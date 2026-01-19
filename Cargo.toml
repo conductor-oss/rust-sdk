@@ -1,0 +1,195 @@
+[package]
+name = "conductor-rust"
+version = "0.1.0"
+edition = "2021"
+description = "Rust SDK for Netflix Conductor workflow orchestration"
+license = "Apache-2.0"
+repository = "https://github.com/conductor-oss/conductor-rust"
+keywords = ["conductor", "workflow", "orchestration", "microservices"]
+categories = ["api-bindings", "asynchronous"]
+readme = "README.md"
+
+# Lint configuration for production-ready code
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+# Critical: Prevent panics in production
+unwrap_used = "warn"
+expect_used = "warn"
+# Performance
+redundant_clone = "warn"
+needless_borrow = "warn"
+# Code quality
+large_enum_variant = "warn"
+clone_on_copy = "warn"
+
+[workspace]
+members = [".", "conductor-macros"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full", "macros", "rt-multi-thread", "sync", "time"] }
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+hyper = { version = "0.14", features = ["server", "http1", "http2", "tcp"] }
+urlencoding = "2.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Metrics
+prometheus = "0.13"
+
+# Utilities
+async-trait = "0.1"
+uuid = { version = "1.6", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+hostname = "0.3"
+once_cell = "1.19"
+parking_lot = "0.12"
+dashmap = "5.5"
+futures = "0.3"
+
+# Environment/Config
+dotenvy = "0.15"
+
+# Derive macros for worker functions
+inventory = "0.3"
+
+# JSON Schema generation
+schemars = "0.8"
+
+# Procedural macros (optional feature)
+conductor-macros = { path = "conductor-macros", optional = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.5"
+mockall = "0.12"
+criterion = "0.5"
+
+[features]
+default = []
+macros = ["conductor-macros"]
+
+[[example]]
+name = "hello_world"
+path = "examples/hello_world.rs"
+
+[[example]]
+name = "async_workers"
+path = "examples/async_workers.rs"
+
+[[example]]
+name = "dynamic_workflow"
+path = "examples/dynamic_workflow.rs"
+
+[[example]]
+name = "kitchensink"
+path = "examples/kitchensink.rs"
+
+[[example]]
+name = "worker_example"
+path = "examples/worker_example.rs"
+
+[[example]]
+name = "task_workers"
+path = "examples/task_workers.rs"
+
+[[example]]
+name = "workflow_ops"
+path = "examples/workflow_ops.rs"
+
+[[example]]
+name = "test_workflows"
+path = "examples/test_workflows.rs"
+
+[[example]]
+name = "metadata_journey"
+path = "examples/metadata_journey.rs"
+
+[[example]]
+name = "schedule_journey"
+path = "examples/schedule_journey.rs"
+
+[[example]]
+name = "authorization_example"
+path = "examples/authorization_example.rs"
+
+[[example]]
+name = "secret_example"
+path = "examples/secret_example.rs"
+
+[[example]]
+name = "task_context_example"
+path = "examples/task_context_example.rs"
+
+[[example]]
+name = "worker_config_example"
+path = "examples/worker_config_example.rs"
+
+[[example]]
+name = "event_listener_example"
+path = "examples/event_listener_example.rs"
+
+[[example]]
+name = "metrics_example"
+path = "examples/metrics_example.rs"
+
+[[example]]
+name = "worker_macro_example"
+path = "examples/worker_macro_example.rs"
+required-features = ["macros"]
+
+# Orkes AI/LLM examples
+[[example]]
+name = "openai_helloworld"
+path = "examples/openai_helloworld.rs"
+
+[[example]]
+name = "llm_chat_example"
+path = "examples/llm_chat_example.rs"
+
+[[example]]
+name = "vector_db_example"
+path = "examples/vector_db_example.rs"
+
+# Advanced workflow examples
+[[example]]
+name = "http_poll_example"
+path = "examples/http_poll_example.rs"
+
+[[example]]
+name = "wait_for_webhook_example"
+path = "examples/wait_for_webhook_example.rs"
+
+[[example]]
+name = "sync_state_update_example"
+path = "examples/sync_state_update_example.rs"
+
+[[example]]
+name = "workflow_rerun_example"
+path = "examples/workflow_rerun_example.rs"
+
+[[example]]
+name = "fork_join_script_example"
+path = "examples/fork_join_script_example.rs"
+
+[[example]]
+name = "task_status_audit_example"
+path = "examples/task_status_audit_example.rs"
+
+[lib]
+name = "conductor"
+path = "src/lib.rs"
