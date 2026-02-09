@@ -95,7 +95,9 @@ jobs:
           cargo test --tests --all-features -- --test-threads=1
       
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: |
+          cargo clippy --lib --all-features -- -D warnings
+          cargo clippy --tests --examples --all-features -- -D warnings -A clippy::unwrap_used -A clippy::expect_used
 
   publish:
     name: Publish to crates.io

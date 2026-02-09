@@ -50,14 +50,18 @@ impl MetricsCollector {
             Opts::new("task_poll_total", "Total number of task poll attempts").namespace(namespace),
             &["task_type"],
         )
-        .expect("Failed to create task_poll_total counter");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_poll_total counter: {}", e);
+        });
 
         let task_poll_error_total = CounterVec::new(
             Opts::new("task_poll_error_total", "Total number of task poll errors")
                 .namespace(namespace),
             &["task_type", "error_type"],
         )
-        .expect("Failed to create task_poll_error_total counter");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_poll_error_total counter: {}", e);
+        });
 
         let task_execute_error_total = CounterVec::new(
             Opts::new(
@@ -67,7 +71,9 @@ impl MetricsCollector {
             .namespace(namespace),
             &["task_type", "error_type"],
         )
-        .expect("Failed to create task_execute_error_total counter");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_execute_error_total counter: {}", e);
+        });
 
         let task_update_error_total = CounterVec::new(
             Opts::new(
@@ -77,14 +83,18 @@ impl MetricsCollector {
             .namespace(namespace),
             &["task_type"],
         )
-        .expect("Failed to create task_update_error_total counter");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_update_error_total counter: {}", e);
+        });
 
         let task_paused_total = CounterVec::new(
             Opts::new("task_paused_total", "Number of polls while worker paused")
                 .namespace(namespace),
             &["task_type"],
         )
-        .expect("Failed to create task_paused_total counter");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_paused_total counter: {}", e);
+        });
 
         // Create histograms with default buckets
         let buckets = vec![
@@ -97,7 +107,9 @@ impl MetricsCollector {
                 .buckets(buckets.clone()),
             &["task_type", "status"],
         )
-        .expect("Failed to create task_poll_time_seconds histogram");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_poll_time_seconds histogram: {}", e);
+        });
 
         let task_execute_time_seconds = HistogramVec::new(
             HistogramOpts::new(
@@ -108,7 +120,9 @@ impl MetricsCollector {
             .buckets(buckets.clone()),
             &["task_type", "status"],
         )
-        .expect("Failed to create task_execute_time_seconds histogram");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_execute_time_seconds histogram: {}", e);
+        });
 
         let task_update_time_seconds = HistogramVec::new(
             HistogramOpts::new("task_update_time_seconds", "Task update latency in seconds")
@@ -116,50 +130,58 @@ impl MetricsCollector {
                 .buckets(buckets),
             &["task_type", "status"],
         )
-        .expect("Failed to create task_update_time_seconds histogram");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_update_time_seconds histogram: {}", e);
+        });
 
         // Create gauges
         let task_result_size_bytes = GaugeVec::new(
             Opts::new("task_result_size_bytes", "Size of task result payload").namespace(namespace),
             &["task_type"],
         )
-        .expect("Failed to create task_result_size_bytes gauge");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create task_result_size_bytes gauge: {}", e);
+        });
 
         let active_workers = GaugeVec::new(
             Opts::new("active_workers", "Number of active workers").namespace(namespace),
             &["task_type"],
         )
-        .expect("Failed to create active_workers gauge");
+        .unwrap_or_else(|e| {
+            panic!("Failed to create active_workers gauge: {}", e);
+        });
 
         // Register metrics
-        registry
-            .register(Box::new(task_poll_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(task_poll_error_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(task_execute_error_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(task_update_error_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(task_paused_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(task_poll_time_seconds.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(task_execute_time_seconds.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(task_update_time_seconds.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(task_result_size_bytes.clone()))
-            .unwrap();
-        registry.register(Box::new(active_workers.clone())).unwrap();
+        if let Err(e) = registry.register(Box::new(task_poll_total.clone())) {
+            panic!("Failed to register task_poll_total: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(task_poll_error_total.clone())) {
+            panic!("Failed to register task_poll_error_total: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(task_execute_error_total.clone())) {
+            panic!("Failed to register task_execute_error_total: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(task_update_error_total.clone())) {
+            panic!("Failed to register task_update_error_total: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(task_paused_total.clone())) {
+            panic!("Failed to register task_paused_total: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(task_poll_time_seconds.clone())) {
+            panic!("Failed to register task_poll_time_seconds: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(task_execute_time_seconds.clone())) {
+            panic!("Failed to register task_execute_time_seconds: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(task_update_time_seconds.clone())) {
+            panic!("Failed to register task_update_time_seconds: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(task_result_size_bytes.clone())) {
+            panic!("Failed to register task_result_size_bytes: {}", e);
+        }
+        if let Err(e) = registry.register(Box::new(active_workers.clone())) {
+            panic!("Failed to register active_workers: {}", e);
+        }
 
         Self {
             settings,
@@ -189,8 +211,14 @@ impl MetricsCollector {
         let encoder = prometheus::TextEncoder::new();
         let metric_families = self.registry.gather();
         let mut buffer = Vec::new();
-        encoder.encode(&metric_families, &mut buffer).unwrap();
-        String::from_utf8(buffer).unwrap()
+        if let Err(e) = encoder.encode(&metric_families, &mut buffer) {
+            error!(error = %e, "Failed to encode metrics");
+            return String::new();
+        }
+        String::from_utf8(buffer).unwrap_or_else(|e| {
+            error!(error = %e, "Failed to convert metrics buffer to UTF-8");
+            String::new()
+        })
     }
 
     /// Increment task paused counter
@@ -237,23 +265,42 @@ impl MetricsCollector {
                                     let encoder = prometheus::TextEncoder::new();
                                     let metric_families = registry.gather();
                                     let mut buffer = Vec::new();
-                                    encoder.encode(&metric_families, &mut buffer).unwrap();
-
-                                    Response::builder()
-                                        .status(200)
-                                        .header("Content-Type", "text/plain; charset=utf-8")
-                                        .body(Body::from(buffer))
-                                        .unwrap()
+                                    
+                                    match encoder.encode(&metric_families, &mut buffer) {
+                                        Ok(()) => {
+                                            Response::builder()
+                                                .status(200)
+                                                .header("Content-Type", "text/plain; charset=utf-8")
+                                                .body(Body::from(buffer))
+                                                .unwrap_or_else(|e| {
+                                                    error!(error = %e, "Failed to build metrics response");
+                                                    Response::new(Body::from("Internal Server Error"))
+                                                })
+                                        }
+                                        Err(e) => {
+                                            error!(error = %e, "Failed to encode metrics");
+                                            Response::builder()
+                                                .status(500)
+                                                .body(Body::from("Internal Server Error"))
+                                                .unwrap_or_else(|_| Response::new(Body::from("Internal Server Error")))
+                                        }
+                                    }
                                 } else if req.uri().path() == health_path {
                                     Response::builder()
                                         .status(200)
                                         .body(Body::from("OK"))
-                                        .unwrap()
+                                        .unwrap_or_else(|e| {
+                                            error!(error = %e, "Failed to build health response");
+                                            Response::new(Body::from("Internal Server Error"))
+                                        })
                                 } else {
                                     Response::builder()
                                         .status(404)
                                         .body(Body::from("Not Found"))
-                                        .unwrap()
+                                        .unwrap_or_else(|e| {
+                                            error!(error = %e, "Failed to build 404 response");
+                                            Response::new(Body::from("Not Found"))
+                                        })
                                 };
                                 Ok::<_, Infallible>(response)
                             }

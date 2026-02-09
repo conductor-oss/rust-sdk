@@ -56,7 +56,11 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
       
       - name: Run clippy (zero warnings enforced)
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: |
+          # Check library code with strict lints
+          cargo clippy --lib --all-features -- -D warnings
+          # Check tests and examples with relaxed lints (allow unwrap/expect in tests)
+          cargo clippy --tests --examples --all-features -- -D warnings -A clippy::unwrap_used -A clippy::expect_used
 
   build:
     name: Build (${{ matrix.os }})
