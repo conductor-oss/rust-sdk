@@ -7,8 +7,8 @@ use super::Task;
 
 /// Module for flexible timestamp deserialization (handles both i64 and ISO date strings)
 mod timestamp_deserializer {
-    use serde::{self, Deserialize, Deserializer};
     use chrono::{DateTime, Utc};
+    use serde::{self, Deserialize, Deserializer};
 
     /// Deserialize a timestamp that may be either i64 (epoch ms) or ISO 8601 string
     pub fn deserialize<'de, D>(deserializer: D) -> Result<i64, D::Error>
@@ -44,7 +44,9 @@ mod flexible_map_deserializer {
     use std::collections::HashMap;
 
     /// Deserialize a map that may be either a proper JSON map or a string representation
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<String, serde_json::Value>, D::Error>
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<HashMap<String, serde_json::Value>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -69,8 +71,8 @@ mod flexible_map_deserializer {
 
 /// Module for flexible Vec<Task> deserialization (handles both arrays and string representations)
 mod flexible_tasks_deserializer {
-    use serde::{self, Deserialize, Deserializer};
     use super::Task;
+    use serde::{self, Deserialize, Deserializer};
 
     /// Deserialize tasks that may be either a proper array or a string representation
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<Task>, D::Error>
@@ -265,7 +267,10 @@ pub struct Workflow {
     pub owner_app: Option<String>,
 
     /// Task to domain mapping
-    #[serde(default, deserialize_with = "flexible_string_map_deserializer::deserialize")]
+    #[serde(
+        default,
+        deserialize_with = "flexible_string_map_deserializer::deserialize"
+    )]
     pub task_to_domain: HashMap<String, String>,
 
     /// Workflow definition
@@ -273,11 +278,17 @@ pub struct Workflow {
     pub workflow_definition: Option<super::WorkflowDef>,
 
     /// Failed reference task names
-    #[serde(default, deserialize_with = "flexible_string_vec_deserializer::deserialize")]
+    #[serde(
+        default,
+        deserialize_with = "flexible_string_vec_deserializer::deserialize"
+    )]
     pub failed_reference_task_names: Vec<String>,
 
     /// Failed task names
-    #[serde(default, deserialize_with = "flexible_string_vec_deserializer::deserialize")]
+    #[serde(
+        default,
+        deserialize_with = "flexible_string_vec_deserializer::deserialize"
+    )]
     pub failed_task_names: Vec<String>,
 
     /// Last retried time (epoch ms or ISO 8601 string)

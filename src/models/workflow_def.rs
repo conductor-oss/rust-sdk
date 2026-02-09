@@ -462,10 +462,13 @@ impl WorkflowTask {
     }
 
     /// Create a switch (decision) task with value_param evaluator
-    /// 
+    ///
     /// Use this for simple value expressions like ${workflow.input.choice}
     /// The evaluator_type is set to "value-param" which directly evaluates the expression.
-    pub fn switch_value_param(task_ref_name: impl Into<String>, case_expression: impl Into<String>) -> Self {
+    pub fn switch_value_param(
+        task_ref_name: impl Into<String>,
+        case_expression: impl Into<String>,
+    ) -> Self {
         Self {
             name: "switch".to_string(),
             task_reference_name: task_ref_name.into(),

@@ -195,7 +195,7 @@ impl TaskDef {
     }
 
     /// Set timeout configuration
-    /// 
+    ///
     /// Note: This also sets response_timeout_seconds to the same value to ensure
     /// response_timeout_seconds <= timeout_seconds (required by Conductor validation)
     pub fn with_timeout(mut self, timeout_seconds: i64, policy: TimeoutPolicy) -> Self {

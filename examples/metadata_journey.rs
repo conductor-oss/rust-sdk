@@ -185,14 +185,20 @@ async fn main() -> Result<()> {
         .await?;
     info!("Deleted workflow tag");
 
-    orkes_metadata.delete_task_tag(&task_name, &task_tag).await?;
+    orkes_metadata
+        .delete_task_tag(&task_name, &task_tag)
+        .await?;
     info!("Deleted task tag");
 
     // Delete workflow versions (base MetadataClient via Deref)
-    orkes_metadata.delete_workflow_def(&workflow_name, 1).await?;
+    orkes_metadata
+        .delete_workflow_def(&workflow_name, 1)
+        .await?;
     info!("Deleted workflow v1");
 
-    orkes_metadata.delete_workflow_def(&workflow_name, 2).await?;
+    orkes_metadata
+        .delete_workflow_def(&workflow_name, 2)
+        .await?;
     info!("Deleted workflow v2");
 
     // Delete task

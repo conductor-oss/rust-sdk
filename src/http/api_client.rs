@@ -503,7 +503,6 @@ impl ApiClient {
         }
     }
 
-
     /// GET request with no response
     pub async fn get_no_response(&self, path: &str) -> Result<()> {
         let url = format!("{}{}", self.base_url, path);

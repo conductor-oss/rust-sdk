@@ -481,7 +481,7 @@ async fn test_graceful_shutdown() {
     let task_def = TaskDef::new(&task_name)
         .with_timeout(60, conductor::models::TimeoutPolicy::TimeOutWf)
         .with_response_timeout(30);
-    
+
     // If we can't register the task, there's likely no server running
     if let Err(e) = metadata_client.register_task_def(&task_def).await {
         println!("   Skipping test: Cannot reach Conductor server: {}", e);
@@ -568,9 +568,14 @@ async fn test_graceful_shutdown() {
     // Note: In CI without a real server, we may get 0 completions, which is acceptable
     // The main purpose is to ensure graceful shutdown doesn't panic
     if completed > 0 {
-        println!("✅ Graceful shutdown test passed! ({} tasks completed)", completed);
+        println!(
+            "✅ Graceful shutdown test passed! ({} tasks completed)",
+            completed
+        );
     } else {
-        println!("⚠️ Graceful shutdown test completed (no tasks executed - check server connectivity)");
+        println!(
+            "⚠️ Graceful shutdown test completed (no tasks executed - check server connectivity)"
+        );
     }
 }
 
@@ -714,8 +719,9 @@ async fn test_high_concurrency_stress() {
     let min_expected = workflow_ids.len() * 80 / 100;
     assert!(
         processed >= min_expected,
-        "At least 80% of workflows should be processed. Got {}/{}", 
-        processed, workflow_ids.len()
+        "At least 80% of workflows should be processed. Got {}/{}",
+        processed,
+        workflow_ids.len()
     );
 
     println!("✅ High concurrency stress test passed!");

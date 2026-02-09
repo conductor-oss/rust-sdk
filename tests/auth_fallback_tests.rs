@@ -25,8 +25,7 @@ async fn test_auth_fallback_on_404() {
 
     // 4. Configure client with Auth
     let server_url = format!("{}/api", mock_server.uri());
-    let config = Configuration::new(&server_url)
-        .with_auth("dummy_key", "dummy_secret");
+    let config = Configuration::new(&server_url).with_auth("dummy_key", "dummy_secret");
 
     let client = ApiClient::new(config).expect("Failed to create client");
 

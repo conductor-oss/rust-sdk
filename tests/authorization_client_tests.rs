@@ -4,9 +4,9 @@
 
 mod common;
 
+use common::*;
 use conductor::client::ConductorClient;
 use conductor::models::{CreateOrUpdateApplicationRequest, UpsertGroupRequest, UpsertUserRequest};
-use common::*;
 
 // =============================================================================
 // Application Tests
@@ -14,8 +14,6 @@ use common::*;
 
 #[tokio::test]
 async fn test_create_and_get_application() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -24,11 +22,11 @@ async fn test_create_and_get_application() {
 
     // Create application
     let request = CreateOrUpdateApplicationRequest::new(&app_name);
-    
+
     match auth.create_application(&request).await {
         Ok(app) => {
             assert_eq!(app.name, app_name);
-            
+
             // Get application
             match auth.get_application(&app.id).await {
                 Ok(retrieved) => {
@@ -36,7 +34,7 @@ async fn test_create_and_get_application() {
                 }
                 Err(e) => eprintln!("Warning: get_application failed: {:?}", e),
             }
-            
+
             // Delete application
             auth.delete_application(&app.id).await.ok();
         }
@@ -48,8 +46,6 @@ async fn test_create_and_get_application() {
 
 #[tokio::test]
 async fn test_list_applications() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -75,7 +71,7 @@ async fn test_create_access_key() {
 
     // Create application first
     let request = CreateOrUpdateApplicationRequest::new(&app_name);
-    
+
     match auth.create_application(&request).await {
         Ok(app) => {
             // Create access key
@@ -83,7 +79,7 @@ async fn test_create_access_key() {
                 Ok(access_key) => {
                     assert!(!access_key.id.is_empty());
                     assert!(!access_key.secret.is_empty());
-                    
+
                     // Get access keys
                     match auth.get_access_keys(&app.id).await {
                         Ok(keys) => {
@@ -91,16 +87,18 @@ async fn test_create_access_key() {
                         }
                         Err(e) => eprintln!("Warning: get_access_keys failed: {:?}", e),
                     }
-                    
+
                     // Toggle access key status
-                    auth.toggle_access_key_status(&app.id, &access_key.id).await.ok();
-                    
+                    auth.toggle_access_key_status(&app.id, &access_key.id)
+                        .await
+                        .ok();
+
                     // Delete access key
                     auth.delete_access_key(&app.id, &access_key.id).await.ok();
                 }
                 Err(e) => eprintln!("Warning: create_access_key failed: {:?}", e),
             }
-            
+
             // Delete application
             auth.delete_application(&app.id).await.ok();
         }
@@ -128,7 +126,7 @@ async fn test_upsert_and_get_user() {
     match auth.upsert_user(&request, &user_id).await {
         Ok(user) => {
             assert_eq!(user.id, user_id);
-            
+
             // Get user
             match auth.get_user(&user_id).await {
                 Ok(retrieved) => {
@@ -136,7 +134,7 @@ async fn test_upsert_and_get_user() {
                 }
                 Err(e) => eprintln!("Warning: get_user failed: {:?}", e),
             }
-            
+
             // Delete user
             auth.delete_user(&user_id).await.ok();
         }
@@ -182,7 +180,7 @@ async fn test_upsert_and_get_group() {
     match auth.upsert_group(&request, &group_id).await {
         Ok(group) => {
             assert_eq!(group.id, group_id);
-            
+
             // Get group
             match auth.get_group(&group_id).await {
                 Ok(retrieved) => {
@@ -190,7 +188,7 @@ async fn test_upsert_and_get_group() {
                 }
                 Err(e) => eprintln!("Warning: get_group failed: {:?}", e),
             }
-            
+
             // Delete group
             auth.delete_group(&group_id).await.ok();
         }
@@ -292,5 +290,3 @@ async fn test_list_all_roles() {
         }
     }
 }
-
-

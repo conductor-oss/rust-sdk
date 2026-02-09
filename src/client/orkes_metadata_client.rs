@@ -207,7 +207,7 @@ mod tests {
         let config = Configuration::new("http://localhost:8080/api");
         let api = ApiClient::new(config).unwrap();
         let orkes_client = OrkesMetadataClient::new(api);
-        
+
         // Access inner MetadataClient via Deref
         let _metadata_ref: &MetadataClient = &orkes_client;
     }

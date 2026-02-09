@@ -4,20 +4,18 @@
 
 mod common;
 
+use common::*;
 use conductor::{
     client::ConductorClient,
     models::{StartWorkflowRequest, TaskDef, WorkflowDef, WorkflowTask},
-    worker::{FnWorker, TaskHandler, WorkerOutput, TaskContext},
+    worker::{FnWorker, TaskContext, TaskHandler, WorkerOutput},
 };
-use common::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::test]
 async fn test_worker_poll_and_execute() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -27,7 +25,10 @@ async fn test_worker_poll_and_execute() {
     let workflow_name = generate_unique_workflow_name("worker_poll_wf");
 
     // Register task and workflow
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
     let workflow_def = WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(WorkflowTask::simple(&task_name, "task_ref"));
@@ -69,8 +70,6 @@ async fn test_worker_poll_and_execute() {
 
 #[tokio::test]
 async fn test_worker_concurrency_control() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -80,7 +79,10 @@ async fn test_worker_concurrency_control() {
     let workflow_name = generate_unique_workflow_name("worker_concurrency_wf");
 
     // Register task and workflow
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
     let workflow_def = WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(WorkflowTask::simple(&task_name, "task_ref"));
@@ -98,13 +100,13 @@ async fn test_worker_concurrency_control() {
         let mx = max.clone();
         async move {
             let now_running = curr.fetch_add(1, Ordering::SeqCst) + 1;
-            
+
             // Update max if needed
             mx.fetch_max(now_running, Ordering::SeqCst);
-            
+
             // Simulate work
             tokio::time::sleep(Duration::from_millis(100)).await;
-            
+
             curr.fetch_sub(1, Ordering::SeqCst);
             Ok(WorkerOutput::completed_with_result("success"))
         }
@@ -176,7 +178,10 @@ async fn test_worker_error_handling() {
     // Wait for failure
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    let wf = workflow_client.get_workflow(&workflow_id, false).await.unwrap();
+    let wf = workflow_client
+        .get_workflow(&workflow_id, false)
+        .await
+        .unwrap();
     assert_eq!(wf.status, conductor::models::WorkflowStatus::Failed);
 
     // Cleanup
@@ -197,7 +202,10 @@ async fn test_worker_task_in_progress() {
     let workflow_name = generate_unique_workflow_name("worker_in_progress_wf");
 
     // Register
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
     let workflow_def = WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(WorkflowTask::simple(&task_name, "task_ref"));
@@ -206,7 +214,7 @@ async fn test_worker_task_in_progress() {
     // Worker that returns IN_PROGRESS first, then completes
     let worker = FnWorker::new(task_name.clone(), move |task| async move {
         let ctx = TaskContext::from_task(&task);
-        
+
         if ctx.poll_count() < 2 {
             // Return in progress
             Ok(WorkerOutput::in_progress(1)) // callback in 1 second
@@ -245,7 +253,10 @@ async fn test_worker_domain_filtering() {
     let task_name = generate_unique_task_name("worker_domain");
 
     // Register task
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
 
     // Create worker with specific domain
     let worker = FnWorker::new(task_name.clone(), move |_task| async move {
@@ -274,14 +285,17 @@ async fn test_worker_configuration_override() {
     let task_name = generate_unique_task_name("worker_config");
 
     // Register task
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
 
     // Create worker with custom configuration
     let worker = FnWorker::new(task_name.clone(), move |_task| async move {
         Ok(WorkerOutput::completed_with_result("success"))
     })
-    .with_poll_interval_millis(500)  // Custom poll interval
-    .with_thread_count(5);           // Custom thread count
+    .with_poll_interval_millis(500) // Custom poll interval
+    .with_thread_count(5); // Custom thread count
 
     let mut handler = TaskHandler::new(config.clone()).unwrap();
     handler.add_worker(worker);
@@ -304,7 +318,10 @@ async fn test_worker_pause_resume() {
     let task_name = generate_unique_task_name("worker_pause");
 
     // Register task
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
 
     let worker = FnWorker::new(task_name.clone(), move |_task| async move {
         Ok(WorkerOutput::completed_with_result("success"))

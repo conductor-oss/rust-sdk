@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 /// Module for flexible timestamp deserialization (handles both i64 and ISO date strings)
 mod timestamp_deserializer {
-    use serde::{self, Deserialize, Deserializer};
     use chrono::{DateTime, Utc};
+    use serde::{self, Deserialize, Deserializer};
 
     /// Deserialize a timestamp that may be either i64 (epoch ms) or ISO 8601 string
     pub fn deserialize<'de, D>(deserializer: D) -> Result<i64, D::Error>

@@ -49,11 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     "#;
 
     prompt_client
-        .save_prompt(
-            prompt_name,
-            "US Constitution QnA",
-            prompt_text,
-        )
+        .save_prompt(prompt_name, "US Constitution QnA", prompt_text)
         .await?;
 
     integration_client

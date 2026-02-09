@@ -4,14 +4,13 @@
 
 mod common;
 
+use common::*;
 use conductor::{
     client::ConductorClient,
     models::{
-        StartWorkflowRequest, TaskDef, TaskResult, TaskResultStatus,
-        WorkflowDef, WorkflowTask,
+        StartWorkflowRequest, TaskDef, TaskResult, TaskResultStatus, WorkflowDef, WorkflowTask,
     },
 };
-use common::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -21,8 +20,6 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_update_task() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -33,7 +30,10 @@ async fn test_update_task() {
     let workflow_name = generate_unique_workflow_name("update_task_wf");
 
     // Register
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
     let workflow_def = WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(WorkflowTask::simple(&task_name, "task_ref"));
@@ -46,15 +46,17 @@ async fn test_update_task() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Get workflow to find task
-    let workflow = workflow_client.get_workflow(&workflow_id, true).await.unwrap();
-    
+    let workflow = workflow_client
+        .get_workflow(&workflow_id, true)
+        .await
+        .unwrap();
+
     if let Some(task) = workflow.tasks.first() {
         // Create task result
         let mut output = HashMap::new();
         output.insert("result".to_string(), serde_json::json!("completed"));
-        
-        let result = TaskResult::completed(&task.task_id, &workflow_id)
-            .with_output(output);
+
+        let result = TaskResult::completed(&task.task_id, &workflow_id).with_output(output);
 
         // Update task
         task_client.update_task(&result).await.unwrap();
@@ -62,9 +64,13 @@ async fn test_update_task() {
         tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Verify workflow completed
-        let updated_wf = workflow_client.get_workflow(&workflow_id, false).await.unwrap();
+        let updated_wf = workflow_client
+            .get_workflow(&workflow_id, false)
+            .await
+            .unwrap();
         assert!(
-            updated_wf.is_successful() || updated_wf.status == conductor::models::WorkflowStatus::Running,
+            updated_wf.is_successful()
+                || updated_wf.status == conductor::models::WorkflowStatus::Running,
             "Workflow should complete or be running after task update"
         );
     }
@@ -87,7 +93,10 @@ async fn test_update_task_by_ref_name() {
     let workflow_name = generate_unique_workflow_name("update_ref_wf");
 
     // Register
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
     let workflow_def = WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(WorkflowTask::simple(&task_name, "my_task_ref"));
@@ -117,10 +126,11 @@ async fn test_update_task_by_ref_name() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Verify
-    let wf = workflow_client.get_workflow(&workflow_id, false).await.unwrap();
-    assert!(
-        wf.is_successful() || wf.status == conductor::models::WorkflowStatus::Running
-    );
+    let wf = workflow_client
+        .get_workflow(&workflow_id, false)
+        .await
+        .unwrap();
+    assert!(wf.is_successful() || wf.status == conductor::models::WorkflowStatus::Running);
 
     // Cleanup
     cleanup_workflow(&client, &workflow_id).await;
@@ -144,7 +154,10 @@ async fn test_task_log() {
     let workflow_name = generate_unique_workflow_name("log_task_wf");
 
     // Register
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
     let workflow_def = WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(WorkflowTask::simple(&task_name, "task_ref"));
@@ -157,8 +170,11 @@ async fn test_task_log() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Get workflow to find task
-    let workflow = workflow_client.get_workflow(&workflow_id, true).await.unwrap();
-    
+    let workflow = workflow_client
+        .get_workflow(&workflow_id, true)
+        .await
+        .unwrap();
+
     if let Some(task) = workflow.tasks.first() {
         // Add task log
         task_client
@@ -191,9 +207,7 @@ async fn test_get_queue_size_for_task() {
     let task_client = client.task_client();
 
     // Get queue size (should not error even for non-existent task)
-    let size = task_client
-        .get_queue_size_for_task("some_task_name")
-        .await;
+    let size = task_client.get_queue_size_for_task("some_task_name").await;
 
     // Should return a number (possibly 0)
     assert!(size.is_ok());
@@ -251,10 +265,7 @@ async fn test_search_tasks() {
     let task_client = client.task_client();
 
     // Search tasks
-    let result = task_client
-        .search_tasks(None, None, 0, 10)
-        .await
-        .unwrap();
+    let result = task_client.search_tasks(None, None, 0, 10).await.unwrap();
 
     // Should return search results
     assert!(result.total_hits >= 0);
@@ -267,16 +278,17 @@ async fn test_search_v2_tasks() {
     let task_client = client.task_client();
 
     // Search tasks V2
-    let result = task_client
-        .search_tasks_v2(None, None, 0, 10)
-        .await;
+    let result = task_client.search_tasks_v2(None, None, 0, 10).await;
 
     // V2 search may not be available in all environments
     match result {
         Ok(r) => assert!(r.total_hits >= 0),
         Err(e) => {
             // Server returns 500 when search result is null in some versions
-            eprintln!("Warning: search_v2 returned error (may not be available): {:?}", e);
+            eprintln!(
+                "Warning: search_v2 returned error (may not be available): {:?}",
+                e
+            );
         }
     }
 }
@@ -295,11 +307,20 @@ async fn test_batch_poll() {
     let task_name = generate_unique_task_name("batch_poll");
 
     // Register task
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
 
     // Batch poll (will likely return empty since no tasks scheduled)
     let tasks = task_client
-        .batch_poll(&task_name, Some("test-worker"), None, 5, Duration::from_secs(1))
+        .batch_poll(
+            &task_name,
+            Some("test-worker"),
+            None,
+            5,
+            Duration::from_secs(1),
+        )
         .await
         .unwrap();
 
@@ -326,7 +347,10 @@ async fn test_get_task_details() {
     let workflow_name = generate_unique_workflow_name("task_details_wf");
 
     // Register
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
     let workflow_def = WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(WorkflowTask::simple(&task_name, "task_ref"));
@@ -339,8 +363,11 @@ async fn test_get_task_details() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Get workflow to find task
-    let workflow = workflow_client.get_workflow(&workflow_id, true).await.unwrap();
-    
+    let workflow = workflow_client
+        .get_workflow(&workflow_id, true)
+        .await
+        .unwrap();
+
     if let Some(task) = workflow.tasks.first() {
         // Get task details
         let details = task_client.get_task(&task.task_id).await.unwrap();
@@ -368,7 +395,10 @@ async fn test_requeue_pending_tasks() {
     let task_name = generate_unique_task_name("requeue");
 
     // Register task
-    metadata.register_task_def(&TaskDef::new(&task_name)).await.unwrap();
+    metadata
+        .register_task_def(&TaskDef::new(&task_name))
+        .await
+        .unwrap();
 
     // Requeue pending tasks
     let result = task_client.requeue_pending_tasks(&task_name).await;
@@ -397,7 +427,7 @@ async fn test_update_task_sync() {
     //     .update_task_sync(workflow_id, task_ref_name, status, output)
     //     .await
     //     .unwrap();
-    
+
     // Verify synchronous update
 }
 

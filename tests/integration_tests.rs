@@ -19,12 +19,8 @@ fn test_config() -> Configuration {
     Configuration::from_env()
 }
 
-
-
 #[tokio::test]
 async fn test_task_def_crud() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -67,8 +63,6 @@ async fn test_task_def_crud() {
 
 #[tokio::test]
 async fn test_workflow_def_crud() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -116,8 +110,6 @@ async fn test_workflow_def_crud() {
 
 #[tokio::test]
 async fn test_workflow_execution() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -198,8 +190,6 @@ async fn test_workflow_execution() {
 
 #[tokio::test]
 async fn test_workflow_lifecycle_operations() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -270,8 +260,6 @@ async fn test_workflow_lifecycle_operations() {
 
 #[tokio::test]
 async fn test_multiple_workers() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -363,8 +351,6 @@ async fn test_multiple_workers() {
 
 #[tokio::test]
 async fn test_http_task_workflow() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -402,8 +388,6 @@ async fn test_http_task_workflow() {
 
 #[tokio::test]
 async fn test_inline_javascript_task() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -451,8 +435,6 @@ async fn test_inline_javascript_task() {
 
 #[tokio::test]
 async fn test_fork_join_workflow() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -496,8 +478,6 @@ async fn test_fork_join_workflow() {
 
 #[tokio::test]
 async fn test_switch_task_workflow() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -548,8 +528,6 @@ async fn test_switch_task_workflow() {
 
 #[tokio::test]
 async fn test_do_while_workflow() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -594,8 +572,6 @@ async fn test_do_while_workflow() {
 
 #[tokio::test]
 async fn test_workflow_retry() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -677,8 +653,6 @@ async fn test_workflow_retry() {
 
 #[tokio::test]
 async fn test_workflow_search() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let workflow_client = client.workflow_client();
@@ -699,8 +673,6 @@ async fn test_workflow_search() {
 
 #[tokio::test]
 async fn test_http_poll_task() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -745,38 +717,35 @@ async fn test_http_poll_task() {
 
 #[tokio::test]
 async fn test_get_all_workflows_with_latest_versions() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
 
     // Get all workflows
-    let _workflows = metadata.get_all_workflow_defs_latest_versions().await.unwrap();
-    
+    let _workflows = metadata
+        .get_all_workflow_defs_latest_versions()
+        .await
+        .unwrap();
+
     // Should return a list (may be empty on fresh install, but should not error)
     // workflows is a Vec, may be empty on fresh install but call should succeed
 }
 
 #[tokio::test]
 async fn test_get_all_task_defs() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
 
     // Get all task defs
     let _tasks = metadata.get_all_task_defs().await.unwrap();
-    
+
     // Should return a list (may be empty on fresh install, but should not error)
     // tasks is a Vec, may be empty on fresh install but call should succeed
 }
 
 #[tokio::test]
 async fn test_task_tagging() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -785,13 +754,12 @@ async fn test_task_tagging() {
     let task_name = format!("test_tag_task_{}", &uuid::Uuid::new_v4().to_string()[..8]);
 
     // Register task (base MetadataClient)
-    let task_def = TaskDef::new(&task_name)
-        .with_description("Task for tag testing");
+    let task_def = TaskDef::new(&task_name).with_description("Task for tag testing");
     metadata.register_task_def(&task_def).await.unwrap();
 
     // Add a tag (OrkesMetadataClient)
     let tag = conductor::models::MetadataTag::with_value("environment", "test");
-    
+
     match orkes_metadata.add_task_tag(&task_name, &tag).await {
         Ok(_) => {
             // Get tags
@@ -802,7 +770,7 @@ async fn test_task_tagging() {
                 }
                 Err(e) => eprintln!("Warning: get_task_tags failed: {:?}", e),
             }
-            
+
             // Delete tag
             orkes_metadata.delete_task_tag(&task_name, &tag).await.ok();
         }
@@ -817,8 +785,6 @@ async fn test_task_tagging() {
 
 #[tokio::test]
 async fn test_workflow_tagging() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -830,12 +796,12 @@ async fn test_workflow_tagging() {
     let workflow_def = WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(WorkflowTask::simple("simple_task", "simple_ref"));
-    
+
     metadata.register_workflow_def(&workflow_def).await.unwrap();
 
     // Add a tag (OrkesMetadataClient)
     let tag = conductor::models::MetadataTag::with_value("team", "platform");
-    
+
     match orkes_metadata.add_workflow_tag(&workflow_name, &tag).await {
         Ok(_) => {
             // Get tags
@@ -846,15 +812,24 @@ async fn test_workflow_tagging() {
                 }
                 Err(e) => eprintln!("Warning: get_workflow_tags failed: {:?}", e),
             }
-            
+
             // Delete tag
-            orkes_metadata.delete_workflow_tag(&workflow_name, &tag).await.ok();
+            orkes_metadata
+                .delete_workflow_tag(&workflow_name, &tag)
+                .await
+                .ok();
         }
         Err(e) => {
-            eprintln!("Warning: add_workflow_tag failed (may require Orkes): {:?}", e);
+            eprintln!(
+                "Warning: add_workflow_tag failed (may require Orkes): {:?}",
+                e
+            );
         }
     }
 
     // Cleanup (base MetadataClient via Deref)
-    orkes_metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+    orkes_metadata
+        .delete_workflow_def(&workflow_name, 1)
+        .await
+        .ok();
 }

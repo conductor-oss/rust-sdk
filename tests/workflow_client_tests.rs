@@ -4,15 +4,15 @@
 
 mod common;
 
+use common::*;
 use conductor::{
     client::ConductorClient,
     models::{
-        StartWorkflowRequest, TaskDef, WorkflowDef,
-        WorkflowStatus, WorkflowTask, WorkflowTimeoutPolicy,
+        StartWorkflowRequest, TaskDef, WorkflowDef, WorkflowStatus, WorkflowTask,
+        WorkflowTimeoutPolicy,
     },
     worker::{FnWorker, TaskHandler, WorkerOutput},
 };
-use common::*;
 use std::time::Duration;
 
 // =============================================================================
@@ -21,8 +21,6 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_start_workflow() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let workflow_client = client.workflow_client();
@@ -406,7 +404,7 @@ async fn test_retry_last_failed_task() {
         .get_workflow(&workflow_id, false)
         .await
         .unwrap();
-    
+
     // Should be running or completed
     assert!(
         wf.status == WorkflowStatus::Running || wf.status == WorkflowStatus::Completed,
@@ -499,7 +497,10 @@ async fn test_search_v2_workflows() {
         Ok(r) => assert!(r.total_hits > 0, "Should find at least one workflow"),
         Err(e) => {
             // V2 search is deprecated in some server versions
-            eprintln!("Warning: search_v2 returned error (may be deprecated): {:?}", e);
+            eprintln!(
+                "Warning: search_v2 returned error (may be deprecated): {:?}",
+                e
+            );
         }
     }
 

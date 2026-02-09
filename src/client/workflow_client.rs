@@ -253,47 +253,72 @@ impl WorkflowClient {
 
         let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
-        self.api.get_with_params("/workflow/search-v2", &params).await
+        self.api
+            .get_with_params("/workflow/search-v2", &params)
+            .await
     }
 
     /// Skip a task from workflow (alias for skip_task)
-    pub async fn skip_task_from_workflow(&self, workflow_id: &str, task_reference_name: &str) -> Result<()> {
+    pub async fn skip_task_from_workflow(
+        &self,
+        workflow_id: &str,
+        task_reference_name: &str,
+    ) -> Result<()> {
         self.skip_task(workflow_id, task_reference_name).await
     }
 
     /// Bulk pause workflows
-    pub async fn pause_workflows(&self, workflow_ids: &[String]) -> Result<HashMap<String, serde_json::Value>> {
+    pub async fn pause_workflows(
+        &self,
+        workflow_ids: &[String],
+    ) -> Result<HashMap<String, serde_json::Value>> {
         let path = "/workflow/bulk/pause";
         self.api.put(path, workflow_ids).await
     }
 
     /// Bulk resume workflows
-    pub async fn resume_workflows(&self, workflow_ids: &[String]) -> Result<HashMap<String, serde_json::Value>> {
+    pub async fn resume_workflows(
+        &self,
+        workflow_ids: &[String],
+    ) -> Result<HashMap<String, serde_json::Value>> {
         let path = "/workflow/bulk/resume";
         self.api.put(path, workflow_ids).await
     }
 
     /// Bulk restart workflows
-    pub async fn restart_workflows(&self, workflow_ids: &[String], use_latest_def: bool) -> Result<HashMap<String, serde_json::Value>> {
-        let path = format!("/workflow/bulk/restart?useLatestDefinitions={}", use_latest_def);
+    pub async fn restart_workflows(
+        &self,
+        workflow_ids: &[String],
+        use_latest_def: bool,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let path = format!(
+            "/workflow/bulk/restart?useLatestDefinitions={}",
+            use_latest_def
+        );
         self.api.post(&path, workflow_ids).await
     }
 
     /// Bulk retry workflows
-    pub async fn retry_workflows(&self, workflow_ids: &[String]) -> Result<HashMap<String, serde_json::Value>> {
+    pub async fn retry_workflows(
+        &self,
+        workflow_ids: &[String],
+    ) -> Result<HashMap<String, serde_json::Value>> {
         let path = "/workflow/bulk/retry";
         self.api.post(path, workflow_ids).await
     }
 
     /// Bulk terminate workflows
-    pub async fn terminate_workflows(&self, workflow_ids: &[String], reason: Option<&str>) -> Result<HashMap<String, serde_json::Value>> {
+    pub async fn terminate_workflows(
+        &self,
+        workflow_ids: &[String],
+        reason: Option<&str>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
         let mut path = "/workflow/bulk/terminate".to_string();
         if let Some(r) = reason {
             path.push_str(&format!("?reason={}", urlencoding::encode(r)));
         }
         self.api.post(&path, workflow_ids).await
     }
-
 
     /// Get running workflows by name
     pub async fn get_running_workflows(

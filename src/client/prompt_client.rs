@@ -110,11 +110,7 @@ impl PromptClient {
     /// # Arguments
     /// * `prompts` - List of prompt templates to create
     /// * `new_version` - If true, creates new versions for existing prompts; if false, updates existing versions
-    pub async fn save_prompts(
-        &self,
-        prompts: &[PromptTemplate],
-        new_version: bool,
-    ) -> Result<()> {
+    pub async fn save_prompts(&self, prompts: &[PromptTemplate], new_version: bool) -> Result<()> {
         let path = format!("/prompts?newVersion={}", new_version);
         let _: serde_json::Value = self.api.post(&path, prompts).await?;
         Ok(())
@@ -147,10 +143,7 @@ impl PromptClient {
     ///
     /// # Returns
     /// List of all versions of the prompt template, ordered by version number
-    pub async fn get_all_prompt_versions(
-        &self,
-        prompt_name: &str,
-    ) -> Result<Vec<PromptTemplate>> {
+    pub async fn get_all_prompt_versions(&self, prompt_name: &str) -> Result<Vec<PromptTemplate>> {
         let path = format!("/prompts/{}/versions", prompt_name);
         self.api.get(&path).await
     }

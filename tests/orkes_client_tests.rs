@@ -4,9 +4,9 @@
 
 mod common;
 
+use common::*;
 use conductor::client::ConductorClient;
 use conductor::models::SaveScheduleRequest;
-use common::*;
 use std::time::Duration;
 
 // =============================================================================
@@ -15,8 +15,6 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_scheduler_save_and_get() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let scheduler = client.scheduler_client();
@@ -29,9 +27,12 @@ async fn test_scheduler_save_and_get() {
     let workflow_def = conductor::models::WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(conductor::models::WorkflowTask::wait("wait_ref"));
-    
+
     if let Err(e) = metadata.register_workflow_def(&workflow_def).await {
-        eprintln!("Warning: Could not create workflow for schedule test: {:?}", e);
+        eprintln!(
+            "Warning: Could not create workflow for schedule test: {:?}",
+            e
+        );
         return;
     }
 
@@ -49,22 +50,23 @@ async fn test_scheduler_save_and_get() {
                 }
                 Err(e) => eprintln!("Warning: get_schedule failed: {:?}", e),
             }
-            
+
             // Cleanup
             scheduler.delete_schedule(&schedule_name).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: save_schedule failed (may require specific permissions): {:?}", e);
+            eprintln!(
+                "Warning: save_schedule failed (may require specific permissions): {:?}",
+                e
+            );
         }
     }
-    
+
     metadata.delete_workflow_def(&workflow_name, 1).await.ok();
 }
 
 #[tokio::test]
 async fn test_scheduler_pause_resume() {
-
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let scheduler = client.scheduler_client();
@@ -77,7 +79,7 @@ async fn test_scheduler_pause_resume() {
     let workflow_def = conductor::models::WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(conductor::models::WorkflowTask::wait("wait_ref"));
-    
+
     if let Err(e) = metadata.register_workflow_def(&workflow_def).await {
         eprintln!("Warning: Could not create workflow: {:?}", e);
         return;
@@ -94,12 +96,12 @@ async fn test_scheduler_pause_resume() {
             if let Err(e) = scheduler.pause_schedule(&schedule_name).await {
                 eprintln!("Warning: pause_schedule failed: {:?}", e);
             }
-            
+
             // Resume schedule
             if let Err(e) = scheduler.resume_schedule(&schedule_name).await {
                 eprintln!("Warning: resume_schedule failed: {:?}", e);
             }
-            
+
             // Cleanup
             scheduler.delete_schedule(&schedule_name).await.ok();
         }
@@ -107,7 +109,7 @@ async fn test_scheduler_pause_resume() {
             eprintln!("Warning: save_schedule failed: {:?}", e);
         }
     }
-    
+
     metadata.delete_workflow_def(&workflow_name, 1).await.ok();
 }
 
@@ -118,7 +120,10 @@ async fn test_scheduler_search_executions() {
     let scheduler = client.scheduler_client();
 
     // Search schedule executions
-    match scheduler.search_schedule_executions(Some(0), Some(10), None, None, None).await {
+    match scheduler
+        .search_schedule_executions(Some(0), Some(10), None, None, None)
+        .await
+    {
         Ok(results) => {
             assert!(results.total_hits >= 0);
         }
@@ -135,13 +140,19 @@ async fn test_scheduler_get_next_execution_times() {
     let scheduler = client.scheduler_client();
 
     // Get next 5 execution times for daily cron
-    match scheduler.get_next_few_schedule_execution_times("0 0 * * *", None, None, Some(5)).await {
+    match scheduler
+        .get_next_few_schedule_execution_times("0 0 * * *", None, None, Some(5))
+        .await
+    {
         Ok(times) => {
             assert!(!times.is_empty());
             assert!(times.len() <= 5);
         }
         Err(e) => {
-            eprintln!("Warning: get_next_few_schedule_execution_times failed: {:?}", e);
+            eprintln!(
+                "Warning: get_next_few_schedule_execution_times failed: {:?}",
+                e
+            );
         }
     }
 }
@@ -169,12 +180,15 @@ async fn test_secret_put_and_get() {
                 }
                 Err(e) => eprintln!("Warning: get_secret failed: {:?}", e),
             }
-            
+
             // Cleanup
             secret.delete_secret(&secret_key).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: put_secret failed (may require specific permissions): {:?}", e);
+            eprintln!(
+                "Warning: put_secret failed (may require specific permissions): {:?}",
+                e
+            );
         }
     }
 }
@@ -215,13 +229,13 @@ async fn test_secret_exists() {
                 }
                 Err(e) => eprintln!("Warning: secret_exists failed: {:?}", e),
             }
-            
+
             // Delete
             secret.delete_secret(&secret_key).await.ok();
-            
+
             // Wait for deletion
             tokio::time::sleep(Duration::from_millis(500)).await;
-            
+
             // Check doesn't exist
             match secret.secret_exists(&secret_key).await {
                 Ok(exists) => {
@@ -249,11 +263,14 @@ async fn test_prompt_save_and_get() {
     let prompt_name = generate_unique_name("test_prompt");
 
     // Save prompt
-    match prompt.save_prompt(
-        &prompt_name,
-        "Test prompt for integration tests",
-        "Please analyze ${input} and provide insights.",
-    ).await {
+    match prompt
+        .save_prompt(
+            &prompt_name,
+            "Test prompt for integration tests",
+            "Please analyze ${input} and provide insights.",
+        )
+        .await
+    {
         Ok(_) => {
             // Get prompt
             match prompt.get_prompt(&prompt_name).await {
@@ -262,12 +279,15 @@ async fn test_prompt_save_and_get() {
                 }
                 Err(e) => eprintln!("Warning: get_prompt failed: {:?}", e),
             }
-            
+
             // Cleanup
             prompt.delete_prompt(&prompt_name).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: save_prompt failed (may require AI module): {:?}", e);
+            eprintln!(
+                "Warning: save_prompt failed (may require AI module): {:?}",
+                e
+            );
         }
     }
 }
@@ -298,22 +318,21 @@ async fn test_prompt_test() {
     let prompt_name = generate_unique_name("test_prompt_test");
 
     // Save a prompt first
-    match prompt.save_prompt(
-        &prompt_name,
-        "Test prompt",
-        "Say hello to ${name}.",
-    ).await {
+    match prompt
+        .save_prompt(&prompt_name, "Test prompt", "Say hello to ${name}.")
+        .await
+    {
         Ok(_) => {
             // Test the prompt (requires AI integration to be configured)
-            let mut vars: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+            let mut vars: std::collections::HashMap<String, serde_json::Value> =
+                std::collections::HashMap::new();
             vars.insert("name".to_string(), serde_json::json!("World"));
-            
+
             // Note: test_prompt requires a valid AI integration to be configured
             // Also requires a valid LLM model name and integration
             // Skipping actual test since we don't have AI configured
             println!("Prompt created successfully. Skipping test_prompt as it requires AI configuration.");
 
-            
             // Cleanup
             prompt.delete_prompt(&prompt_name).await.ok();
         }
@@ -351,7 +370,10 @@ async fn test_event_handlers() {
     let event = client.event_client();
 
     // Try to get event handlers for a specific event
-    match event.get_event_handlers("conductor:test_event", false).await {
+    match event
+        .get_event_handlers("conductor:test_event", false)
+        .await
+    {
         Ok(handlers) => {
             println!("Found {} handlers for event", handlers.len());
         }
@@ -377,5 +399,3 @@ async fn test_event_queue_configuration() {
         }
     }
 }
-
-
