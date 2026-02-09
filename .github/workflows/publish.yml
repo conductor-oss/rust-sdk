@@ -1,0 +1,177 @@
+name: Publish to crates.io
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version from tag
+        id: get_version
+        run: |
+          # Extract version from tag (e.g., v0.1.0 -> 0.1.0)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Tag version: $VERSION"
+      
+      - name: Verify version matches Cargo.toml
+        run: |
+          TAG_VERSION="${{ steps.get_version.outputs.version }}"
+          CARGO_VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          echo "Tag version: $TAG_VERSION"
+          echo "Cargo.toml version: $CARGO_VERSION"
+          
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "Error: Tag version ($TAG_VERSION) does not match Cargo.toml version ($CARGO_VERSION)"
+            exit 1
+          fi
+          echo "Version validation passed!"
+
+  test:
+    name: Run Full Test Suite
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    services:
+      conductor:
+        image: conductoross/conductor-standalone:latest
+        ports:
+          - 8080:8080
+          - 5000:5000
+        options: >-
+          --health-cmd "curl -f http://localhost:8080/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Wait for Conductor
+        run: |
+          timeout 120 bash -c 'until curl -f -s http://localhost:8080/health | grep -q "healthy"; do 
+            echo "Waiting for Conductor..."
+            sleep 3
+          done'
+          echo "Conductor is ready!"
+      
+      - name: Run all tests
+        env:
+          CONDUCTOR_SERVER_URL: http://localhost:8080/api
+        run: |
+          cargo test --lib --all-features
+          cargo test --tests --all-features -- --test-threads=1
+      
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: [validate, test]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Publish conductor-macros
+        working-directory: conductor-macros
+        run: |
+          echo "Publishing conductor-macros..."
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty || true
+          # Wait for crates.io to process the package
+          sleep 30
+        continue-on-error: false
+      
+      - name: Publish conductor-rust
+        run: |
+          echo "Publishing conductor-rust..."
+          # Wait a bit more to ensure macros are fully available
+          sleep 10
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty
+        continue-on-error: false
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${GITHUB_REF#refs/tags/}$" | head -n1)
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "First release - no previous tag found"
+            CHANGELOG="Initial release of Conductor Rust SDK"
+          else
+            echo "Generating changelog from $PREV_TAG to ${GITHUB_REF#refs/tags/}"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG..${GITHUB_REF#refs/tags/}" | head -n 50)
+          fi
+          
+          # Save changelog to file
+          echo "$CHANGELOG" > changelog.txt
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ needs.validate.outputs.version }}
+          body_path: changelog.txt
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

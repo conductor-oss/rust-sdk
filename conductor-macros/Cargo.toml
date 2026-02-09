@@ -2,6 +2,7 @@
 name = "conductor-macros"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.70"
 description = "Procedural macros for Conductor Rust SDK"
 license = "Apache-2.0"
 repository = "https://github.com/conductor-oss/conductor-rust"
