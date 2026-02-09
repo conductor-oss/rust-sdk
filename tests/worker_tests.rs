@@ -16,10 +16,7 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_worker_poll_and_execute() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
@@ -72,10 +69,7 @@ async fn test_worker_poll_and_execute() {
 
 #[tokio::test]
 async fn test_worker_concurrency_control() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
@@ -149,11 +143,6 @@ async fn test_worker_concurrency_control() {
 
 #[tokio::test]
 async fn test_worker_error_handling() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -199,11 +188,6 @@ async fn test_worker_error_handling() {
 
 #[tokio::test]
 async fn test_worker_task_in_progress() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -254,11 +238,6 @@ async fn test_worker_task_in_progress() {
 
 #[tokio::test]
 async fn test_worker_domain_filtering() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -288,11 +267,6 @@ async fn test_worker_domain_filtering() {
 
 #[tokio::test]
 async fn test_worker_configuration_override() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -323,11 +297,6 @@ async fn test_worker_configuration_override() {
 
 #[tokio::test]
 async fn test_worker_pause_resume() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();

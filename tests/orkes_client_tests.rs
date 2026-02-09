@@ -15,10 +15,7 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_scheduler_save_and_get() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -66,10 +63,7 @@ async fn test_scheduler_save_and_get() {
 
 #[tokio::test]
 async fn test_scheduler_pause_resume() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -119,11 +113,6 @@ async fn test_scheduler_pause_resume() {
 
 #[tokio::test]
 async fn test_scheduler_search_executions() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let scheduler = client.scheduler_client();
@@ -141,11 +130,6 @@ async fn test_scheduler_search_executions() {
 
 #[tokio::test]
 async fn test_scheduler_get_next_execution_times() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let scheduler = client.scheduler_client();
@@ -168,11 +152,6 @@ async fn test_scheduler_get_next_execution_times() {
 
 #[tokio::test]
 async fn test_secret_put_and_get() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let secret = client.secret_client();
@@ -202,11 +181,6 @@ async fn test_secret_put_and_get() {
 
 #[tokio::test]
 async fn test_secret_list_all() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let secret = client.secret_client();
@@ -225,11 +199,6 @@ async fn test_secret_list_all() {
 
 #[tokio::test]
 async fn test_secret_exists() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let secret = client.secret_client();
@@ -273,11 +242,6 @@ async fn test_secret_exists() {
 
 #[tokio::test]
 async fn test_prompt_save_and_get() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let prompt = client.prompt_client();
@@ -310,11 +274,6 @@ async fn test_prompt_save_and_get() {
 
 #[tokio::test]
 async fn test_prompt_get_prompts() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let prompt = client.prompt_client();
@@ -332,11 +291,6 @@ async fn test_prompt_get_prompts() {
 
 #[tokio::test]
 async fn test_prompt_test() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let prompt = client.prompt_client();
@@ -375,11 +329,6 @@ async fn test_prompt_test() {
 
 #[tokio::test]
 async fn test_get_all_event_handlers() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let event = client.event_client();
@@ -397,11 +346,6 @@ async fn test_get_all_event_handlers() {
 
 #[tokio::test]
 async fn test_event_handlers() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let event = client.event_client();
@@ -419,11 +363,6 @@ async fn test_event_handlers() {
 
 #[tokio::test]
 async fn test_event_queue_configuration() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let event = client.event_client();

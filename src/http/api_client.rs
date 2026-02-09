@@ -659,8 +659,10 @@ impl ApiClient {
             // Reset auth failures on successful request
             *self.auth_failures.write().await = 0;
 
-            let text = response.text().await?;
-            if text.is_empty() {
+            let bytes = response.bytes().await.map_err(ConductorError::Http)?;
+            let text = String::from_utf8_lossy(&bytes);
+
+            if text.trim().is_empty() {
                 // Try to deserialize from empty - works for Option<T> or ()
                 serde_json::from_str("null").map_err(ConductorError::Json)
             } else {

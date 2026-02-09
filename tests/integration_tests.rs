@@ -19,24 +19,11 @@ fn test_config() -> Configuration {
     Configuration::from_env()
 }
 
-/// Check if Conductor server is available
-async fn conductor_available() -> bool {
-    let config = test_config();
-    let client = match ConductorClient::new(config) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
 
-    // Try to get metadata to verify connection
-    client.metadata_client().get_all_task_defs().await.is_ok()
-}
 
 #[tokio::test]
 async fn test_task_def_crud() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -80,10 +67,7 @@ async fn test_task_def_crud() {
 
 #[tokio::test]
 async fn test_workflow_def_crud() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -132,10 +116,7 @@ async fn test_workflow_def_crud() {
 
 #[tokio::test]
 async fn test_workflow_execution() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
@@ -194,6 +175,8 @@ async fn test_workflow_execution() {
         .await
         .unwrap();
 
+    println!("Started workflow with ID: {}", workflow_run.workflow_id);
+
     // Verify execution
     assert!(
         workflow_run.is_successful(),
@@ -215,10 +198,7 @@ async fn test_workflow_execution() {
 
 #[tokio::test]
 async fn test_workflow_lifecycle_operations() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
@@ -290,10 +270,7 @@ async fn test_workflow_lifecycle_operations() {
 
 #[tokio::test]
 async fn test_multiple_workers() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
@@ -386,10 +363,7 @@ async fn test_multiple_workers() {
 
 #[tokio::test]
 async fn test_http_task_workflow() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -428,10 +402,7 @@ async fn test_http_task_workflow() {
 
 #[tokio::test]
 async fn test_inline_javascript_task() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -480,10 +451,7 @@ async fn test_inline_javascript_task() {
 
 #[tokio::test]
 async fn test_fork_join_workflow() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -528,10 +496,7 @@ async fn test_fork_join_workflow() {
 
 #[tokio::test]
 async fn test_switch_task_workflow() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -583,10 +548,7 @@ async fn test_switch_task_workflow() {
 
 #[tokio::test]
 async fn test_do_while_workflow() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -632,10 +594,7 @@ async fn test_do_while_workflow() {
 
 #[tokio::test]
 async fn test_workflow_retry() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
@@ -718,10 +677,7 @@ async fn test_workflow_retry() {
 
 #[tokio::test]
 async fn test_workflow_search() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -743,10 +699,7 @@ async fn test_workflow_search() {
 
 #[tokio::test]
 async fn test_http_poll_task() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -792,10 +745,7 @@ async fn test_http_poll_task() {
 
 #[tokio::test]
 async fn test_get_all_workflows_with_latest_versions() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -810,10 +760,7 @@ async fn test_get_all_workflows_with_latest_versions() {
 
 #[tokio::test]
 async fn test_get_all_task_defs() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -828,10 +775,7 @@ async fn test_get_all_task_defs() {
 
 #[tokio::test]
 async fn test_task_tagging() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -873,10 +817,7 @@ async fn test_task_tagging() {
 
 #[tokio::test]
 async fn test_workflow_tagging() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();

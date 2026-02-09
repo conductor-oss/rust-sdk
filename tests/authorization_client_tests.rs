@@ -14,10 +14,7 @@ use common::*;
 
 #[tokio::test]
 async fn test_create_and_get_application() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -51,10 +48,7 @@ async fn test_create_and_get_application() {
 
 #[tokio::test]
 async fn test_list_applications() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
@@ -73,11 +67,6 @@ async fn test_list_applications() {
 
 #[tokio::test]
 async fn test_create_access_key() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -127,11 +116,6 @@ async fn test_create_access_key() {
 
 #[tokio::test]
 async fn test_upsert_and_get_user() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -164,11 +148,6 @@ async fn test_upsert_and_get_user() {
 
 #[tokio::test]
 async fn test_list_users() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -190,11 +169,6 @@ async fn test_list_users() {
 
 #[tokio::test]
 async fn test_upsert_and_get_group() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -228,11 +202,6 @@ async fn test_upsert_and_get_group() {
 
 #[tokio::test]
 async fn test_list_groups() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -254,11 +223,6 @@ async fn test_list_groups() {
 
 #[tokio::test]
 async fn test_grant_and_remove_permissions() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -276,11 +240,6 @@ async fn test_grant_and_remove_permissions() {
 
 #[tokio::test]
 async fn test_check_permissions() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -302,11 +261,6 @@ async fn test_check_permissions() {
 
 #[tokio::test]
 async fn test_create_and_get_role() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();
@@ -324,11 +278,6 @@ async fn test_create_and_get_role() {
 
 #[tokio::test]
 async fn test_list_all_roles() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let auth = client.authorization_client();

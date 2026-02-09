@@ -23,17 +23,7 @@ pub fn test_config() -> Configuration {
     Configuration::from_env()
 }
 
-/// Check if Conductor server is available
-pub async fn conductor_available() -> bool {
-    let config = test_config();
-    let client = match ConductorClient::new(config) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
 
-    // Try to get metadata to verify connection
-    client.metadata_client().get_all_task_defs().await.is_ok()
-}
 
 /// Generate a unique workflow name with prefix
 #[allow(dead_code)]

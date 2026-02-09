@@ -21,10 +21,7 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_update_task() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
+
 
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
@@ -80,11 +77,6 @@ async fn test_update_task() {
 
 #[tokio::test]
 async fn test_update_task_by_ref_name() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -142,11 +134,6 @@ async fn test_update_task_by_ref_name() {
 
 #[tokio::test]
 async fn test_task_log() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -199,11 +186,6 @@ async fn test_task_log() {
 
 #[tokio::test]
 async fn test_get_queue_size_for_task() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let task_client = client.task_client();
@@ -219,11 +201,6 @@ async fn test_get_queue_size_for_task() {
 
 #[tokio::test]
 async fn test_get_poll_data() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let task_client = client.task_client();
@@ -246,11 +223,6 @@ async fn test_get_poll_data() {
 
 #[tokio::test]
 async fn test_get_all_poll_data() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let task_client = client.task_client();
@@ -274,11 +246,6 @@ async fn test_get_all_poll_data() {
 
 #[tokio::test]
 async fn test_search_tasks() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let task_client = client.task_client();
@@ -295,11 +262,6 @@ async fn test_search_tasks() {
 
 #[tokio::test]
 async fn test_search_v2_tasks() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let task_client = client.task_client();
@@ -325,11 +287,6 @@ async fn test_search_v2_tasks() {
 
 #[tokio::test]
 async fn test_batch_poll() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -359,11 +316,6 @@ async fn test_batch_poll() {
 
 #[tokio::test]
 async fn test_get_task_details() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config.clone()).unwrap();
     let metadata = client.metadata_client();
@@ -408,11 +360,6 @@ async fn test_get_task_details() {
 
 #[tokio::test]
 async fn test_requeue_pending_tasks() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -440,11 +387,6 @@ async fn test_requeue_pending_tasks() {
 #[tokio::test]
 #[ignore] // Requires specific workflow setup with state updates
 async fn test_update_task_sync() {
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let _task_client = client.task_client();
