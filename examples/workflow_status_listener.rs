@@ -43,7 +43,11 @@
 //! cargo run --example workflow_status_listener
 //! ```
 
-use conductor_rust::{ConductorClient, Configuration, WorkflowDef, WorkflowTask};
+use conductor::{
+    client::ConductorClient,
+    configuration::Configuration,
+    models::{StateChangeConfig, StateChangeEvent, StateChangeEventType, WorkflowDef, WorkflowTask},
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -52,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize the client
     let config = Configuration::default();
-    let client = ConductorClient::new(config).await?;
+    let client = ConductorClient::new(config)?;
 
     // Create a simple workflow with HTTP task
     let workflow_name = "rust_workflow_status_listener_demo";
@@ -85,7 +89,7 @@ async fn main() -> anyhow::Result<()> {
     // Register the workflow
     println!("Registering workflow with status listener...");
     let metadata_client = client.metadata_client();
-    metadata_client.register_workflow_def(&workflow, true).await?;
+    metadata_client.register_or_update_workflow_def(&workflow, true).await?;
     println!("  Workflow registered: {}", workflow_name);
 
     // Display status listener configuration
@@ -147,13 +151,13 @@ async fn main() -> anyhow::Result<()> {
                 .with_description("HTTP task with audit events")
                 // Configure state change events for this task
                 .with_state_change(
-                    conductor_rust::StateChangeConfig::new()
-                        .on_event(conductor_rust::StateChangeEventType::OnScheduled)
-                        .on_event(conductor_rust::StateChangeEventType::OnStart)
-                        .on_event(conductor_rust::StateChangeEventType::OnCompleted)
-                        .on_event(conductor_rust::StateChangeEventType::OnFailed)
+                    StateChangeConfig::new()
+                        .on_event(StateChangeEventType::OnScheduled)
+                        .on_event(StateChangeEventType::OnStart)
+                        .on_event(StateChangeEventType::OnCompleted)
+                        .on_event(StateChangeEventType::OnFailed)
                         .with_event(
-                            conductor_rust::StateChangeEvent::new("kafka:task-audit-events")
+                            StateChangeEvent::new("kafka:task-audit-events")
                                 .with_payload(
                                     "taskRef",
                                     serde_json::json!("${task.referenceTaskName}"),
@@ -172,7 +176,7 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     // Register the audit workflow
-    metadata_client.register_workflow_def(&audit_workflow, true).await?;
+    metadata_client.register_or_update_workflow_def(&audit_workflow, true).await?;
     println!("  Audit workflow registered: rust_task_status_audit_demo");
 
     // Clean up
@@ -183,7 +187,7 @@ async fn main() -> anyhow::Result<()> {
     println!("Cleaning up created resources...");
 
     match metadata_client
-        .unregister_workflow_def(workflow_name, 1)
+        .delete_workflow_def(workflow_name, 1)
         .await
     {
         Ok(_) => println!("  Deleted: {}", workflow_name),
@@ -191,7 +195,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     match metadata_client
-        .unregister_workflow_def("rust_task_status_audit_demo", 1)
+        .delete_workflow_def("rust_task_status_audit_demo", 1)
         .await
     {
         Ok(_) => println!("  Deleted: rust_task_status_audit_demo"),

@@ -31,7 +31,11 @@
 //! cargo run --example prompt_journey
 //! ```
 
-use conductor_rust::{ConductorClient, Configuration, MetadataTag};
+use conductor::{
+    client::ConductorClient,
+    configuration::Configuration,
+    models::MetadataTag,
+};
 use std::collections::HashMap;
 use std::env;
 
@@ -43,15 +47,15 @@ struct PromptJourney {
 }
 
 impl PromptJourney {
-    async fn new() -> Self {
+    fn new() -> anyhow::Result<Self> {
         let config = Configuration::default();
-        let client = ConductorClient::new(config).await.expect("Failed to create client");
+        let client = ConductorClient::new(config)?;
 
-        Self {
+        Ok(Self {
             client,
             created_prompts: Vec::new(),
             ai_integration: env::var("AI_INTEGRATION").unwrap_or_else(|_| "openai".to_string()),
-        }
+        })
     }
 
     /// Chapter 1: Initial Setup - Creating Basic Prompt Templates
@@ -161,12 +165,12 @@ Be helpful and understanding while following company policy."#;
         // Add tags to greeting prompt
         println!("Adding tags to customer greeting prompt...");
         let greeting_tags = vec![
-            MetadataTag::new("category", "customer_service"),
-            MetadataTag::new("type", "greeting"),
-            MetadataTag::new("department", "support"),
-            MetadataTag::new("language", "english"),
-            MetadataTag::new("status", "active"),
-            MetadataTag::new("priority", "high"),
+            MetadataTag::with_value("category", "customer_service"),
+            MetadataTag::with_value("type", "greeting"),
+            MetadataTag::with_value("department", "support"),
+            MetadataTag::with_value("language", "english"),
+            MetadataTag::with_value("status", "active"),
+            MetadataTag::with_value("priority", "high"),
         ];
 
         prompt_client
@@ -181,19 +185,19 @@ Be helpful and understanding while following company policy."#;
             .await?;
         println!("  Tags ({} total):", retrieved_tags.len());
         for tag in &retrieved_tags {
-            println!("    - {}: {}", tag.key, tag.value);
+            println!("    - {}: {}", tag.key, tag.value.as_deref().unwrap_or(""));
         }
 
         // Add tags to order inquiry prompt
         println!("\nAdding tags to order inquiry prompt...");
         let order_tags = vec![
-            MetadataTag::new("category", "customer_service"),
-            MetadataTag::new("type", "inquiry"),
-            MetadataTag::new("department", "support"),
-            MetadataTag::new("language", "english"),
-            MetadataTag::new("status", "active"),
-            MetadataTag::new("priority", "high"),
-            MetadataTag::new("integration", "order_system"),
+            MetadataTag::with_value("category", "customer_service"),
+            MetadataTag::with_value("type", "inquiry"),
+            MetadataTag::with_value("department", "support"),
+            MetadataTag::with_value("language", "english"),
+            MetadataTag::with_value("status", "active"),
+            MetadataTag::with_value("priority", "high"),
+            MetadataTag::with_value("integration", "order_system"),
         ];
 
         prompt_client
@@ -204,13 +208,13 @@ Be helpful and understanding while following company policy."#;
         // Add tags to return request prompt
         println!("\nAdding tags to return request prompt...");
         let return_tags = vec![
-            MetadataTag::new("category", "customer_service"),
-            MetadataTag::new("type", "returns"),
-            MetadataTag::new("department", "support"),
-            MetadataTag::new("language", "english"),
-            MetadataTag::new("status", "testing"),
-            MetadataTag::new("priority", "medium"),
-            MetadataTag::new("compliance", "requires_review"),
+            MetadataTag::with_value("category", "customer_service"),
+            MetadataTag::with_value("type", "returns"),
+            MetadataTag::with_value("department", "support"),
+            MetadataTag::with_value("language", "english"),
+            MetadataTag::with_value("status", "testing"),
+            MetadataTag::with_value("priority", "medium"),
+            MetadataTag::with_value("compliance", "requires_review"),
         ];
 
         prompt_client
@@ -345,10 +349,10 @@ How may we help you today?"#;
         // Tag versions for tracking
         println!("\nTagging versions for management...");
         let version_tags = vec![
-            MetadataTag::new("version_status", "active"),
-            MetadataTag::new("tested_models", "openai:gpt-4o"),
-            MetadataTag::new("performance", "optimized"),
-            MetadataTag::new("last_updated", "2024-12-24"),
+            MetadataTag::with_value("version_status", "active"),
+            MetadataTag::with_value("tested_models", "openai:gpt-4o"),
+            MetadataTag::with_value("performance", "optimized"),
+            MetadataTag::with_value("last_updated", "2024-12-24"),
         ];
 
         prompt_client
@@ -535,7 +539,7 @@ How may we help you today?"#;
 async fn main() -> anyhow::Result<()> {
     println!("Prompt Management Journey - Conductor Rust SDK\n");
 
-    let mut journey = PromptJourney::new().await;
+    let mut journey = PromptJourney::new()?;
 
     match journey.run().await {
         Ok(_) => {

@@ -33,7 +33,11 @@
 //! cargo run --example task_configure
 //! ```
 
-use conductor_rust::{ConductorClient, Configuration, TaskDef, RetryLogic};
+use conductor::{
+    client::ConductorClient,
+    configuration::Configuration,
+    models::{RetryLogic, TaskDef, TimeoutPolicy},
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -42,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize the client
     let config = Configuration::default();
-    let client = ConductorClient::new(config).await?;
+    let client = ConductorClient::new(config)?;
     let metadata_client = client.metadata_client();
 
     // Track created tasks for cleanup
@@ -76,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
     let linear_backoff_task = TaskDef::new("rust_task_linear_backoff")
         .with_description("Task with linear backoff retry strategy")
         .with_retry(5, RetryLogic::LinearBackoff, 5)
-        .with_timeout(120); // 2 minute timeout
+        .with_timeout(120, TimeoutPolicy::Retry); // 2 minute timeout
 
     println!("  Name: {}", linear_backoff_task.name);
     println!("  Retry Count: {:?}", linear_backoff_task.retry_count);
@@ -107,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
     let exp_backoff_task = TaskDef::new("rust_task_exponential_backoff")
         .with_description("Task with exponential backoff for external API calls")
         .with_retry(4, RetryLogic::ExponentialBackoff, 2)
-        .with_timeout(300); // 5 minute timeout
+        .with_timeout(300, TimeoutPolicy::Retry); // 5 minute timeout
 
     println!("  Name: {}", exp_backoff_task.name);
     println!("  Retry Count: {:?}", exp_backoff_task.retry_count);
@@ -136,8 +140,8 @@ async fn main() -> anyhow::Result<()> {
     let concurrent_task = TaskDef::new("rust_task_concurrent_limited")
         .with_description("Task with limited concurrent executions")
         .with_retry(3, RetryLogic::Fixed, 10)
-        .with_timeout(120)
-        .with_concurrent_exec_limit(5); // Only 5 tasks can be IN_PROGRESS at a time
+        .with_timeout(120, TimeoutPolicy::Retry)
+        .with_concurrent_limit(5); // Only 5 tasks can be IN_PROGRESS at a time
 
     println!("  Name: {}", concurrent_task.name);
     println!(
@@ -163,7 +167,7 @@ async fn main() -> anyhow::Result<()> {
     let rate_limited_task = TaskDef::new("rust_task_rate_limited")
         .with_description("Task with rate limiting for external API calls")
         .with_retry(3, RetryLogic::Fixed, 10)
-        .with_timeout(120)
+        .with_timeout(120, TimeoutPolicy::Retry)
         .with_rate_limit(100, 10); // 100 executions per 10-second window
 
     println!("  Name: {}", rate_limited_task.name);
@@ -192,7 +196,7 @@ async fn main() -> anyhow::Result<()> {
     let response_timeout_task = TaskDef::new("rust_task_response_timeout")
         .with_description("Long-running task with response timeout")
         .with_retry(2, RetryLogic::Fixed, 30)
-        .with_timeout(3600) // Total timeout: 1 hour
+        .with_timeout(3600, TimeoutPolicy::Retry) // Total timeout: 1 hour
         .with_response_timeout(300); // Timeout if no status update in 5 minutes
 
     println!("  Name: {}", response_timeout_task.name);
@@ -225,10 +229,12 @@ async fn main() -> anyhow::Result<()> {
     println!("\n7. TASK WITH POLL TIMEOUT");
     println!("{}", "-".repeat(40));
 
-    let poll_timeout_task = TaskDef::new("rust_task_poll_timeout")
+    let mut poll_timeout_task = TaskDef::new("rust_task_poll_timeout")
         .with_description("Task that must be picked up quickly")
-        .with_retry(3, RetryLogic::Fixed, 10)
-        .with_poll_timeout(60); // Fail if not polled within 60 seconds
+        .with_retry(3, RetryLogic::Fixed, 10);
+    
+    // Set poll timeout directly (no builder method available)
+    poll_timeout_task.poll_timeout_seconds = 60; // Fail if not polled within 60 seconds
 
     println!("  Name: {}", poll_timeout_task.name);
     println!(
@@ -255,16 +261,18 @@ async fn main() -> anyhow::Result<()> {
     println!("\n8. COMPLETE PRODUCTION TASK");
     println!("{}", "-".repeat(40));
 
-    let production_task = TaskDef::new("rust_task_production")
+    let mut production_task = TaskDef::new("rust_task_production")
         .with_description("Production-ready task with comprehensive configuration")
         .with_retry(3, RetryLogic::ExponentialBackoff, 5)
-        .with_timeout(300)
+        .with_timeout(300, TimeoutPolicy::Retry)
         .with_response_timeout(60)
-        .with_poll_timeout(30)
-        .with_concurrent_exec_limit(10)
+        .with_concurrent_limit(10)
         .with_rate_limit(1000, 60)
         .with_input_keys(vec!["orderId".to_string(), "customerId".to_string()])
         .with_output_keys(vec!["result".to_string(), "processedAt".to_string()]);
+    
+    // Set poll timeout directly
+    production_task.poll_timeout_seconds = 30;
 
     println!("  Name: {}", production_task.name);
     println!("  Description: {:?}", production_task.description);
@@ -324,7 +332,7 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     for task_name in &created_tasks {
-        match metadata_client.unregister_task_def(task_name).await {
+        match metadata_client.delete_task_def(task_name).await {
             Ok(_) => println!("  Deleted: {}", task_name),
             Err(e) => println!("  Could not delete {}: {}", task_name, e),
         }
