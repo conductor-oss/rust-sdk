@@ -353,7 +353,7 @@ How may we help you today?"#;
         // Test with different scenarios
         println!("Testing customer greeting prompt...\n");
 
-        let test_cases = vec![
+        let test_cases = [
             HashMap::from([
                 ("customer_name".to_string(), serde_json::json!("John Smith")),
                 ("customer_tier".to_string(), serde_json::json!("Premium")),

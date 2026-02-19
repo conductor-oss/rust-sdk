@@ -354,7 +354,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
     println!("{}", "=".repeat(80));
     println!();
 
-    let example_queries = vec![
+    let example_queries = [
         "What's the weather like in San Francisco?",
         "Calculate 15% of 250",
         "What is the capital of France?",

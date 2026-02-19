@@ -33,9 +33,38 @@ cargo test --test integration_tests
 
 # Run single test
 cargo test test_workflow_execution -- --exact
+```
 
-# Check for warnings (must pass with zero warnings)
-cargo clippy --all-targets
+## IMPORTANT: After Every Code Change
+
+**You MUST run these commands after making any code changes:**
+
+```bash
+# 1. Format code (REQUIRED)
+cargo fmt --all
+
+# 2. Run clippy for library code (REQUIRED - must pass with zero warnings)
+cargo clippy --lib --all-features -- -D warnings
+
+# 3. Run clippy for tests/examples (REQUIRED - allows unwrap/expect)
+cargo clippy --tests --examples --all-features -- -D warnings -A clippy::unwrap_used -A clippy::expect_used
+
+# 4. Verify it compiles
+cargo check --all-features
+```
+
+### Quick One-Liner for Validation
+
+```bash
+cargo fmt --all && cargo clippy --lib --all-features -- -D warnings && cargo clippy --tests --examples --all-features -- -D warnings -A clippy::unwrap_used -A clippy::expect_used
+```
+
+### License Headers for New Files
+
+When creating new `.rs` files, add the license header or run:
+
+```bash
+./scripts/add-license-headers.sh
 ```
 
 ## Environment Variables
@@ -99,8 +128,19 @@ let task = TaskDef::new("my_task")
 All code must compile with **zero warnings**. Check with:
 
 ```bash
-cargo clippy --all-targets 2>&1 | grep -E "^warning:"
-# Should produce no output
+# Library code (strict - no unwrap/expect)
+cargo clippy --lib --all-features -- -D warnings
+
+# Tests and examples (relaxed - unwrap/expect allowed)
+cargo clippy --tests --examples --all-features -- -D warnings -A clippy::unwrap_used -A clippy::expect_used
+```
+
+### Formatting
+
+All code must be formatted with `cargo fmt`:
+
+```bash
+cargo fmt --all
 ```
 
 ### Test Requirements
