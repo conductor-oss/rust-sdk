@@ -1,11 +1,5 @@
-//! Task runner for polling and executing tasks
-//!
-//! This implements the core polling loop with:
-//! - Dynamic batch polling based on capacity
-//! - Adaptive backoff when queue is empty
-//! - Concurrent task execution with semaphore
-//! - Event publishing for metrics
-//! - Graceful shutdown with task tracking
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};

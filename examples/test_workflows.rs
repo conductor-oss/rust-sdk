@@ -1,18 +1,5 @@
-//! Test Workflows Example
-//!
-//! Demonstrates workflow testing capabilities.
-//!
-//! What it shows:
-//! - Testing workflows with mock task outputs
-//! - Dry-run workflow execution
-//! - Testing without executing actual tasks
-//! - Validating workflow logic
-//!
-//! Run with: cargo run --example test_workflows
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::{ConductorClient, TestWorkflowRequest},

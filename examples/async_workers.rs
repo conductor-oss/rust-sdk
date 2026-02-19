@@ -1,12 +1,5 @@
-//! Async Workers Example
-//!
-//! This example demonstrates:
-//! - Multiple async workers
-//! - Concurrent task execution
-//! - Prometheus metrics
-//! - Long-running tasks with TaskInProgress
-//!
-//! Run with: cargo run --example async_workers
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

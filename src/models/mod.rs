@@ -1,6 +1,5 @@
-//! Data models for Conductor SDK
-//!
-//! This module contains all the data structures used to interact with Conductor.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 mod authorization;
 mod integration;

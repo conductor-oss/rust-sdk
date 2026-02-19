@@ -1,17 +1,5 @@
-//! High-level Conductor API clients
-//!
-//! This module provides typed clients for interacting with Conductor:
-//! - `TaskClient`: Task polling and updates
-//! - `WorkflowClient`: Workflow execution management
-//! - `MetadataClient`: Workflow and task definitions
-//! - `SchedulerClient`: Workflow scheduling (cron-based)
-//! - `SecretClient`: Secret management
-//! - `AuthorizationClient`: Users, groups, and permissions
-//! - `IntegrationClient`: External system integrations
-//! - `PromptClient`: AI prompt templates
-//! - `SchemaClient`: Schema definitions
-//! - `EventClient`: Event queue configurations
-//! - `ConductorClient` / `OrkesClients`: Combined client for all operations
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 mod authorization_client;
 mod conductor_client;

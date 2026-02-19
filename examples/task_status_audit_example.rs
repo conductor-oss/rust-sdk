@@ -1,13 +1,5 @@
-//! Task Status Change Audit Example
-//!
-//! This example demonstrates how to use state change events to trigger
-//! audit logging when task statuses change. This is useful for monitoring,
-//! compliance, and debugging workflows.
-//! It mirrors the Python SDK's orkes/task_status_change_audit.py example.
-//!
-//! Prerequisites:
-//! - Conductor server running
-//! - CONDUCTOR_SERVER_URL environment variable set
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::worker::{FnWorker, WorkerOutput};
 use conductor::{

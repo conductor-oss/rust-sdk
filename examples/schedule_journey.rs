@@ -1,19 +1,5 @@
-//! Schedule Journey Example
-//!
-//! Demonstrates workflow scheduling with cron expressions.
-//!
-//! What it shows:
-//! - Creating scheduled workflows
-//! - Cron expressions for scheduling
-//! - Pause/resume schedules
-//! - Querying schedule executions
-//! - Schedule tags
-//!
-//! Run with: cargo run --example schedule_journey
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

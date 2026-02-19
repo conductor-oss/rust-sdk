@@ -1,7 +1,5 @@
-//! High-level worker hosting API
-//!
-//! WorkerHost provides a convenient way to run Conductor workers
-//! with minimal boilerplate.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::sync::Arc;
 use tokio::sync::oneshot;

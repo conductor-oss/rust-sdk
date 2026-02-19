@@ -1,13 +1,5 @@
-//! Worker framework for executing Conductor tasks
-//!
-//! This module provides the core worker infrastructure:
-//! - `Worker`: Trait for implementing task workers
-//! - `FnWorker`: Function-based worker (clones task for each execution)
-//! - `FnWorkerArc`: High-performance worker using Arc<Task> (zero-copy)
-//! - `TaskRunner`: Async task polling and execution loop
-//! - `TaskHandler`: Manages multiple workers and their lifecycle
-//! - `WorkerHost`: High-level worker hosting
-//! - `TaskContext`: Execution context for accessing task metadata
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 mod task_context;
 mod task_handler;

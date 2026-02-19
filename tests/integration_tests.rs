@@ -1,6 +1,5 @@
-//! Integration tests for Conductor Rust SDK
-//!
-//! These tests require a running Conductor server on localhost:8080
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

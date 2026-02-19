@@ -1,43 +1,5 @@
-//! Multi-Agent Chat Example
-//!
-//! This example demonstrates a multi-agent discussion system where different
-//! AI personas debate or collaborate on a topic.
-//!
-//! ## Architecture
-//! ```text
-//! ┌────────────────────────────────────────────────────────────────────┐
-//! │                    MULTI-AGENT DISCUSSION                          │
-//! ├────────────────────────────────────────────────────────────────────┤
-//! │                                                                    │
-//! │  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌─────────────────┐ │
-//! │  │ Agent 1  │──▶│ Agent 2  │──▶│ Agent 1  │──▶│ ... (N rounds)  │ │
-//! │  │ (Expert) │   │(Critic)  │   │(Response)│   │                 │ │
-//! │  └──────────┘   └──────────┘   └──────────┘   └─────────────────┘ │
-//! │                                                                    │
-//! │  Input: topic ───▶ Output: discussion_summary                      │
-//! └────────────────────────────────────────────────────────────────────┘
-//! ```
-//!
-//! ## Agents
-//! - **Expert**: Provides detailed technical information
-//! - **Critic**: Challenges assumptions and asks probing questions
-//! - **Synthesizer**: Combines insights into actionable conclusions
-//!
-//! ## Prerequisites
-//! 1. Conductor server with AI/LLM support
-//! 2. LLM provider configured
-//!
-//! ## Environment Variables
-//! ```bash
-//! export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//! export CONDUCTOR_AUTH_KEY="your-key"
-//! export CONDUCTOR_AUTH_SECRET="your-secret"
-//! ```
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example multiagent_chat
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

@@ -1,19 +1,5 @@
-//! Authorization Example
-//!
-//! Demonstrates user, group, and permission management.
-//!
-//! What it shows:
-//! - User management (create, update, delete)
-//! - Group management
-//! - Adding users to groups
-//! - Granting and revoking permissions
-//! - Application and access key management
-//!
-//! Run with: cargo run --example authorization_example
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080 with authentication enabled
-//! - Set CONDUCTOR_SERVER_URL, CONDUCTOR_AUTH_KEY, CONDUCTOR_AUTH_SECRET
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

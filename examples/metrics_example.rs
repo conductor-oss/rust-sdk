@@ -1,20 +1,5 @@
-//! Metrics Example
-//!
-//! Demonstrates Prometheus metrics collection and HTTP endpoint.
-//!
-//! What it shows:
-//! - Enabling Prometheus metrics collection
-//! - Configuring the metrics HTTP server
-//! - Available metrics (poll, execution, errors, etc.)
-//! - Custom namespace and labels
-//!
-//! Run with: cargo run --example metrics_example
-//!
-//! Then visit: http://localhost:9090/metrics
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

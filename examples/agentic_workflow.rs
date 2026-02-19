@@ -1,48 +1,5 @@
-//! Agentic Workflow Example
-//!
-//! This example demonstrates building an AI agent using Conductor workflows.
-//! The agent can:
-//! 1. Decide which tool to use based on user input
-//! 2. Execute the selected tool (implemented as task workers)
-//! 3. Return results to the user
-//!
-//! ## Agent Architecture
-//! ```text
-//! ┌─────────────────────────────────────────────────────────────────────┐
-//! │                          AGENT WORKFLOW                             │
-//! ├─────────────────────────────────────────────────────────────────────┤
-//! │                                                                     │
-//! │  ┌──────────────┐    ┌──────────────┐    ┌───────────────────────┐ │
-//! │  │  LLM Task    │───▶│  Switch/Case │───▶│  Tool Worker Tasks    │ │
-//! │  │  (Reasoning) │    │  (Routing)   │    │  (get_weather, etc.)  │ │
-//! │  └──────────────┘    └──────────────┘    └───────────────────────┘ │
-//! │                                                                     │
-//! │  Input: user_question ────▶ Output: final_answer                   │
-//! └─────────────────────────────────────────────────────────────────────┘
-//! ```
-//!
-//! ## Tool Definitions
-//! The agent has access to these tools:
-//! - **get_weather**: Get current weather for a location
-//! - **calculate**: Perform mathematical calculations
-//! - **search_knowledge**: Search internal knowledge base
-//!
-//! ## Prerequisites
-//! 1. Conductor server with AI/LLM support (Orkes Conductor)
-//! 2. LLM provider configured (e.g., OpenAI with function calling support)
-//! 3. Task workers registered for each tool
-//!
-//! ## Environment Variables
-//! ```bash
-//! export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//! export CONDUCTOR_AUTH_KEY="your-key"
-//! export CONDUCTOR_AUTH_SECRET="your-secret"
-//! ```
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example agentic_workflow
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

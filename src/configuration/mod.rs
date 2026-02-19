@@ -1,9 +1,5 @@
-//! Configuration module for Conductor SDK
-//!
-//! Provides hierarchical configuration with support for:
-//! - Environment variables
-//! - Code-level defaults
-//! - Worker-specific overrides
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 mod settings;
 mod worker_config;

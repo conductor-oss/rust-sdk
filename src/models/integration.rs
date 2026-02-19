@@ -1,4 +1,5 @@
-//! Integration models for external systems (AI, Vector DBs, Kafka, etc.)
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

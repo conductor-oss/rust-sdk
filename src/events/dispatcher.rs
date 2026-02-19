@@ -1,10 +1,5 @@
-//! Event dispatcher for publishing events to listeners
-//!
-//! The dispatcher clones the listener list before iterating to avoid
-//! holding the lock during listener execution. This prevents:
-//! - Deadlocks if a listener tries to register/unregister
-//! - Blocking other threads from publishing events
-//! - Serializing all event publishing
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use parking_lot::RwLock;
 use std::sync::Arc;

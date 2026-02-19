@@ -1,13 +1,5 @@
-//! Performance and Concurrency Test Suite
-//!
-//! This test validates:
-//! 1. No concurrency bugs (task input/output isolation)
-//! 2. Poll latency within acceptable bounds
-//! 3. Throughput under load
-//! 4. Graceful handling of high concurrency
-//!
-//! Run with: cargo test --test performance_test -- --nocapture
-//! Or for release performance: cargo test --test performance_test --release -- --nocapture
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     models::{StartWorkflowRequest, Task, TaskDef, WorkflowDef, WorkflowStatus, WorkflowTask},

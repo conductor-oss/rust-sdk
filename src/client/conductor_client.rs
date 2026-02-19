@@ -1,4 +1,5 @@
-//! Combined Conductor client providing access to all API clients
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use crate::configuration::Configuration;
 use crate::error::Result;

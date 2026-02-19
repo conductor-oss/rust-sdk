@@ -1,7 +1,5 @@
-//! Task handler for managing multiple workers
-//!
-//! TaskHandler is the main entry point for running Conductor workers.
-//! It manages the lifecycle of multiple TaskRunners.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::sync::Arc;
 use tokio::task::JoinHandle;

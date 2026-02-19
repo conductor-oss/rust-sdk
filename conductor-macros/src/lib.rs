@@ -1,18 +1,5 @@
-//! Procedural macros for the Conductor Rust SDK
-//!
-//! This crate provides attribute macros for defining Conductor workers in a declarative way,
-//! similar to Python's `@worker_task` decorator or Java's annotations.
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use conductor_macros::worker;
-//!
-//! #[worker(name = "greet", poll_interval = 100, thread_count = 5)]
-//! async fn greet(name: String) -> String {
-//!     format!("Hello, {}!", name)
-//! }
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use darling::{ast::NestedMeta, FromMeta};
 use proc_macro::TokenStream;

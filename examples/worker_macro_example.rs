@@ -1,22 +1,6 @@
-//! Worker Macro Example
-//!
-//! Demonstrates the `#[worker]` attribute macro for defining workers.
-//!
-//! This is similar to Python's `@worker_task` decorator or Java's annotations.
-//!
-//! What it shows:
-//! - Using #[worker] attribute macro
-//! - Different function signatures (simple params, Task param, TaskContext, Result return)
-//! - Generated worker functions
-//!
-//! Run with: cargo run --example worker_macro_example --features macros
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-// Note: This example requires the "macros" feature
-// cargo run --example worker_macro_example --features macros
 
 use conductor::{
     client::ConductorClient,

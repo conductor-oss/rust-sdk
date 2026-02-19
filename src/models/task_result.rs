@@ -1,4 +1,5 @@
-//! Task result model for reporting task execution results
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

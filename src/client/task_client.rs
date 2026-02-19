@@ -1,4 +1,5 @@
-//! Task client for polling and updating tasks
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::time::Duration;
 use tracing::{debug, warn};

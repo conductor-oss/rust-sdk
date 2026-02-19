@@ -1,11 +1,5 @@
-//! LLM Chat Complete Example
-//!
-//! This example demonstrates how to use LLM chat complete tasks with loops.
-//! It mirrors the Python SDK's orkes/open_ai_chat_gpt.py example.
-//!
-//! Prerequisites:
-//! - Conductor server running with OpenAI integration configured
-//! - CONDUCTOR_SERVER_URL environment variable set
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::time::Duration;
 

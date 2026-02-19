@@ -1,32 +1,5 @@
-//! JSON Schema generation for task definitions
-//!
-//! This module provides utilities for generating JSON Schemas from Rust types,
-//! similar to Python SDK's automatic schema generation from type hints.
-//!
-//! # Example
-//!
-//! ```rust
-//! use conductor::schema::generate_schema;
-//! use schemars::JsonSchema;
-//! use serde::{Deserialize, Serialize};
-//!
-//! #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-//! struct OrderInput {
-//!     order_id: String,
-//!     amount: f64,
-//!     customer_id: i64,
-//! }
-//!
-//! #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-//! struct OrderOutput {
-//!     status: String,
-//!     processed_at: String,
-//! }
-//!
-//! // Generate schemas
-//! let input_schema = generate_schema::<OrderInput>(false);
-//! let output_schema = generate_schema::<OrderOutput>(false);
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use schemars::{schema::RootSchema, schema_for, JsonSchema};
 use serde_json::Value;

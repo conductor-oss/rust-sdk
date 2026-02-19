@@ -1,13 +1,5 @@
-//! Wait for Webhook Example
-//!
-//! This example demonstrates how to use Wait for Webhook tasks that pause
-//! workflow execution until an external webhook is received.
-//! It mirrors the Python SDK's orkes/wait_for_webhook.py example.
-//!
-//! Prerequisites:
-//! - Conductor server running
-//! - CONDUCTOR_SERVER_URL environment variable set
-//! - A webhook configured in Conductor UI to dispatch to this workflow
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::collections::HashMap;
 use std::time::Duration;

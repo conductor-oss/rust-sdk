@@ -1,34 +1,5 @@
-//! LLM Function Calling Example
-//!
-//! This example demonstrates how to use LLM function/tool calling capabilities
-//! in Conductor workflows. The LLM decides which function to call based on user input.
-//!
-//! ## Function Calling Pattern
-//! ```text
-//! User Question ─▶ LLM with Functions ─▶ Function Call ─▶ Process Result
-//! ```
-//!
-//! ## Use Cases
-//! - API route selection
-//! - Intent classification
-//! - Parameter extraction
-//! - Multi-step reasoning
-//!
-//! ## Prerequisites
-//! 1. Conductor server with AI/LLM support
-//! 2. LLM provider with function calling (OpenAI, Anthropic, etc.)
-//!
-//! ## Environment Variables
-//! ```bash
-//! export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//! export CONDUCTOR_AUTH_KEY="your-key"
-//! export CONDUCTOR_AUTH_SECRET="your-secret"
-//! ```
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example function_calling_example
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

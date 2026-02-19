@@ -1,22 +1,5 @@
-//! Workflow Operations Example
-//!
-//! Demonstrates various workflow lifecycle operations and control mechanisms.
-//!
-//! What it does:
-//! - Start workflow: Create and execute a new workflow instance
-//! - Pause workflow: Temporarily halt workflow execution
-//! - Resume workflow: Continue paused workflow
-//! - Terminate workflow: Force stop a running workflow
-//! - Retry workflow: Retry from failed task
-//! - Restart workflow: Restart from the beginning
-//! - Update task: Manually update task status and output
-//! - Search workflows: Find workflows by query
-//!
-//! Run with: cargo run --example workflow_ops
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

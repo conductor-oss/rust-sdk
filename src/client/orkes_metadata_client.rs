@@ -1,7 +1,5 @@
-//! Orkes Metadata client with tagging APIs
-//!
-//! This client extends the base MetadataClient with Orkes-specific
-//! features like tagging for workflows and tasks.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::ops::Deref;
 use tracing::{debug, info};

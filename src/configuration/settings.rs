@@ -1,4 +1,5 @@
-//! Main configuration settings for Conductor SDK
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::env;
 use std::time::{Duration, Instant};

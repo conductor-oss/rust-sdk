@@ -1,12 +1,5 @@
-//! OpenAI Hello World Example
-//!
-//! This example demonstrates how to use LLM tasks in Conductor workflows.
-//! It mirrors the Python SDK's orkes/open_ai_helloworld.py example.
-//!
-//! Prerequisites:
-//! - Conductor server running with OpenAI integration configured
-//! - CONDUCTOR_SERVER_URL environment variable set
-//! - CONDUCTOR_AUTH_KEY and CONDUCTOR_AUTH_SECRET for Orkes Cloud
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::collections::HashMap;
 use std::time::Duration;

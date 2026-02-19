@@ -1,9 +1,5 @@
-//! Dynamic Workflow Example
-//!
-//! This example demonstrates creating and executing workflows dynamically
-//! without pre-registering them.
-//!
-//! Run with: cargo run --example dynamic_workflow
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

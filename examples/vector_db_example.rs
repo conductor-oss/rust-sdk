@@ -1,11 +1,5 @@
-//! Vector Database Example
-//!
-//! This example demonstrates how to use vector database tasks for RAG workflows.
-//! It mirrors the Python SDK's orkes/vector_db_helloworld.py example.
-//!
-//! Prerequisites:
-//! - Conductor server running with OpenAI and Pinecone integrations configured
-//! - CONDUCTOR_SERVER_URL environment variable set
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::collections::HashMap;
 use std::time::Duration;

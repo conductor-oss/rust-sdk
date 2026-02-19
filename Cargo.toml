@@ -6,9 +6,22 @@ rust-version = "1.70"
 description = "Rust SDK for Netflix Conductor workflow orchestration"
 license = "Apache-2.0"
 repository = "https://github.com/conductor-oss/conductor-rust"
+homepage = "https://conductor-oss.org"
+documentation = "https://docs.rs/conductor-rust"
+authors = ["Orkes, Inc. <info@orkes.io>"]
 keywords = ["conductor", "workflow", "orchestration", "microservices"]
 categories = ["api-bindings", "asynchronous"]
 readme = "README.md"
+exclude = [
+    ".github/*",
+    ".gitignore",
+    "PUBLISHING.md",
+    "DESIGN.md",
+    "SDK_COMPARISON.md",
+    "WORKER_COMPARISON.md",
+    "EXAMPLES_COMPARISON.md",
+    "launch_blog.md",
+]
 
 # Lint configuration for production-ready code
 [lints.rust]
@@ -72,7 +85,7 @@ inventory = "0.3"
 schemars = "0.8"
 
 # Procedural macros (optional feature)
-conductor-macros = { path = "conductor-macros", optional = true }
+conductor-macros = { version = "0.1.0", path = "conductor-macros", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -190,6 +203,48 @@ path = "examples/fork_join_script_example.rs"
 [[example]]
 name = "task_status_audit_example"
 path = "examples/task_status_audit_example.rs"
+
+# New AI/LLM examples
+[[example]]
+name = "prompt_journey"
+path = "examples/prompt_journey.rs"
+
+[[example]]
+name = "rag_workflow"
+path = "examples/rag_workflow.rs"
+
+[[example]]
+name = "agentic_workflow"
+path = "examples/agentic_workflow.rs"
+
+[[example]]
+name = "function_calling_example"
+path = "examples/function_calling_example.rs"
+
+[[example]]
+name = "multiagent_chat"
+path = "examples/multiagent_chat.rs"
+
+[[example]]
+name = "llm_chat_human_in_loop"
+path = "examples/llm_chat_human_in_loop.rs"
+
+# Configuration examples
+[[example]]
+name = "task_configure"
+path = "examples/task_configure.rs"
+
+[[example]]
+name = "workflow_status_listener"
+path = "examples/workflow_status_listener.rs"
+
+[[example]]
+name = "connection_config_example"
+path = "examples/connection_config_example.rs"
+
+[[example]]
+name = "kitchensink_workers"
+path = "examples/kitchensink_workers.rs"
 
 [lib]
 name = "conductor"

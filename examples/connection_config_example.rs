@@ -1,37 +1,5 @@
-//! Connection Configuration Example
-//!
-//! This example demonstrates various connection and configuration scenarios:
-//! - Basic connection setup
-//! - Authenticated connections (Orkes Conductor)
-//! - Unauthenticated connections (OSS Conductor)
-//! - Custom timeouts and settings
-//! - Environment variable configuration
-//!
-//! ## Configuration Options
-//!
-//! The SDK supports multiple ways to configure the client:
-//!
-//! 1. **Environment Variables** (Recommended for production)
-//!    ```bash
-//!    export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//!    export CONDUCTOR_AUTH_KEY="your-key"
-//!    export CONDUCTOR_AUTH_SECRET="your-secret"
-//!    ```
-//!
-//! 2. **Programmatic Configuration**
-//!    ```rust
-//!    let config = Configuration::new("https://your-server/api")
-//!        .with_auth("key", "secret")
-//!        .with_timeout(Duration::from_secs(60));
-//!    ```
-//!
-//! 3. **`.env` File** (Development)
-//!    The SDK automatically loads `.env` files from the current directory.
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example connection_config_example
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::time::Duration;
 

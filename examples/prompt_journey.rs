@@ -1,35 +1,5 @@
-//! Prompt Management Journey Example
-//!
-//! This comprehensive example demonstrates all Prompt Management APIs through a narrative
-//! of building an AI-powered customer service system for an e-commerce platform.
-//!
-//! ## API Coverage
-//! - `save_prompt()` - Create or update prompt templates
-//! - `save_prompt_with_options()` - Create with version, models, auto_increment
-//! - `get_prompt()` - Retrieve specific prompt template
-//! - `get_prompts()` - Get all prompt templates
-//! - `delete_prompt()` - Delete prompt template
-//! - `get_tags_for_prompt_template()` - Get tags for a prompt
-//! - `update_tag_for_prompt_template()` - Set/update tags on a prompt
-//! - `delete_tag_for_prompt_template()` - Remove tags from a prompt
-//! - `test_prompt()` - Test prompt with variables and AI model
-//!
-//! ## Requirements
-//! - Conductor server with AI integration configured
-//! - Valid authentication credentials (for Orkes)
-//! - AI integration (e.g., OpenAI) configured in Conductor
-//!
-//! ## Environment Variables
-//! ```bash
-//! export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//! export CONDUCTOR_AUTH_KEY="your-key"
-//! export CONDUCTOR_AUTH_SECRET="your-secret"
-//! ```
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example prompt_journey
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

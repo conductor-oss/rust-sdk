@@ -1,3 +1,6 @@
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
 use conductor::client::ConductorClient;
 use conductor::worker::{FnWorker, TaskHandler, WorkerOutput};
 use serde_json::{json, Value};

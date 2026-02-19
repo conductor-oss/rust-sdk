@@ -1,12 +1,5 @@
-//! Low-level HTTP API client for Conductor
-//!
-//! Thread-safe HTTP client with:
-//! - Connection pooling
-//! - Automatic token refresh with synchronization
-//! - Proactive token refresh based on TTL
-//! - Automatic retry on 401 with token refresh
-//! - Exponential backoff on auth failures
-//! - Graceful handling of OSS Conductor (no auth)
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use reqwest::{Client, Response, StatusCode};
 use serde::{de::DeserializeOwned, Serialize};

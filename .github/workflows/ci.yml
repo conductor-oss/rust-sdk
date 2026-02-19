@@ -12,6 +12,15 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  license-headers:
+    name: License Headers Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check license headers
+        run: ./scripts/add-license-headers.sh --check
+
   fmt:
     name: Format Check
     runs-on: ubuntu-latest

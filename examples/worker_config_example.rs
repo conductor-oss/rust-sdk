@@ -1,36 +1,5 @@
-//! Worker Configuration Example
-//!
-//! Demonstrates worker configuration options and environment variable overrides.
-//!
-//! What it shows:
-//! - All worker configuration properties
-//! - Hierarchical environment variable configuration
-//! - JSON Schema generation for input/output
-//! - Automatic task definition registration
-//! - Domain-based routing
-//!
-//! Run with: cargo run --example worker_config_example
-//!
-//! Environment variables (try setting these before running):
-//! ```bash
-//! # Global settings (apply to all workers)
-//! export CONDUCTOR_WORKER_ALL_POLL_INTERVAL_MILLIS=500
-//! export CONDUCTOR_WORKER_ALL_THREAD_COUNT=10
-//! export CONDUCTOR_WORKER_ALL_DOMAIN=production
-//!
-//! # Worker-specific overrides
-//! export CONDUCTOR_WORKER_CONFIGURED_TASK_POLL_INTERVAL_MILLIS=100
-//! export CONDUCTOR_WORKER_CONFIGURED_TASK_THREAD_COUNT=20
-//! export CONDUCTOR_WORKER_CONFIGURED_TASK_PAUSED=true
-//!
-//! # Task registration
-//! export CONDUCTOR_WORKER_ALL_REGISTER_TASK_DEF=true
-//! export CONDUCTOR_WORKER_CONFIGURED_TASK_OVERWRITE_TASK_DEF=true
-//! ```
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

@@ -1,23 +1,5 @@
-//! Task Context Example
-//!
-//! Demonstrates TaskContext for accessing task metadata and poll_count.
-//!
-//! What it shows:
-//! - Using task.context() shorthand (new recommended approach)
-//! - Using TaskContext::from_task() (alternative approach)
-//! - Direct helper methods on Task (task.task_id(), task.is_first_poll(), etc.)
-//! - Checking retry_count
-//! - Accessing task metadata (task_id, workflow_instance_id, etc.)
-//! - Implementing long-running tasks with progress tracking
-//! - Using is_first_poll() and is_retry() helpers
-//!
-//! For the #[worker] macro approach with TaskContext, see worker_macro_example.rs
-//!
-//! Run with: cargo run --example task_context_example
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

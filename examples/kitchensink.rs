@@ -1,23 +1,5 @@
-//! Kitchen Sink Example
-//!
-//! Comprehensive example demonstrating all major workflow task types and patterns.
-//!
-//! What it demonstrates:
-//! - HTTP Task: Make external API calls
-//! - JavaScript (Inline) Task: Execute inline JavaScript code
-//! - JSON JQ Task: Transform JSON using JQ queries
-//! - Switch Task: Conditional branching based on values
-//! - Wait Task: Pause workflow execution
-//! - Set Variable Task: Store values in workflow variables
-//! - Terminate Task: End workflow with specific status
-//! - Fork/Join Task: Parallel execution
-//! - Custom Worker Task: Execute Rust business logic
-//!
-//! Run with: cargo run --example kitchensink
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

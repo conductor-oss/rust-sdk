@@ -1,7 +1,5 @@
-//! Task runner events for observability
-//!
-//! These events are published during task polling and execution,
-//! enabling metrics collection and custom monitoring.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use chrono::{DateTime, Utc};
 use std::time::Duration;

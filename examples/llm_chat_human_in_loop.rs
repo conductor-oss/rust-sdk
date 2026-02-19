@@ -1,46 +1,5 @@
-//! LLM Chat with Human-in-the-Loop Example
-//!
-//! This example demonstrates an interactive chat workflow where the LLM
-//! generates responses and then waits for human input to continue.
-//!
-//! ## Architecture
-//! ```text
-//! ┌──────────────────────────────────────────────────────────────────────┐
-//! │                 HUMAN-IN-THE-LOOP CHAT WORKFLOW                      │
-//! ├──────────────────────────────────────────────────────────────────────┤
-//! │                                                                      │
-//! │  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐         │
-//! │  │  LLM     │──▶│  WAIT    │──▶│  LLM     │──▶│  WAIT    │──▶ ...  │
-//! │  │ Response │   │(Human)   │   │ Response │   │(Human)   │         │
-//! │  └──────────┘   └──────────┘   └──────────┘   └──────────┘         │
-//! │                      │                              │               │
-//! │                      ▼                              ▼               │
-//! │              Human provides              Human provides             │
-//! │              next message                next message               │
-//! └──────────────────────────────────────────────────────────────────────┘
-//! ```
-//!
-//! ## Use Cases
-//! - Interactive chatbots requiring approval
-//! - Customer support with human escalation
-//! - Content generation with human review
-//! - Step-by-step guided processes
-//!
-//! ## Prerequisites
-//! 1. Conductor server with AI/LLM support
-//! 2. LLM provider configured
-//!
-//! ## Environment Variables
-//! ```bash
-//! export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//! export CONDUCTOR_AUTH_KEY="your-key"
-//! export CONDUCTOR_AUTH_SECRET="your-secret"
-//! ```
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example llm_chat_human_in_loop
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

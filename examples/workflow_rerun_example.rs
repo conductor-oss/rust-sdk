@@ -1,11 +1,5 @@
-//! Workflow Rerun Example
-//!
-//! This example demonstrates how to rerun a workflow from a specific task.
-//! It mirrors the Python SDK's orkes/workflow_rerun.py example.
-//!
-//! Prerequisites:
-//! - Conductor server running
-//! - CONDUCTOR_SERVER_URL environment variable set
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::collections::HashMap;
 

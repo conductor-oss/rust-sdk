@@ -1,35 +1,5 @@
-//! RAG (Retrieval Augmented Generation) Workflow Example
-//!
-//! This example demonstrates a complete RAG pipeline using Conductor:
-//! 1. Index text into a vector database
-//! 2. Search the index with a user query
-//! 3. Generate an answer using the retrieved context
-//!
-//! ## Pipeline
-//! ```text
-//! index_text --> wait --> search_index --> generate_answer
-//! ```
-//!
-//! ## Prerequisites
-//! 1. Conductor server with AI/LLM support (Orkes Conductor)
-//! 2. Vector DB integration configured (e.g., pgvector, pinecone)
-//! 3. LLM provider configured (e.g., OpenAI)
-//!
-//! ## Configure Integrations in Conductor
-//! - Vector DB integration named "postgres-prod" (pgvector)
-//! - LLM provider named "openai" with a valid API key
-//!
-//! ## Environment Variables
-//! ```bash
-//! export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//! export CONDUCTOR_AUTH_KEY="your-key"
-//! export CONDUCTOR_AUTH_SECRET="your-secret"
-//! ```
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example rag_workflow
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

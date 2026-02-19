@@ -1,12 +1,5 @@
-//! Sync State Update Example
-//!
-//! This example demonstrates how to update workflow state synchronously,
-//! including completing wait tasks and setting workflow variables.
-//! It mirrors the Python SDK's orkes/sync_updates.py example.
-//!
-//! Prerequisites:
-//! - Conductor server running
-//! - CONDUCTOR_SERVER_URL environment variable set
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::collections::HashMap;
 

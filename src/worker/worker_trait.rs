@@ -1,9 +1,5 @@
-//! Worker trait and function types
-//!
-//! This module provides:
-//! - `Worker` trait for implementing task workers
-//! - `FnWorker` for simple closure-based workers (clones Task)
-//! - `FnWorkerArc` for high-performance workers (uses Arc<Task>)
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use async_trait::async_trait;
 use serde_json::Value;

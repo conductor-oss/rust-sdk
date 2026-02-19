@@ -1,37 +1,5 @@
-//! Task Configuration Example
-//!
-//! Demonstrates how to programmatically create and configure task definitions
-//! with various settings like retries, timeouts, rate limits, and concurrency.
-//!
-//! ## Key Configuration Options
-//! - `retry_count`: Number of retry attempts on failure
-//! - `retry_logic`: LINEAR_BACKOFF, EXPONENTIAL_BACKOFF, FIXED
-//! - `retry_delay_seconds`: Wait time between retries
-//! - `concurrent_exec_limit`: Max concurrent executions
-//! - `poll_timeout_seconds`: Task fails if not polled within this time
-//! - `timeout_seconds`: Total execution timeout
-//! - `response_timeout_seconds`: Timeout if no status update received
-//! - `rate_limit_per_frequency`: Rate limit per time window
-//! - `rate_limit_frequency_in_seconds`: Time window for rate limit
-//!
-//! ## Use Cases
-//! - Programmatically managing task definitions (Infrastructure as Code)
-//! - Setting task-level retry policies
-//! - Configuring timeout and concurrency controls
-//! - Implementing rate limiting for external API calls
-//! - Creating task definitions as part of deployment automation
-//!
-//! ## Environment Variables
-//! ```bash
-//! export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//! export CONDUCTOR_AUTH_KEY="your-key"
-//! export CONDUCTOR_AUTH_SECRET="your-secret"
-//! ```
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example task_configure
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

@@ -1,47 +1,5 @@
-//! Workflow Status Listener Example
-//!
-//! Demonstrates enabling external status listeners for workflow state changes.
-//!
-//! ## What It Does
-//! - Creates a workflow with HTTP task
-//! - Enables a Kafka/SQS status listener
-//! - Registers the workflow with listener configuration
-//! - Status changes will be published to the specified sink
-//!
-//! ## Use Cases
-//! - Real-time workflow monitoring via message queues
-//! - Integrating workflows with external systems (Kafka, SQS, etc.)
-//! - Building event-driven architectures
-//! - Audit logging and compliance tracking
-//! - Custom notifications on workflow state changes
-//! - Analytics and metrics collection
-//!
-//! ## Status Events Published
-//! - Workflow started
-//! - Workflow completed
-//! - Workflow failed
-//! - Workflow paused
-//! - Workflow resumed
-//! - Workflow terminated
-//! - Task status changes
-//!
-//! ## Sink Formats
-//! - Kafka: `kafka:<topic_name>`
-//! - SQS: `sqs:<queue_url>`
-//! - NATS: `nats:<subject>`
-//! - AMQP: `amqp_exchange:<exchange_name>`
-//!
-//! ## Environment Variables
-//! ```bash
-//! export CONDUCTOR_SERVER_URL="https://your-conductor-server/api"
-//! export CONDUCTOR_AUTH_KEY="your-key"
-//! export CONDUCTOR_AUTH_SECRET="your-secret"
-//! ```
-//!
-//! ## Run
-//! ```bash
-//! cargo run --example workflow_status_listener
-//! ```
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

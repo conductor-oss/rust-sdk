@@ -1,19 +1,5 @@
-//! Comprehensive Worker Example
-//!
-//! Demonstrates both async workers and long-running task patterns.
-//!
-//! What it shows:
-//! - Async workers for I/O-bound tasks (HTTP calls, database queries)
-//! - Workers with different thread counts
-//! - Long-running tasks with callback patterns
-//! - Error handling in workers
-//! - Worker output patterns (completed, failed, in_progress)
-//!
-//! Run with: cargo run --example worker_example
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

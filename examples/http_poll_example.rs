@@ -1,12 +1,5 @@
-//! HTTP Poll Task Example
-//!
-//! This example demonstrates how to use HTTP Poll tasks that repeatedly
-//! call an endpoint until a termination condition is met.
-//! It mirrors the Python SDK's orkes/http_poll.py example.
-//!
-//! Prerequisites:
-//! - Conductor server running
-//! - CONDUCTOR_SERVER_URL environment variable set
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::time::Duration;
 use uuid::Uuid;

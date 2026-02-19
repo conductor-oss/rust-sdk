@@ -1,7 +1,5 @@
-//! Common test utilities for Conductor Rust SDK tests
-//!
-//! This module provides shared utilities, helpers, and common test data
-//! used across all test files.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient, configuration::Configuration, error::Result, models::WorkflowStatus,

@@ -1,19 +1,5 @@
-//! Task Workers Example
-//!
-//! Demonstrates various worker patterns and configurations.
-//!
-//! What it shows:
-//! - Simple workers with different configurations
-//! - Worker with domain-based routing
-//! - Batch polling configuration
-//! - Task execution with context
-//! - Error handling patterns
-//!
-//! Run with: cargo run --example task_workers
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

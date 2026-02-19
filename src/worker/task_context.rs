@@ -1,6 +1,5 @@
-//! Task execution context for workers
-//!
-//! Provides access to task metadata and execution state during worker execution.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use crate::models::Task;
 

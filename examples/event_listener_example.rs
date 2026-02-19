@@ -1,19 +1,5 @@
-//! Event Listener Example
-//!
-//! Demonstrates custom event listeners for monitoring worker activity.
-//!
-//! What it shows:
-//! - Implementing TaskRunnerEventsListener trait
-//! - Handling all event types (poll, execution, update)
-//! - Custom logging and alerting
-//! - SLA monitoring
-//! - Error tracking
-//!
-//! Run with: cargo run --example event_listener_example
-//!
-//! Prerequisites:
-//! - Conductor server running on localhost:8080
-//! - Set CONDUCTOR_SERVER_URL if using a different address
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::{
     client::ConductorClient,

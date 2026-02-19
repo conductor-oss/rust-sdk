@@ -1,6 +1,5 @@
-//! Prometheus metrics collection for Conductor workers
-//!
-//! This module provides metrics collection using the event-driven architecture.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 mod collector;
 mod settings;

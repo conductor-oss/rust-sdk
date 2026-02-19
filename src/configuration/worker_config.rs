@@ -1,9 +1,5 @@
-//! Worker configuration with hierarchical environment variable support
-//!
-//! Configuration priority (highest to lowest):
-//! 1. Worker-specific env: `CONDUCTOR_WORKER_{WORKER_NAME}_{PROPERTY}`
-//! 2. Global env: `CONDUCTOR_WORKER_ALL_{PROPERTY}`
-//! 3. Code defaults
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::env;
 use std::time::Duration;
