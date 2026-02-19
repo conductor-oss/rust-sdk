@@ -10,7 +10,7 @@ docker run -d \
   --name conductor \
   -p 8080:8080 \
   -p 5000:5000 \
-  conductoross/conductor-standalone:latest
+  conductoross/conductor:latest
 ```
 
 **Option B: Use existing server**
@@ -104,7 +104,7 @@ Error: Unauthorized: Invalid token
 
 ### 1. Start server
 ```bash
-docker run -d -p 8080:8080 conductoross/conductor-standalone:latest
+docker run -d -p 8080:8080 conductoross/conductor:latest
 ```
 
 ### 2. Wait for server to be ready (~30 seconds)
@@ -232,7 +232,7 @@ jobs:
     
     services:
       conductor:
-        image: conductoross/conductor-standalone:latest
+        image: conductoross/conductor:latest
         ports:
           - 8080:8080
           

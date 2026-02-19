@@ -205,7 +205,7 @@ tests/
 ### Start Local Server
 
 ```bash
-docker run -d -p 8080:8080 conductoross/conductor-standalone:latest
+docker run -d -p 8080:8080 conductoross/conductor:latest
 ```
 
 ### Wait for Ready

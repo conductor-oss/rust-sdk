@@ -35,7 +35,7 @@ tests/
 1. **Start Conductor Server**:
    ```bash
    docker run --init -p 8080:8080 -p 5000:5000 \
-     conductoross/conductor-standalone:3.15.0
+     conductoross/conductor:latest
    ```
 
 2. **Set Environment Variables**:
@@ -254,7 +254,7 @@ jobs:
     
     services:
       conductor:
-        image: conductoross/conductor-standalone:3.15.0
+        image: conductoross/conductor:latest
         ports:
           - 8080:8080
           - 5000:5000
@@ -290,7 +290,7 @@ curl http://localhost:8080/health
 
 # Start Conductor if not running
 docker run --init -p 8080:8080 -p 5000:5000 \
-  conductoross/conductor-standalone:3.15.0
+  conductoross/conductor:latest
 ```
 
 ### Tests timeout
