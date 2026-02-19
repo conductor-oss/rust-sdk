@@ -70,7 +70,7 @@ mod flexible_map_deserializer {
     }
 }
 
-/// Module for flexible Vec<Task> deserialization (handles both arrays and string representations)
+/// Module for flexible `Vec<Task>` deserialization (handles both arrays and string representations)
 mod flexible_tasks_deserializer {
     use super::Task;
     use serde::{self, Deserialize, Deserializer};
@@ -98,7 +98,7 @@ mod flexible_tasks_deserializer {
     }
 }
 
-/// Module for flexible Vec<String> deserialization (handles both arrays and string representations)
+/// Module for flexible `Vec<String>` deserialization (handles both arrays and string representations)
 mod flexible_string_vec_deserializer {
     use serde::{self, Deserialize, Deserializer};
 

@@ -264,12 +264,12 @@ impl Worker for FnWorker {
     }
 }
 
-/// Type alias for async worker functions that use Arc<Task> (zero-copy)
+/// Type alias for async worker functions that use `Arc<Task>` (zero-copy)
 pub type WorkerFnArc = Arc<
     dyn Fn(Arc<Task>) -> Pin<Box<dyn Future<Output = Result<WorkerOutput>> + Send>> + Send + Sync,
 >;
 
-/// High-performance function-based worker that uses Arc<Task> to avoid cloning
+/// High-performance function-based worker that uses `Arc<Task>` to avoid cloning
 ///
 /// Use this instead of `FnWorker` for high-throughput scenarios where task
 /// cloning overhead is significant.
@@ -368,7 +368,7 @@ impl FnWorkerArc {
         self
     }
 
-    /// Execute with Arc<Task> directly (internal use)
+    /// Execute with `Arc<Task>` directly (internal use)
     pub async fn execute_arc(&self, task: Arc<Task>) -> Result<WorkerOutput> {
         (self.execute_fn)(task).await
     }
