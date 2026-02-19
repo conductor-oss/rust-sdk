@@ -386,12 +386,13 @@ impl WorkflowTask {
 
     /// Create an HTTP task
     pub fn http(task_ref_name: impl Into<String>, uri: impl Into<String>) -> Self {
+        let http_request = serde_json::json!({
+            "uri": uri.into(),
+            "method": "GET"
+        });
+
         let mut input = HashMap::new();
-        input.insert("uri".to_string(), serde_json::Value::String(uri.into()));
-        input.insert(
-            "method".to_string(),
-            serde_json::Value::String("GET".to_string()),
-        );
+        input.insert("http_request".to_string(), http_request);
 
         Self {
             name: "http".to_string(),
@@ -667,9 +668,13 @@ impl WorkflowTask {
 
     /// Create an HTTP Poll task
     pub fn http_poll(task_ref_name: impl Into<String>, uri: impl Into<String>) -> Self {
+        let http_request = serde_json::json!({
+            "uri": uri.into(),
+            "method": "GET"
+        });
+
         let mut input = HashMap::new();
-        input.insert("uri".to_string(), serde_json::json!(uri.into()));
-        input.insert("method".to_string(), serde_json::json!("GET"));
+        input.insert("http_request".to_string(), http_request);
         input.insert("pollingStrategy".to_string(), serde_json::json!("FIXED"));
         input.insert("pollingInterval".to_string(), serde_json::json!(1000));
 
