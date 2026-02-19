@@ -117,10 +117,12 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     let tool_tasks = vec![
-        TaskDef::new("get_weather")
-            .with_description("Gets weather for a location. Worker should return temperature and conditions."),
-        TaskDef::new("calculate")
-            .with_description("Evaluates a mathematical expression. Worker should return the result."),
+        TaskDef::new("get_weather").with_description(
+            "Gets weather for a location. Worker should return temperature and conditions.",
+        ),
+        TaskDef::new("calculate").with_description(
+            "Evaluates a mathematical expression. Worker should return the result.",
+        ),
         TaskDef::new("search_knowledge")
             .with_description("Searches knowledge base. Worker should return matching documents."),
     ];
@@ -207,21 +209,38 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
 
     // Step 3: Switch based on tool selection
     let weather_task = WorkflowTask::simple("get_weather", "get_weather_ref")
-        .with_input_param("location", "${parse_tool_call_ref.output.result.tool_args.location}")
-        .with_input_param("unit", "${parse_tool_call_ref.output.result.tool_args.unit}");
+        .with_input_param(
+            "location",
+            "${parse_tool_call_ref.output.result.tool_args.location}",
+        )
+        .with_input_param(
+            "unit",
+            "${parse_tool_call_ref.output.result.tool_args.unit}",
+        );
 
-    let calculate_task = WorkflowTask::simple("calculate", "calculate_ref")
-        .with_input_param("expression", "${parse_tool_call_ref.output.result.tool_args.expression}");
+    let calculate_task = WorkflowTask::simple("calculate", "calculate_ref").with_input_param(
+        "expression",
+        "${parse_tool_call_ref.output.result.tool_args.expression}",
+    );
 
     let search_task = WorkflowTask::simple("search_knowledge", "search_knowledge_ref")
-        .with_input_param("query", "${parse_tool_call_ref.output.result.tool_args.query}")
-        .with_input_param("max_results", "${parse_tool_call_ref.output.result.tool_args.max_results}");
+        .with_input_param(
+            "query",
+            "${parse_tool_call_ref.output.result.tool_args.query}",
+        )
+        .with_input_param(
+            "max_results",
+            "${parse_tool_call_ref.output.result.tool_args.max_results}",
+        );
 
     let direct_answer_task = WorkflowTask::inline(
         "direct_answer_ref",
         "(function(){ return { result: $.answer }; })();",
     )
-    .with_input_param("answer", "${parse_tool_call_ref.output.result.tool_args.answer}");
+    .with_input_param(
+        "answer",
+        "${parse_tool_call_ref.output.result.tool_args.answer}",
+    );
 
     let tool_switch = WorkflowTask::switch_value_param(
         "tool_router_ref",
@@ -235,7 +254,10 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
         "unknown_tool_ref",
         "(function(){ return { error: 'Unknown tool: ' + $.tool_name }; })();",
     )
-    .with_input_param("tool_name", "${parse_tool_call_ref.output.result.tool_name}")]);
+    .with_input_param(
+        "tool_name",
+        "${parse_tool_call_ref.output.result.tool_name}",
+    )]);
 
     // Step 4: Format the final response
     let format_script = r#"
@@ -258,7 +280,10 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
     "#;
 
     let format_task = WorkflowTask::inline("format_response_ref", format_script)
-        .with_input_param("tool_name", "${parse_tool_call_ref.output.result.tool_name}")
+        .with_input_param(
+            "tool_name",
+            "${parse_tool_call_ref.output.result.tool_name}",
+        )
         .with_input_param("tool_result", "${tool_router_ref.output}")
         .with_input_param("question", "${workflow.input.question}");
 
@@ -271,8 +296,14 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
         .with_task(tool_switch)
         .with_task(format_task)
         .with_input_parameters(vec!["question".to_string()])
-        .with_output_param("tool_used", "${format_response_ref.output.result.tool_used}")
-        .with_output_param("tool_output", "${format_response_ref.output.result.tool_output}")
+        .with_output_param(
+            "tool_used",
+            "${format_response_ref.output.result.tool_used}",
+        )
+        .with_output_param(
+            "tool_output",
+            "${format_response_ref.output.result.tool_output}",
+        )
         .with_output_param("summary", "${format_response_ref.output.result.summary}")
         .with_timeout(120, WorkflowTimeoutPolicy::TimeOutWf);
 
@@ -385,10 +416,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
                                 println!("Tool Selected: {}", tool);
                             }
                             if let Some(output) = wf.output.get("tool_output") {
-                                println!(
-                                    "Tool Output: {}",
-                                    serde_json::to_string_pretty(output)?
-                                );
+                                println!("Tool Output: {}", serde_json::to_string_pretty(output)?);
                             }
                             if let Some(summary) = wf.output.get("summary") {
                                 println!("\nSummary:\n{}", summary.as_str().unwrap_or("N/A"));

@@ -4,7 +4,9 @@
 use conductor::{
     client::ConductorClient,
     configuration::Configuration,
-    models::{StateChangeConfig, StateChangeEvent, StateChangeEventType, WorkflowDef, WorkflowTask},
+    models::{
+        StateChangeConfig, StateChangeEvent, StateChangeEventType, WorkflowDef, WorkflowTask,
+    },
 };
 
 #[tokio::main]
@@ -25,9 +27,12 @@ async fn main() -> anyhow::Result<()> {
         .with_version(1)
         // Add a simple HTTP task
         .with_task(
-            WorkflowTask::http("http_ref", "https://orkes-api-tester.orkesconductor.com/api")
-                .with_input_param("method", "GET")
-                .with_description("Simple HTTP call to demonstrate status events"),
+            WorkflowTask::http(
+                "http_ref",
+                "https://orkes-api-tester.orkesconductor.com/api",
+            )
+            .with_input_param("method", "GET")
+            .with_description("Simple HTTP call to demonstrate status events"),
         )
         // Enable workflow status listener - events will be published to Kafka topic
         .with_status_listener_enabled(true);
@@ -47,7 +52,9 @@ async fn main() -> anyhow::Result<()> {
     // Register the workflow
     println!("Registering workflow with status listener...");
     let metadata_client = client.metadata_client();
-    metadata_client.register_or_update_workflow_def(&workflow, true).await?;
+    metadata_client
+        .register_or_update_workflow_def(&workflow, true)
+        .await?;
     println!("  Workflow registered: {}", workflow_name);
 
     // Display status listener configuration
@@ -105,25 +112,28 @@ async fn main() -> anyhow::Result<()> {
         .with_description("Demo workflow with task-level status audit")
         .with_version(1)
         .with_task(
-            WorkflowTask::http("http_task_ref", "https://orkes-api-tester.orkesconductor.com/api")
-                .with_description("HTTP task with audit events")
-                // Configure state change events for this task
-                .with_state_change(
-                    StateChangeConfig::new()
-                        .on_event(StateChangeEventType::OnScheduled)
-                        .on_event(StateChangeEventType::OnStart)
-                        .on_event(StateChangeEventType::OnCompleted)
-                        .on_event(StateChangeEventType::OnFailed)
-                        .with_event(
-                            StateChangeEvent::new("kafka:task-audit-events")
-                                .with_payload(
-                                    "taskRef",
-                                    serde_json::json!("${task.referenceTaskName}"),
-                                )
-                                .with_payload("status", serde_json::json!("${task.status}"))
-                                .with_payload("workflowId", serde_json::json!("${workflow.workflowId}")),
-                        ),
-                ),
+            WorkflowTask::http(
+                "http_task_ref",
+                "https://orkes-api-tester.orkesconductor.com/api",
+            )
+            .with_description("HTTP task with audit events")
+            // Configure state change events for this task
+            .with_state_change(
+                StateChangeConfig::new()
+                    .on_event(StateChangeEventType::OnScheduled)
+                    .on_event(StateChangeEventType::OnStart)
+                    .on_event(StateChangeEventType::OnCompleted)
+                    .on_event(StateChangeEventType::OnFailed)
+                    .with_event(
+                        StateChangeEvent::new("kafka:task-audit-events")
+                            .with_payload("taskRef", serde_json::json!("${task.referenceTaskName}"))
+                            .with_payload("status", serde_json::json!("${task.status}"))
+                            .with_payload(
+                                "workflowId",
+                                serde_json::json!("${workflow.workflowId}"),
+                            ),
+                    ),
+            ),
         )
         .with_status_listener_enabled(true);
 
@@ -134,7 +144,9 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     // Register the audit workflow
-    metadata_client.register_or_update_workflow_def(&audit_workflow, true).await?;
+    metadata_client
+        .register_or_update_workflow_def(&audit_workflow, true)
+        .await?;
     println!("  Audit workflow registered: rust_task_status_audit_demo");
 
     // Clean up
@@ -144,10 +156,7 @@ async fn main() -> anyhow::Result<()> {
     println!();
     println!("Cleaning up created resources...");
 
-    match metadata_client
-        .delete_workflow_def(workflow_name, 1)
-        .await
-    {
+    match metadata_client.delete_workflow_def(workflow_name, 1).await {
         Ok(_) => println!("  Deleted: {}", workflow_name),
         Err(e) => println!("  Could not delete {}: {}", workflow_name, e),
     }
@@ -157,10 +166,7 @@ async fn main() -> anyhow::Result<()> {
         .await
     {
         Ok(_) => println!("  Deleted: rust_task_status_audit_demo"),
-        Err(e) => println!(
-            "  Could not delete rust_task_status_audit_demo: {}",
-            e
-        ),
+        Err(e) => println!("  Could not delete rust_task_status_audit_demo: {}", e),
     }
 
     println!("\n  Status listener example completed!");

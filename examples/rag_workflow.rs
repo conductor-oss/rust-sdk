@@ -4,7 +4,10 @@
 use conductor::{
     client::ConductorClient,
     configuration::Configuration,
-    models::{ChatMessage, StartWorkflowRequest, WorkflowDef, WorkflowStatus, WorkflowTask, WorkflowTimeoutPolicy},
+    models::{
+        ChatMessage, StartWorkflowRequest, WorkflowDef, WorkflowStatus, WorkflowTask,
+        WorkflowTimeoutPolicy,
+    },
 };
 use std::collections::HashMap;
 
@@ -73,19 +76,20 @@ async fn main() -> anyhow::Result<()> {
     .with_input_param("dimensions", EMBEDDING_DIMENSIONS);
 
     // Step 4: Generate answer using retrieved context
-    let answer_task = WorkflowTask::llm_chat_complete("generate_answer_ref", LLM_PROVIDER, LLM_MODEL)
-        .with_messages(vec![
-            ChatMessage::system(
-                "You are a helpful assistant. Answer the user's question \
+    let answer_task =
+        WorkflowTask::llm_chat_complete("generate_answer_ref", LLM_PROVIDER, LLM_MODEL)
+            .with_messages(vec![
+                ChatMessage::system(
+                    "You are a helpful assistant. Answer the user's question \
                 based ONLY on the context provided below. If the context \
                 does not contain enough information, say so.\n\n\
                 Context from knowledge base:\n\
                 ${search_index_ref.output.result}",
-            ),
-            ChatMessage::user("${workflow.input.question}"),
-        ])
-        .with_temperature(0.2)
-        .with_max_tokens(1024);
+                ),
+                ChatMessage::user("${workflow.input.question}"),
+            ])
+            .with_temperature(0.2)
+            .with_max_tokens(1024);
 
     // Build the workflow definition
     let workflow = WorkflowDef::new(workflow_name)
@@ -119,7 +123,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Register the workflow
     println!("Registering workflow...");
-    metadata_client.register_or_update_workflow_def(&workflow, true).await?;
+    metadata_client
+        .register_or_update_workflow_def(&workflow, true)
+        .await?;
     println!("  Workflow registered: {}", workflow_name);
 
     // ==========================================================================
@@ -174,7 +180,7 @@ It's used by companies like Netflix, Orkes, and many others for workflow orchest
     println!();
 
     println!("Starting workflow execution...");
-    
+
     // Build the start request
     let request = StartWorkflowRequest::new(workflow_name)
         .with_version(1)
@@ -183,13 +189,13 @@ It's used by companies like Netflix, Orkes, and many others for workflow orchest
         .with_input_value("source", "documentation")
         .with_input_value("title", "Conductor Overview")
         .with_input_value("question", "What are the key features of Conductor?");
-    
+
     match workflow_client.start_workflow(&request).await {
         Ok(workflow_id) => {
             println!("  Workflow started: {}", workflow_id);
             println!();
             println!("  View execution at:");
-            
+
             // Extract UI host from config
             let server_url = std::env::var("CONDUCTOR_SERVER_URL")
                 .unwrap_or_else(|_| "http://localhost:8080/api".to_string());
@@ -230,7 +236,12 @@ It's used by companies like Netflix, Orkes, and many others for workflow orchest
                                     println!("  {} chunk(s) found", arr.len());
                                     for (i, chunk) in arr.iter().take(3).enumerate() {
                                         if let Some(text) = chunk.get("text") {
-                                            let preview = text.as_str().unwrap_or("").chars().take(100).collect::<String>();
+                                            let preview = text
+                                                .as_str()
+                                                .unwrap_or("")
+                                                .chars()
+                                                .take(100)
+                                                .collect::<String>();
                                             println!("  {}. {}...", i + 1, preview);
                                         }
                                     }
@@ -246,8 +257,12 @@ It's used by companies like Netflix, Orkes, and many others for workflow orchest
                                 println!("{}", "-".repeat(60));
                             }
                             break;
-                        } else if matches!(status, WorkflowStatus::Failed | WorkflowStatus::Terminated | WorkflowStatus::TimedOut)
-                        {
+                        } else if matches!(
+                            status,
+                            WorkflowStatus::Failed
+                                | WorkflowStatus::Terminated
+                                | WorkflowStatus::TimedOut
+                        ) {
                             println!();
                             println!("  Workflow failed: {:?}", status);
                             if let Some(reason) = wf.reason_for_incompletion {

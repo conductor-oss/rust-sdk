@@ -125,9 +125,15 @@ async fn main() -> anyhow::Result<()> {
     let format_task = WorkflowTask::inline("format_conversation_ref", format_script)
         .with_input_param("initial_message", "${workflow.input.initial_message}")
         .with_input_param("initial_response", "${initial_response_ref.output.result}")
-        .with_input_param("human_msg_1", "${wait_for_human_1_ref.output.human_message}")
+        .with_input_param(
+            "human_msg_1",
+            "${wait_for_human_1_ref.output.human_message}",
+        )
         .with_input_param("response_1", "${response_turn1_ref.output.result}")
-        .with_input_param("human_msg_2", "${wait_for_human_2_ref.output.human_message}")
+        .with_input_param(
+            "human_msg_2",
+            "${wait_for_human_2_ref.output.human_message}",
+        )
         .with_input_param("response_2", "${response_turn2_ref.output.result}");
 
     // Build the workflow
@@ -141,8 +147,14 @@ async fn main() -> anyhow::Result<()> {
         .with_task(response_turn2)
         .with_task(format_task)
         .with_input_parameters(vec!["initial_message".to_string()])
-        .with_output_param("conversation", "${format_conversation_ref.output.result.conversation}")
-        .with_output_param("total_turns", "${format_conversation_ref.output.result.total_turns}")
+        .with_output_param(
+            "conversation",
+            "${format_conversation_ref.output.result.conversation}",
+        )
+        .with_output_param(
+            "total_turns",
+            "${format_conversation_ref.output.result.total_turns}",
+        )
         .with_timeout(3600, WorkflowTimeoutPolicy::TimeOutWf); // 1 hour timeout for human input
 
     println!("Workflow: {}", workflow.name);
@@ -172,7 +184,8 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", "=".repeat(80));
     println!();
 
-    let initial_message = "Hello! I'm learning about workflow orchestration. Can you explain what Conductor is?";
+    let initial_message =
+        "Hello! I'm learning about workflow orchestration. Can you explain what Conductor is?";
     println!("User: {}\n", initial_message);
 
     let request = StartWorkflowRequest::new(workflow_name)
@@ -279,8 +292,7 @@ async fn main() -> anyhow::Result<()> {
                                 .find(|t| t.reference_task_name == "wait_for_human_2_ref")
                             {
                                 if wait_task2.status == TaskStatus::InProgress {
-                                    let human_message_2 =
-                                        "Thanks! That's very helpful. Goodbye!";
+                                    let human_message_2 = "Thanks! That's very helpful. Goodbye!";
                                     println!("Simulated Human: {}\n", human_message_2);
 
                                     let output2 = serde_json::json!({
@@ -351,7 +363,9 @@ async fn main() -> anyhow::Result<()> {
     println!();
     println!("```rust");
     println!("// Create webhook wait task");
-    println!("let webhook_wait = WorkflowTask::wait_for_webhook(\"wait_ref\", \"unique-match-key\")");
+    println!(
+        "let webhook_wait = WorkflowTask::wait_for_webhook(\"wait_ref\", \"unique-match-key\")"
+    );
     println!("    .with_input_param(\"matches\", json!({{");
     println!("        \"$['session_id']\": \"${{workflow.input.session_id}}\"");
     println!("    }}));");

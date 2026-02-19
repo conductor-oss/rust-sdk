@@ -84,7 +84,10 @@ async fn main() -> anyhow::Result<()> {
     let oss_config = Configuration::new("http://localhost:8080/api");
     println!("OSS config:");
     println!("  Server URL: {}", oss_config.server_api_url);
-    println!("  Auth configured: {} (none needed for OSS)", oss_config.has_auth());
+    println!(
+        "  Auth configured: {} (none needed for OSS)",
+        oss_config.has_auth()
+    );
 
     // ==========================================================================
     // Option 4: Token TTL Configuration

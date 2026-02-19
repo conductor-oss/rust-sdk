@@ -287,7 +287,10 @@ If information is not provided, make reasonable assumptions based on context."#;
                 ChatMessage::user("${workflow.input.booking_request}"),
             ])
             .with_input_param("tools", booking_function)
-            .with_input_param("tool_choice", serde_json::json!({"type": "function", "function": {"name": "create_booking"}}))
+            .with_input_param(
+                "tool_choice",
+                serde_json::json!({"type": "function", "function": {"name": "create_booking"}}),
+            )
             .with_temperature(0.0);
 
     let format_script = r#"
@@ -320,7 +323,10 @@ If information is not provided, make reasonable assumptions based on context."#;
         .with_task(format_task)
         .with_input_parameters(vec!["booking_request".to_string()])
         .with_output_param("booking", "${format_booking_ref.output.result.booking}")
-        .with_output_param("is_complete", "${format_booking_ref.output.result.is_complete}")
+        .with_output_param(
+            "is_complete",
+            "${format_booking_ref.output.result.is_complete}",
+        )
         .with_timeout(60, WorkflowTimeoutPolicy::TimeOutWf);
 
     println!("Workflow: {}", extraction_wf.name);
@@ -384,7 +390,7 @@ If information is not provided, make reasonable assumptions based on context."#;
     println!("  3. Use `tool_choice` to control function selection:");
     println!("     - \"auto\"     - LLM decides whether to call a function");
     println!("     - \"required\" - LLM must call a function");
-    println!("     - {{\"type\": \"function\", \"function\": {{\"name\": \"...\"}}}}" );
+    println!("     - {{\"type\": \"function\", \"function\": {{\"name\": \"...\"}}}}");
     println!("                   - Force specific function");
     println!("  4. Parse tool_calls from LLM response for routing/processing");
 

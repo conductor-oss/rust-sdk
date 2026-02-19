@@ -92,11 +92,11 @@ async fn main() -> anyhow::Result<()> {
             .with_max_tokens(300);
 
     // Synthesizer: Combine all perspectives
-    let synthesizer =
-        WorkflowTask::llm_chat_complete("synthesizer_ref", LLM_PROVIDER, LLM_MODEL)
-            .with_messages(vec![
-                ChatMessage::system(SYNTHESIZER_PERSONA),
-                ChatMessage::user(r#"Topic: ${workflow.input.topic}
+    let synthesizer = WorkflowTask::llm_chat_complete("synthesizer_ref", LLM_PROVIDER, LLM_MODEL)
+        .with_messages(vec![
+            ChatMessage::system(SYNTHESIZER_PERSONA),
+            ChatMessage::user(
+                r#"Topic: ${workflow.input.topic}
 
 Full Discussion:
 
@@ -112,10 +112,11 @@ ${expert_round2_ref.output.result}
 CRITIC (Round 2):
 ${critic_round2_ref.output.result}
 
-Synthesize this discussion into key takeaways and recommendations."#),
-            ])
-            .with_temperature(0.5)
-            .with_max_tokens(400);
+Synthesize this discussion into key takeaways and recommendations."#,
+            ),
+        ])
+        .with_temperature(0.5)
+        .with_max_tokens(400);
 
     // Format the final output
     let format_script = r#"
@@ -154,7 +155,10 @@ Synthesize this discussion into key takeaways and recommendations."#),
         .with_task(format_task)
         .with_input_parameters(vec!["topic".to_string()])
         .with_output_param("topic", "${format_output_ref.output.result.topic}")
-        .with_output_param("discussion", "${format_output_ref.output.result.discussion}")
+        .with_output_param(
+            "discussion",
+            "${format_output_ref.output.result.discussion}",
+        )
         .with_output_param("synthesis", "${format_output_ref.output.result.synthesis}")
         .with_timeout(180, WorkflowTimeoutPolicy::TimeOutWf);
 

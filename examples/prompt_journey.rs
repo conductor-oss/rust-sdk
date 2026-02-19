@@ -1,11 +1,7 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-use conductor::{
-    client::ConductorClient,
-    configuration::Configuration,
-    models::MetadataTag,
-};
+use conductor::{client::ConductorClient, configuration::Configuration, models::MetadataTag};
 use std::collections::HashMap;
 use std::env;
 
@@ -56,7 +52,8 @@ Keep the greeting warm, professional, and under 50 words."#;
                 greeting_prompt,
             )
             .await?;
-        self.created_prompts.push("rust_customer_greeting".to_string());
+        self.created_prompts
+            .push("rust_customer_greeting".to_string());
         println!("  Created 'rust_customer_greeting' prompt");
 
         // Verify by retrieving
@@ -313,7 +310,8 @@ How may we help you today?"#;
                 false,
             )
             .await?;
-        self.created_prompts.push("rust_greeting_formal".to_string());
+        self.created_prompts
+            .push("rust_greeting_formal".to_string());
         println!("  Created formal greeting with model associations");
 
         // Tag versions for tracking
@@ -362,7 +360,10 @@ How may we help you today?"#;
                 ("time_of_day".to_string(), serde_json::json!("morning")),
             ]),
             HashMap::from([
-                ("customer_name".to_string(), serde_json::json!("Sarah Johnson")),
+                (
+                    "customer_name".to_string(),
+                    serde_json::json!("Sarah Johnson"),
+                ),
                 ("customer_tier".to_string(), serde_json::json!("Standard")),
                 ("time_of_day".to_string(), serde_json::json!("evening")),
             ]),
@@ -409,10 +410,7 @@ How may we help you today?"#;
         let order_template = prompt_client.get_prompt("rust_order_inquiry").await?;
         let order_test = HashMap::from([
             ("customer_name".to_string(), serde_json::json!("Alex Chen")),
-            (
-                "order_id".to_string(),
-                serde_json::json!("ORD-2024-001234"),
-            ),
+            ("order_id".to_string(), serde_json::json!("ORD-2024-001234")),
             ("order_status".to_string(), serde_json::json!("In Transit")),
             (
                 "delivery_date".to_string(),
@@ -424,11 +422,7 @@ How may we help you today?"#;
             ),
         ]);
 
-        let temperature_tests = vec![
-            ("Conservative", 0.3),
-            ("Balanced", 0.7),
-            ("Creative", 0.9),
-        ];
+        let temperature_tests = vec![("Conservative", 0.3), ("Balanced", 0.7), ("Creative", 0.9)];
 
         for (name, temp) in temperature_tests {
             println!("\n  Testing with {} temperature ({}):", name, temp);

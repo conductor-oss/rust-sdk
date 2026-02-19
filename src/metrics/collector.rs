@@ -122,7 +122,10 @@ impl MetricsCollector {
             &["task_type", "status"],
         )
         .unwrap_or_else(|e| {
-            panic!("Failed to create task_execute_time_seconds histogram: {}", e);
+            panic!(
+                "Failed to create task_execute_time_seconds histogram: {}",
+                e
+            );
         });
 
         let task_update_time_seconds = HistogramVec::new(
@@ -266,7 +269,7 @@ impl MetricsCollector {
                                     let encoder = prometheus::TextEncoder::new();
                                     let metric_families = registry.gather();
                                     let mut buffer = Vec::new();
-                                    
+
                                     match encoder.encode(&metric_families, &mut buffer) {
                                         Ok(()) => {
                                             Response::builder()

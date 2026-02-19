@@ -66,7 +66,9 @@ async fn main() -> anyhow::Result<()> {
     println!("    Attempt 4: Wait 20s (5 * 4)");
     println!("    Attempt 5: Wait 25s (5 * 5)");
 
-    metadata_client.register_task_def(&linear_backoff_task).await?;
+    metadata_client
+        .register_task_def(&linear_backoff_task)
+        .await?;
     created_tasks.push(linear_backoff_task.name.clone());
     println!("  [Registered]");
 
@@ -141,7 +143,8 @@ async fn main() -> anyhow::Result<()> {
     println!("  Name: {}", rate_limited_task.name);
     println!(
         "  Rate Limit: {:?} per {:?}s",
-        rate_limited_task.rate_limit_per_frequency, rate_limited_task.rate_limit_frequency_in_seconds
+        rate_limited_task.rate_limit_per_frequency,
+        rate_limited_task.rate_limit_frequency_in_seconds
     );
     println!();
     println!("  Effective Rate: 10 executions/second max");
@@ -151,7 +154,9 @@ async fn main() -> anyhow::Result<()> {
     println!("    - Prevent overwhelming downstream services");
     println!("    - Cost control for metered APIs");
 
-    metadata_client.register_task_def(&rate_limited_task).await?;
+    metadata_client
+        .register_task_def(&rate_limited_task)
+        .await?;
     created_tasks.push(rate_limited_task.name.clone());
     println!("  [Registered]");
 
@@ -187,7 +192,9 @@ async fn main() -> anyhow::Result<()> {
     println!("    - Data processing pipelines");
     println!("    - ML model training tasks");
 
-    metadata_client.register_task_def(&response_timeout_task).await?;
+    metadata_client
+        .register_task_def(&response_timeout_task)
+        .await?;
     created_tasks.push(response_timeout_task.name.clone());
     println!("  [Registered]");
 
@@ -200,7 +207,7 @@ async fn main() -> anyhow::Result<()> {
     let mut poll_timeout_task = TaskDef::new("rust_task_poll_timeout")
         .with_description("Task that must be picked up quickly")
         .with_retry(3, RetryLogic::Fixed, 10);
-    
+
     // Set poll timeout directly (no builder method available)
     poll_timeout_task.poll_timeout_seconds = 60; // Fail if not polled within 60 seconds
 
@@ -219,7 +226,9 @@ async fn main() -> anyhow::Result<()> {
     println!("    - Detecting worker pool issues");
     println!("    - SLA enforcement");
 
-    metadata_client.register_task_def(&poll_timeout_task).await?;
+    metadata_client
+        .register_task_def(&poll_timeout_task)
+        .await?;
     created_tasks.push(poll_timeout_task.name.clone());
     println!("  [Registered]");
 
@@ -238,7 +247,7 @@ async fn main() -> anyhow::Result<()> {
         .with_rate_limit(1000, 60)
         .with_input_keys(vec!["orderId".to_string(), "customerId".to_string()])
         .with_output_keys(vec!["result".to_string(), "processedAt".to_string()]);
-    
+
     // Set poll timeout directly
     production_task.poll_timeout_seconds = 30;
 
@@ -248,10 +257,16 @@ async fn main() -> anyhow::Result<()> {
     println!("  Retry Configuration:");
     println!("    - Retry Count: {:?}", production_task.retry_count);
     println!("    - Retry Logic: {:?}", production_task.retry_logic);
-    println!("    - Retry Delay: {:?}s", production_task.retry_delay_seconds);
+    println!(
+        "    - Retry Delay: {:?}s",
+        production_task.retry_delay_seconds
+    );
     println!();
     println!("  Timeout Configuration:");
-    println!("    - Total Timeout: {:?}s", production_task.timeout_seconds);
+    println!(
+        "    - Total Timeout: {:?}s",
+        production_task.timeout_seconds
+    );
     println!(
         "    - Response Timeout: {:?}s",
         production_task.response_timeout_seconds
