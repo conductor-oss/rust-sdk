@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/conductor-oss/conductor-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/conductor-oss/conductor-rust/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/conductor-rust.svg)](https://crates.io/crates/conductor-rust)
-[![Rust Versions](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/)
+[![Rust Versions](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/crates/l/conductor-rust.svg)](LICENSE)
 
 Rust SDK for [Conductor](https://www.conductor-oss.org/) (OSS and Orkes Conductor) — an orchestration platform for building distributed applications, AI agents, and workflow-driven microservices. Define workflows as code, run workers anywhere, and let Conductor handle retries, state management, and observability.
@@ -479,7 +479,7 @@ Yes. A single workflow can have workers written in Rust, Python, Java, Go, or an
 
 **What Rust versions are supported?**
 
-Rust 1.70 and above (2021 edition).
+Rust 1.75 and above (2021 edition).
 
 **Should I use `async fn` or regular `fn` for my workers?**
 

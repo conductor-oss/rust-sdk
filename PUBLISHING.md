@@ -16,7 +16,7 @@ This document provides instructions for publishing the Conductor Rust SDK to [cr
 
 ## Prerequisites
 
-1. **Rust toolchain** (1.70+)
+1. **Rust toolchain** (1.75+)
    ```shell
    rustup update stable
    ```
@@ -61,7 +61,7 @@ Both crates need proper metadata. The current configuration already includes:
 name = "conductor-rust"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.75"
 description = "Rust SDK for Netflix Conductor workflow orchestration"
 license = "Apache-2.0"
 repository = "https://github.com/conductor-oss/conductor-rust"
@@ -76,7 +76,7 @@ readme = "README.md"
 name = "conductor-macros"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.75"
 description = "Procedural macros for Conductor Rust SDK"
 license = "Apache-2.0"
 repository = "https://github.com/conductor-oss/conductor-rust"

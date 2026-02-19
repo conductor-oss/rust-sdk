@@ -228,13 +228,13 @@ jobs:
           RUSTDOCFLAGS: -D warnings
 
   msrv:
-    name: Minimum Supported Rust Version (1.70)
+    name: Minimum Supported Rust Version (1.75)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust 1.70
-        uses: dtolnay/rust-toolchain@1.70
+      - name: Install Rust 1.75
+        uses: dtolnay/rust-toolchain@1.75
       
       - name: Cache cargo registry
         uses: actions/cache@v4
