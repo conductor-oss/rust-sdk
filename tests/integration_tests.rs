@@ -673,7 +673,10 @@ async fn test_workflow_search() {
 #[tokio::test]
 async fn test_http_poll_task() {
     // HTTP_POLL is an Orkes-only task type, not available in OSS Conductor
-    if std::env::var("CONDUCTOR_AUTH_KEY").unwrap_or_default().is_empty() {
+    if std::env::var("CONDUCTOR_AUTH_KEY")
+        .unwrap_or_default()
+        .is_empty()
+    {
         println!("Skipping: HTTP_POLL requires Orkes Conductor");
         return;
     }
