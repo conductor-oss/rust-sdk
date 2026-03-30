@@ -39,7 +39,7 @@ large_enum_variant = "warn"
 clone_on_copy = "warn"
 
 [workspace]
-members = [".", "conductor-macros"]
+members = [".", "conductor-macros", "harness"]
 
 [dependencies]
 # Async runtime
