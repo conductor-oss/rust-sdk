@@ -24,11 +24,31 @@ struct WorkerDef {
 }
 
 const SIMULATED_WORKERS: &[WorkerDef] = &[
-    WorkerDef { task_name: "rust_worker_0", codename: "quickpulse",  sleep_seconds: 1 },
-    WorkerDef { task_name: "rust_worker_1", codename: "whisperlink", sleep_seconds: 2 },
-    WorkerDef { task_name: "rust_worker_2", codename: "shadowfetch", sleep_seconds: 3 },
-    WorkerDef { task_name: "rust_worker_3", codename: "ironforge",   sleep_seconds: 4 },
-    WorkerDef { task_name: "rust_worker_4", codename: "deepcrawl",   sleep_seconds: 5 },
+    WorkerDef {
+        task_name: "rust_worker_0",
+        codename: "quickpulse",
+        sleep_seconds: 1,
+    },
+    WorkerDef {
+        task_name: "rust_worker_1",
+        codename: "whisperlink",
+        sleep_seconds: 2,
+    },
+    WorkerDef {
+        task_name: "rust_worker_2",
+        codename: "shadowfetch",
+        sleep_seconds: 3,
+    },
+    WorkerDef {
+        task_name: "rust_worker_3",
+        codename: "ironforge",
+        sleep_seconds: 4,
+    },
+    WorkerDef {
+        task_name: "rust_worker_4",
+        codename: "deepcrawl",
+        sleep_seconds: 5,
+    },
 ];
 
 fn env_int_or_default(key: &str, default: usize) -> usize {
@@ -43,18 +63,16 @@ async fn register_metadata(client: &ConductorClient) {
 
     let task_defs: Vec<TaskDef> = SIMULATED_WORKERS
         .iter()
-        .map(|def| {
-            TaskDef {
-                name: def.task_name.to_string(),
-                description: Some(format!(
-                    "Rust SDK harness simulated task ({}, default delay {}s)",
-                    def.codename, def.sleep_seconds
-                )),
-                retry_count: 1,
-                timeout_seconds: 300,
-                response_timeout_seconds: 300,
-                ..Default::default()
-            }
+        .map(|def| TaskDef {
+            name: def.task_name.to_string(),
+            description: Some(format!(
+                "Rust SDK harness simulated task ({}, default delay {}s)",
+                def.codename, def.sleep_seconds
+            )),
+            retry_count: 1,
+            timeout_seconds: 300,
+            response_timeout_seconds: 300,
+            ..Default::default()
         })
         .collect();
 

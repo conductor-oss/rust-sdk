@@ -21,9 +21,8 @@ fn instance_id() -> &'static str {
     use std::sync::OnceLock;
     static INSTANCE_ID: OnceLock<String> = OnceLock::new();
     INSTANCE_ID.get_or_init(|| {
-        std::env::var("HOSTNAME").unwrap_or_else(|_| {
-            uuid::Uuid::new_v4().to_string()[..8].to_string()
-        })
+        std::env::var("HOSTNAME")
+            .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string()[..8].to_string())
     })
 }
 
@@ -63,7 +62,14 @@ impl SimulatedTaskWorker {
         }
     }
 
-    fn calculate_delay(&self, delay_type: &str, min_delay: i64, max_delay: i64, mean_delay: i64, std_deviation: i64) -> i64 {
+    fn calculate_delay(
+        &self,
+        delay_type: &str,
+        min_delay: i64,
+        max_delay: i64,
+        mean_delay: i64,
+        std_deviation: i64,
+    ) -> i64 {
         let mut rng = self.rng.lock().unwrap_or_else(|e| e.into_inner());
         match delay_type.to_lowercase().as_str() {
             "fixed" => min_delay,
@@ -78,7 +84,11 @@ impl SimulatedTaskWorker {
                 let u2: f64 = rng.gen::<f64>();
                 let gaussian = ((-2.0 * u1.ln()).sqrt()) * (2.0 * PI * u2).sin();
                 let delay = (mean_delay as f64 + gaussian * std_deviation as f64).round();
-                if delay < 1.0 { 1 } else { delay as i64 }
+                if delay < 1.0 {
+                    1
+                } else {
+                    delay as i64
+                }
             }
             "exponential" => {
                 let exp = -(mean_delay as f64) * (1.0 - rng.gen::<f64>()).ln();
@@ -89,7 +99,12 @@ impl SimulatedTaskWorker {
         }
     }
 
-    fn should_task_succeed(&self, success_rate: f64, failure_mode: &str, input: &HashMap<String, Value>) -> bool {
+    fn should_task_succeed(
+        &self,
+        success_rate: f64,
+        failure_mode: &str,
+        input: &HashMap<String, Value>,
+    ) -> bool {
         if let Some(v) = input.get("forceSuccess") {
             if let Some(b) = to_bool(v) {
                 return b;
@@ -114,7 +129,12 @@ impl SimulatedTaskWorker {
         }
     }
 
-    fn should_conditional_succeed(&self, success_rate: f64, input: &HashMap<String, Value>, rng: &mut impl Rng) -> bool {
+    fn should_conditional_succeed(
+        &self,
+        success_rate: f64,
+        input: &HashMap<String, Value>,
+        rng: &mut impl Rng,
+    ) -> bool {
         let task_index = get_int_or_default(input, "taskIndex", -1);
         if task_index >= 0 {
             if let Some(Value::Array(arr)) = input.get("failIndexes") {
@@ -152,12 +172,18 @@ impl SimulatedTaskWorker {
         output.insert("codename".to_string(), Value::String(self.codename.clone()));
         output.insert("status".to_string(), Value::String("completed".to_string()));
         output.insert("configuredDelayMs".to_string(), serde_json::json!(delay_ms));
-        output.insert("actualExecutionTimeMs".to_string(), serde_json::json!(elapsed_ms as i64));
+        output.insert(
+            "actualExecutionTimeMs".to_string(),
+            serde_json::json!(elapsed_ms as i64),
+        );
         output.insert("a_or_b".to_string(), Value::String(a_or_b.to_string()));
         output.insert("c_or_d".to_string(), Value::String(c_or_d.to_string()));
 
         if get_bool_or_default(input, "includeInput", false) {
-            output.insert("input".to_string(), serde_json::to_value(input).unwrap_or(Value::Null));
+            output.insert(
+                "input".to_string(),
+                serde_json::to_value(input).unwrap_or(Value::Null),
+            );
         }
 
         if let Some(prev) = input.get("previousTaskOutput") {
@@ -167,7 +193,10 @@ impl SimulatedTaskWorker {
         }
 
         if output_size > 0 {
-            output.insert("data".to_string(), Value::String(generate_random_data(&mut *rng, output_size as usize)));
+            output.insert(
+                "data".to_string(),
+                Value::String(generate_random_data(&mut *rng, output_size as usize)),
+            );
         }
 
         if let Some(Value::Object(tmpl)) = input.get("outputTemplate") {
@@ -221,7 +250,8 @@ impl Worker for SimulatedTaskWorker {
 
         let mut delay_ms: i64 = 0;
         if delay_type.to_lowercase() != "wait" {
-            delay_ms = self.calculate_delay(&delay_type, min_delay, max_delay, mean_delay, std_deviation);
+            delay_ms =
+                self.calculate_delay(&delay_type, min_delay, max_delay, mean_delay, std_deviation);
             println!(
                 "[{}] Simulated task [id={}, index={}] sleeping for {} ms",
                 self.task_name, task_id, task_index, delay_ms
@@ -234,11 +264,14 @@ impl Worker for SimulatedTaskWorker {
                 "[{}] Simulated task [id={}, index={}] failed as configured",
                 self.task_name, task_id, task_index
             );
-            return Ok(WorkerOutput::failed("Simulated task failure based on configuration"));
+            return Ok(WorkerOutput::failed(
+                "Simulated task failure based on configuration",
+            ));
         }
 
         let elapsed = start_time.elapsed().as_millis();
-        let output = self.generate_output(input, task_id, task_index, delay_ms, elapsed, output_size);
+        let output =
+            self.generate_output(input, task_id, task_index, delay_ms, elapsed, output_size);
         Ok(WorkerOutput::completed(output))
     }
 }
@@ -295,8 +328,5 @@ fn get_string_or_default(input: &HashMap<String, Value>, key: &str, default: &st
 }
 
 fn get_bool_or_default(input: &HashMap<String, Value>, key: &str, default: bool) -> bool {
-    input
-        .get(key)
-        .and_then(|v| to_bool(v))
-        .unwrap_or(default)
+    input.get(key).and_then(|v| to_bool(v)).unwrap_or(default)
 }
