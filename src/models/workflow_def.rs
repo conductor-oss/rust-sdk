@@ -146,11 +146,9 @@ pub enum TaskType {
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowTask {
     /// Task name
-    #[serde(default)]
     pub name: String,
 
     /// Task reference name (unique within workflow)
-    #[serde(default)]
     pub task_reference_name: String,
 
     /// Task type
@@ -1102,7 +1100,6 @@ impl ChatMessage {
 #[serde(rename_all = "camelCase")]
 pub struct SubWorkflowParams {
     /// Subworkflow name
-    #[serde(default)]
     pub name: String,
 
     /// Subworkflow version
@@ -1119,7 +1116,6 @@ pub struct SubWorkflowParams {
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowDef {
     /// Workflow name
-    #[serde(default)]
     pub name: String,
 
     /// Workflow description
