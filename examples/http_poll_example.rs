@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "https://orkes-api-tester.orkesconductor.com/api",
     )
     .with_polling_strategy("EXPONENTIAL_BACKOFF")
-    .with_polling_interval(1000)
+    .with_polling_interval(1)
     // Termination condition: stop when randomInt < 10
     .with_termination_condition("(function(){ return $.output.response.body.randomInt < 10;})();");
 

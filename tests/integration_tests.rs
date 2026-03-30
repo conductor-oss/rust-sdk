@@ -672,6 +672,12 @@ async fn test_workflow_search() {
 
 #[tokio::test]
 async fn test_http_poll_task() {
+    // HTTP_POLL is an Orkes-only task type, not available in OSS Conductor
+    if std::env::var("CONDUCTOR_AUTH_KEY").is_err() {
+        println!("Skipping: HTTP_POLL requires Orkes Conductor");
+        return;
+    }
+
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
@@ -685,8 +691,7 @@ async fn test_http_poll_task() {
     // Create workflow with HTTP Poll task
     let http_poll = WorkflowTask::http_poll("http_poll_ref", "https://httpbin.org/json")
         .with_polling_strategy("FIXED")
-        .with_polling_interval(1000)
-        // Terminate immediately after first successful response
+        .with_polling_interval(1)
         .with_termination_condition(
             "(function(){ return $.output.response.statusCode == 200; })();",
         );

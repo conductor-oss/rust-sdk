@@ -728,7 +728,7 @@ let workflow = WorkflowDef::new("polling_workflow")
     .with_task(
         WorkflowTask::http_poll("poll_ref", "https://api.example.com/status/${workflow.input.job_id}")
             .with_method("GET")
-            .with_polling_interval(5000)  // Poll every 5 seconds
+            .with_polling_interval(5)  // Poll every 5 seconds
             .with_polling_strategy("FIXED")
             .with_termination_condition("(function(){ return $.output.body.status === 'COMPLETED'; })();")
     );
