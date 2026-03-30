@@ -1,4 +1,4 @@
-FROM rust:1.75-bookworm AS build
+FROM rust:1.85-bookworm AS build
 RUN mkdir /package
 COPY /src /package/src
 COPY /conductor-macros /package/conductor-macros
@@ -11,9 +11,9 @@ RUN sed -i 's/, "harness"//' Cargo.toml && cargo build --release
 FROM build AS harness-build
 COPY /harness /package/harness
 # Restore the workspace member now that the directory exists
-RUN sed -i 's/"conductor-macros"/"conductor-macros", "harness"/' Cargo.toml
+RUN sed -i '/members/s/"conductor-macros"/"conductor-macros", "harness"/' Cargo.toml
 WORKDIR /package
-RUN cargo build --release --bin harness
+RUN cargo build --release -p harness
 
 FROM debian:bookworm-slim AS harness
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
