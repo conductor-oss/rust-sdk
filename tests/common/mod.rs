@@ -8,32 +8,33 @@ use std::time::Duration;
 
 /// Detect whether the Conductor server is Orkes Enterprise (vs OSS).
 ///
-/// Probes GET /api/admin/config:
-///   - OSS returns 200 with server config JSON (no auth required)
-///   - Enterprise returns 401 INVALID_TOKEN (security is always enabled)
-///
-/// Preferred over checking CONDUCTOR_AUTH_KEY because OSS servers can also be
-/// configured with auth credentials, making that check unreliable.
+/// Probes POST /api/token with dummy credentials (same approach as the JS SDK):
+///   - OSS returns 404 (the /token endpoint does not exist)
+///   - Enterprise returns non-404 (401/403 for bad credentials, 200 for valid ones)
 #[allow(dead_code)]
 pub async fn is_enterprise_server(config: &Configuration) -> bool {
     let probe_url = format!(
-        "{}/admin/config",
+        "{}/token",
         config.server_api_url.trim_end_matches('/')
     );
-    let (is_enterprise, detail) = match reqwest::Client::new().get(&probe_url).send().await {
+    let body = serde_json::json!({"keyId": "probe", "keySecret": "probe"});
+    let (is_enterprise, detail) = match reqwest::Client::new()
+        .post(&probe_url)
+        .json(&body)
+        .send()
+        .await
+    {
         Ok(resp) => {
             let status = resp.status();
-            // OSS returns 200 with config JSON (no auth required);
-            // Enterprise returns non-200 (401, 404, etc. depending on deployment)
             (
-                status != reqwest::StatusCode::OK,
+                status != reqwest::StatusCode::NOT_FOUND,
                 format!("status {status}"),
             )
         }
         Err(e) => (false, format!("connection error: {e}")),
     };
     println!(
-        "[test] server detection: {} (probe {probe_url} → {detail})",
+        "[test] server detection: {} (POST {probe_url} → {detail})",
         if is_enterprise { "Enterprise" } else { "OSS" }
     );
     is_enterprise
