@@ -446,10 +446,12 @@ async fn test_search_workflows() {
         .with_correlation_id(&correlation_id);
     let workflow_id = workflow_client.start_workflow(&request).await.unwrap();
 
-    // Wait for indexing (Enterprise uses Elasticsearch which needs time to index)
-    tokio::time::sleep(Duration::from_secs(if enterprise { 5 } else { 1 })).await;
+    // Enterprise indexing may be eventually consistent; give it time to catch up
+    if enterprise {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 
-    // freeText search works on both OSS (in-memory indexer) and Enterprise (Elasticsearch)
+    // freeText search works on both OSS and Enterprise
     let result = workflow_client
         .search_workflows(None, Some(&correlation_id), 0, 10)
         .await
@@ -459,7 +461,7 @@ async fn test_search_workflows() {
         "freeText search should find at least one workflow"
     );
 
-    // Structured query syntax only works with Elasticsearch (Enterprise)
+    // Structured query syntax requires Enterprise (not supported by the OSS in-memory indexer)
     if enterprise {
         println!(
             "[test_search_workflows] Enterprise detected — also testing structured query search"
@@ -504,10 +506,13 @@ async fn test_search_v2_workflows() {
         .with_correlation_id(&correlation_id);
     let workflow_id = workflow_client.start_workflow(&request).await.unwrap();
 
-    // Wait for indexing (Enterprise uses Elasticsearch which needs time to index)
-    tokio::time::sleep(Duration::from_secs(if enterprise { 5 } else { 1 })).await;
+    // Enterprise indexing may be eventually consistent; give it time to catch up
+    if enterprise {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 
     // freeText search works on both OSS and Enterprise
+    // Note: search_v2 may not be available in all server versions
     let result = workflow_client
         .search_workflows_v2(None, Some(&correlation_id), 0, 10)
         .await;
@@ -525,7 +530,7 @@ async fn test_search_v2_workflows() {
         }
     }
 
-    // Structured query syntax only works with Elasticsearch (Enterprise)
+    // Structured query syntax requires Enterprise (not supported by the OSS in-memory indexer)
     if enterprise {
         let query = format!("correlationId='{}'", correlation_id);
         let result = workflow_client
