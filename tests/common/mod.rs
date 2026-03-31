@@ -6,6 +6,39 @@ use conductor::{
 };
 use std::time::Duration;
 
+/// Detect whether the Conductor server is Orkes Enterprise (vs OSS).
+///
+/// Probes GET /api/admin/config:
+///   - OSS returns 200 with server config JSON (no auth required)
+///   - Enterprise returns 401 INVALID_TOKEN (security is always enabled)
+///
+/// Preferred over checking CONDUCTOR_AUTH_KEY because OSS servers can also be
+/// configured with auth credentials, making that check unreliable.
+#[allow(dead_code)]
+pub async fn is_enterprise_server(config: &Configuration) -> bool {
+    let probe_url = format!(
+        "{}/admin/config",
+        config.server_api_url.trim_end_matches('/')
+    );
+    let (is_enterprise, detail) = match reqwest::Client::new().get(&probe_url).send().await {
+        Ok(resp) => {
+            let status = resp.status();
+            // OSS returns 200 with config JSON (no auth required);
+            // Enterprise returns non-200 (401, 404, etc. depending on deployment)
+            (
+                status != reqwest::StatusCode::OK,
+                format!("status {status}"),
+            )
+        }
+        Err(e) => (false, format!("connection error: {e}")),
+    };
+    println!(
+        "[test] server detection: {} (probe {probe_url} → {detail})",
+        if is_enterprise { "Enterprise" } else { "OSS" }
+    );
+    is_enterprise
+}
+
 /// Common test constants
 #[allow(dead_code)]
 pub const TEST_WORKFLOW_NAME: &str = "test-sdk-rust-workflow";
@@ -17,6 +50,7 @@ pub const TEST_OWNER_EMAIL: &str = "test@orkes.io";
 pub const TEST_WORKFLOW_VERSION: i32 = 1;
 
 /// Get test configuration from environment
+#[allow(dead_code)]
 pub fn test_config() -> Configuration {
     Configuration::from_env()
 }
