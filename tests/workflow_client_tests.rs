@@ -427,8 +427,8 @@ async fn test_retry_last_failed_task() {
 #[tokio::test]
 async fn test_search_workflows() {
     let config = test_config();
-    let enterprise = is_enterprise_server(&config).await;
     let client = ConductorClient::new(config).unwrap();
+    let is_oss = client.is_oss().await;
     let workflow_client = client.workflow_client();
     let metadata = client.metadata_client();
 
@@ -447,7 +447,7 @@ async fn test_search_workflows() {
     let workflow_id = workflow_client.start_workflow(&request).await.unwrap();
 
     // Enterprise indexing may be eventually consistent; give it time to catch up
-    if enterprise {
+    if !is_oss {
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
 
@@ -462,7 +462,7 @@ async fn test_search_workflows() {
     );
 
     // Structured query syntax requires Enterprise (not supported by the OSS in-memory indexer)
-    if enterprise {
+    if !is_oss {
         println!(
             "[test_search_workflows] Enterprise detected — also testing structured query search"
         );
@@ -487,8 +487,8 @@ async fn test_search_workflows() {
 #[tokio::test]
 async fn test_search_v2_workflows() {
     let config = test_config();
-    let enterprise = is_enterprise_server(&config).await;
     let client = ConductorClient::new(config).unwrap();
+    let is_oss = client.is_oss().await;
     let workflow_client = client.workflow_client();
     let metadata = client.metadata_client();
 
@@ -507,7 +507,7 @@ async fn test_search_v2_workflows() {
     let workflow_id = workflow_client.start_workflow(&request).await.unwrap();
 
     // Enterprise indexing may be eventually consistent; give it time to catch up
-    if enterprise {
+    if !is_oss {
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
 
@@ -531,7 +531,7 @@ async fn test_search_v2_workflows() {
     }
 
     // Structured query syntax requires Enterprise (not supported by the OSS in-memory indexer)
-    if enterprise {
+    if !is_oss {
         let query = format!("correlationId='{}'", correlation_id);
         let result = workflow_client
             .search_workflows_v2(Some(&query), None, 0, 10)

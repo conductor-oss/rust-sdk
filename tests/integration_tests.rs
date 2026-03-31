@@ -1,8 +1,6 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-mod common;
-
 use conductor::{
     client::ConductorClient,
     configuration::Configuration,
@@ -675,12 +673,11 @@ async fn test_workflow_search() {
 #[tokio::test]
 async fn test_http_poll_task() {
     let config = test_config();
-    if !common::is_enterprise_server(&config).await {
+    let client = ConductorClient::new(config).unwrap();
+    if client.is_oss().await {
         println!("Skipping: HTTP_POLL requires Orkes Enterprise Conductor");
         return;
     }
-
-    let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
     let workflow_client = client.workflow_client();
 

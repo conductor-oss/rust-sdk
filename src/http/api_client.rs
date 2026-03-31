@@ -53,6 +53,8 @@ pub struct ApiClient {
     last_refresh_attempt: Arc<RwLock<Option<Instant>>>,
     /// Mutex to ensure only one token refresh happens at a time
     token_refresh_lock: Arc<Mutex<()>>,
+    /// Cached result of OSS detection (None = not yet probed)
+    is_oss: Arc<RwLock<Option<bool>>>,
 }
 
 impl ApiClient {
@@ -77,6 +79,7 @@ impl ApiClient {
             auth_failures: Arc::new(RwLock::new(0)),
             last_refresh_attempt: Arc::new(RwLock::new(None)),
             token_refresh_lock: Arc::new(Mutex::new(())),
+            is_oss: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -864,6 +867,7 @@ impl ApiClient {
             let mut config = self.config.write().await;
             config.disable_auth();
             *self.auth_failures.write().await = 0;
+            *self.is_oss.write().await = Some(true);
             Ok(())
         } else if status == StatusCode::UNAUTHORIZED {
             // 401 from /token endpoint - invalid credentials
@@ -905,6 +909,38 @@ impl ApiClient {
         // Acquire lock and refresh
         let _refresh_guard = self.token_refresh_lock.lock().await;
         self.refresh_token().await
+    }
+
+    /// Check whether the server is OSS Conductor (vs Orkes Enterprise).
+    ///
+    /// Probes `POST /token` with dummy credentials on first call and caches
+    /// the result. OSS Conductor returns 404 (the endpoint does not exist);
+    /// Enterprise returns a non-404 status (e.g. 401/403 for invalid creds).
+    ///
+    /// This mirrors the detection strategy used by the JavaScript SDK.
+    pub async fn is_oss(&self) -> bool {
+        // Fast path: already probed
+        if let Some(cached) = *self.is_oss.read().await {
+            return cached;
+        }
+
+        // Probe /token
+        let url = format!("{}/token", self.base_url);
+        let body = serde_json::json!({"keyId": "probe", "keySecret": "probe"});
+        let is_oss = match self.client.post(&url).json(&body).send().await {
+            Ok(resp) => resp.status() == StatusCode::NOT_FOUND,
+            Err(_) => false,
+        };
+
+        info!(
+            "Server detection: {} (POST {} → {})",
+            if is_oss { "OSS" } else { "Enterprise" },
+            url,
+            if is_oss { "404" } else { "non-404" }
+        );
+
+        *self.is_oss.write().await = Some(is_oss);
+        is_oss
     }
 
     /// Get configuration (for reading settings)
