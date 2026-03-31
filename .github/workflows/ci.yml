@@ -201,6 +201,41 @@ jobs:
           CONDUCTOR_SERVER_URL: http://localhost:8080/api
         run: cargo test --tests --all-features -- --test-threads=1
 
+  test-integration-enterprise:
+    name: Integration Tests (Enterprise)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Run integration tests against Enterprise
+        env:
+          CONDUCTOR_SERVER_URL: ${{ vars.SDKDEV_SERVER_URL }}
+          CONDUCTOR_AUTH_KEY: ${{ vars.SDKDEV_AUTH_KEY }}
+          CONDUCTOR_AUTH_SECRET: ${{ secrets.SDKDEV_AUTH_SECRET }}
+        run: cargo test --tests --all-features -- --test-threads=1
+
   docs:
     name: Documentation Check
     runs-on: ubuntu-latest
