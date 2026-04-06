@@ -1,8 +1,8 @@
-FROM rust:1.85-bookworm AS build
+FROM rust:1.86-bookworm AS build
 RUN mkdir /package
 COPY /src /package/src
 COPY /conductor-macros /package/conductor-macros
-COPY /Cargo.toml /package/Cargo.toml
+COPY /Cargo.toml /Cargo.lock /package/
 WORKDIR /package
 # Pre-build the SDK library; the harness workspace member isn't present yet,
 # so temporarily remove it from the workspace members list.
