@@ -4,7 +4,6 @@ Thumbs.db
 
 # Rust
 /target/
-Cargo.lock
 
 # IDE
 .idea/
