@@ -1,0 +1,10 @@
+target/
+.git/
+.github/
+docs/
+examples/
+tests/
+*.md
+LICENSE
+.gitignore
+.dockerignore

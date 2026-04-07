@@ -149,6 +149,14 @@ impl ConductorClient {
         &self.api
     }
 
+    /// Check whether the server is OSS Conductor (vs Orkes Enterprise).
+    ///
+    /// The result is cached after the first call. See [`ApiClient::is_oss`] for
+    /// details on the detection mechanism.
+    pub async fn is_oss(&self) -> bool {
+        self.api.is_oss().await
+    }
+
     /// Get configuration
     pub async fn config(&self) -> Configuration {
         self.api.get_config().await

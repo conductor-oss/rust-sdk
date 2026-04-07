@@ -16,7 +16,7 @@ pub enum WorkflowTimeoutPolicy {
 }
 
 /// Task type in a workflow
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TaskType {
     /// Simple task executed by a worker
@@ -97,6 +97,48 @@ pub enum TaskType {
     /// Get document task
     #[serde(rename = "GET_DOCUMENT")]
     GetDocument,
+    /// No-op task
+    Noop,
+    /// Update task (Orkes) -- update another task's status/output within a workflow
+    #[serde(rename = "UPDATE_TASK")]
+    UpdateTask,
+    /// Get workflow task (Orkes) -- fetch a workflow's state from within a workflow
+    #[serde(rename = "GET_WORKFLOW")]
+    GetWorkflow,
+    /// Update secret task (Orkes)
+    #[serde(rename = "UPDATE_SECRET")]
+    UpdateSecret,
+    /// Publish metric task (Orkes)
+    #[serde(rename = "PUBLISH_METRIC")]
+    PublishMetric,
+    /// Query processor task (Orkes)
+    #[serde(rename = "QUERY_PROCESSOR")]
+    QueryProcessor,
+    /// JDBC task (Orkes)
+    Jdbc,
+    /// Business rule task (Orkes)
+    #[serde(rename = "BUSINESS_RULE")]
+    BusinessRule,
+    /// AWS Lambda task (Orkes)
+    #[serde(rename = "AWS_LAMBDA")]
+    AwsLambda,
+    /// OpsGenie task (Orkes)
+    #[serde(rename = "OPS_GENIE")]
+    OpsGenie,
+    /// SendGrid email task (Orkes)
+    Sendgrid,
+    /// Wait until task (Orkes)
+    #[serde(rename = "WAIT_UNTIL")]
+    WaitUntil,
+    /// MCP remote task (Orkes)
+    #[serde(rename = "MCP_REMOTE")]
+    McpRemote,
+    /// Start workflow batch task (Orkes)
+    #[serde(rename = "START_WORKFLOW_BATCH")]
+    StartWorkflowBatch,
+    /// Unrecognized task type from the server
+    #[serde(other)]
+    Other,
 }
 
 /// A task definition within a workflow
@@ -308,6 +350,7 @@ impl StateChangeEvent {
 #[serde(rename_all = "camelCase")]
 pub struct EmbeddedTaskDef {
     /// Task name
+    #[serde(default)]
     pub name: String,
 
     /// Retry count
@@ -670,13 +713,13 @@ impl WorkflowTask {
     pub fn http_poll(task_ref_name: impl Into<String>, uri: impl Into<String>) -> Self {
         let http_request = serde_json::json!({
             "uri": uri.into(),
-            "method": "GET"
+            "method": "GET",
+            "pollingStrategy": "FIXED",
+            "pollingInterval": 1000
         });
 
         let mut input = HashMap::new();
         input.insert("http_request".to_string(), http_request);
-        input.insert("pollingStrategy".to_string(), serde_json::json!("FIXED"));
-        input.insert("pollingInterval".to_string(), serde_json::json!(1000));
 
         Self {
             name: "http_poll".to_string(),
@@ -687,30 +730,27 @@ impl WorkflowTask {
         }
     }
 
-    /// Set polling strategy (FIXED or EXPONENTIAL_BACKOFF)
+    /// Set polling strategy (FIXED, LINEAR_BACKOFF, or EXPONENTIAL_BACKOFF)
     pub fn with_polling_strategy(mut self, strategy: impl Into<String>) -> Self {
-        self.input_parameters.insert(
-            "pollingStrategy".to_string(),
-            serde_json::json!(strategy.into()),
-        );
+        if let Some(req) = self.input_parameters.get_mut("http_request") {
+            req["pollingStrategy"] = serde_json::json!(strategy.into());
+        }
         self
     }
 
-    /// Set polling interval in milliseconds
-    pub fn with_polling_interval(mut self, interval_ms: i64) -> Self {
-        self.input_parameters.insert(
-            "pollingInterval".to_string(),
-            serde_json::json!(interval_ms),
-        );
+    /// Set polling interval in seconds
+    pub fn with_polling_interval(mut self, interval_secs: i64) -> Self {
+        if let Some(req) = self.input_parameters.get_mut("http_request") {
+            req["pollingInterval"] = serde_json::json!(interval_secs);
+        }
         self
     }
 
     /// Set termination condition script for HTTP Poll
     pub fn with_termination_condition(mut self, script: impl Into<String>) -> Self {
-        self.input_parameters.insert(
-            "terminationCondition".to_string(),
-            serde_json::json!(script.into()),
-        );
+        if let Some(req) = self.input_parameters.get_mut("http_request") {
+            req["terminationCondition"] = serde_json::json!(script.into());
+        }
         self
     }
 

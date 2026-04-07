@@ -428,6 +428,7 @@ async fn test_retry_last_failed_task() {
 async fn test_search_workflows() {
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
+    let is_oss = client.is_oss().await;
     let workflow_client = client.workflow_client();
     let metadata = client.metadata_client();
 
@@ -445,17 +446,38 @@ async fn test_search_workflows() {
         .with_correlation_id(&correlation_id);
     let workflow_id = workflow_client.start_workflow(&request).await.unwrap();
 
-    // Wait for indexing
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Enterprise indexing may be eventually consistent; give it time to catch up
+    if !is_oss {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 
-    // Search
-    let query = format!("correlationId='{}'", correlation_id);
+    // freeText search works on both OSS and Enterprise
     let result = workflow_client
-        .search_workflows(Some(&query), None, 0, 10)
+        .search_workflows(None, Some(&correlation_id), 0, 10)
         .await
         .unwrap();
+    assert!(
+        result.total_hits > 0,
+        "freeText search should find at least one workflow"
+    );
 
-    assert!(result.total_hits > 0, "Should find at least one workflow");
+    // Structured query syntax requires Enterprise (not supported by the OSS in-memory indexer)
+    if !is_oss {
+        println!(
+            "[test_search_workflows] Enterprise detected — also testing structured query search"
+        );
+        let query = format!("correlationId='{}'", correlation_id);
+        let result = workflow_client
+            .search_workflows(Some(&query), None, 0, 10)
+            .await
+            .unwrap();
+        assert!(
+            result.total_hits > 0,
+            "Structured query search should find at least one workflow on Enterprise"
+        );
+    } else {
+        println!("[test_search_workflows] OSS detected — skipping structured query search");
+    }
 
     // Cleanup
     cleanup_workflow(&client, &workflow_id).await;
@@ -466,6 +488,7 @@ async fn test_search_workflows() {
 async fn test_search_v2_workflows() {
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
+    let is_oss = client.is_oss().await;
     let workflow_client = client.workflow_client();
     let metadata = client.metadata_client();
 
@@ -483,23 +506,48 @@ async fn test_search_v2_workflows() {
         .with_correlation_id(&correlation_id);
     let workflow_id = workflow_client.start_workflow(&request).await.unwrap();
 
-    // Wait for indexing
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Enterprise indexing may be eventually consistent; give it time to catch up
+    if !is_oss {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 
-    // Search V2 - may not be available in all environments
-    let query = format!("correlationId='{}'", correlation_id);
+    // freeText search works on both OSS and Enterprise
+    // Note: search_v2 may not be available in all server versions
     let result = workflow_client
-        .search_workflows_v2(Some(&query), None, 0, 10)
+        .search_workflows_v2(None, Some(&correlation_id), 0, 10)
         .await;
 
     match result {
-        Ok(r) => assert!(r.total_hits > 0, "Should find at least one workflow"),
+        Ok(r) => assert!(
+            r.total_hits > 0,
+            "freeText search_v2 should find at least one workflow"
+        ),
         Err(e) => {
-            // V2 search is deprecated in some server versions
             eprintln!(
                 "Warning: search_v2 returned error (may be deprecated): {:?}",
                 e
             );
+        }
+    }
+
+    // Structured query syntax requires Enterprise (not supported by the OSS in-memory indexer)
+    if !is_oss {
+        let query = format!("correlationId='{}'", correlation_id);
+        let result = workflow_client
+            .search_workflows_v2(Some(&query), None, 0, 10)
+            .await;
+
+        match result {
+            Ok(r) => assert!(
+                r.total_hits > 0,
+                "Structured query search_v2 should find at least one workflow on Enterprise"
+            ),
+            Err(e) => {
+                eprintln!(
+                    "Warning: search_v2 structured query returned error: {:?}",
+                    e
+                );
+            }
         }
     }
 

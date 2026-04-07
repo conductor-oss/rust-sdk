@@ -2,7 +2,7 @@
 name = "conductor-rust"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.85"
 description = "Rust SDK for Netflix Conductor workflow orchestration"
 license = "Apache-2.0"
 repository = "https://github.com/conductor-oss/conductor-rust"
@@ -39,7 +39,7 @@ large_enum_variant = "warn"
 clone_on_copy = "warn"
 
 [workspace]
-members = [".", "conductor-macros"]
+members = [".", "conductor-macros", "harness"]
 
 [dependencies]
 # Async runtime

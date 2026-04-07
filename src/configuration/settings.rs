@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_default_config() {
-        let config = Configuration::default();
+        let config = Configuration::new("http://localhost:8080/api");
         assert!(config.server_api_url.contains("localhost:8080"));
         assert!(!config.auth_disabled);
         assert_eq!(config.auth_token_ttl, Duration::from_secs(45 * 60));

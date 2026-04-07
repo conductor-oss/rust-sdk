@@ -17,6 +17,7 @@ pub const TEST_OWNER_EMAIL: &str = "test@orkes.io";
 pub const TEST_WORKFLOW_VERSION: i32 = 1;
 
 /// Get test configuration from environment
+#[allow(dead_code)]
 pub fn test_config() -> Configuration {
     Configuration::from_env()
 }

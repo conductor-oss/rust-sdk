@@ -674,6 +674,10 @@ async fn test_workflow_search() {
 async fn test_http_poll_task() {
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
+    if client.is_oss().await {
+        println!("Skipping: HTTP_POLL requires Orkes Enterprise Conductor");
+        return;
+    }
     let metadata = client.metadata_client();
     let workflow_client = client.workflow_client();
 
@@ -685,8 +689,7 @@ async fn test_http_poll_task() {
     // Create workflow with HTTP Poll task
     let http_poll = WorkflowTask::http_poll("http_poll_ref", "https://httpbin.org/json")
         .with_polling_strategy("FIXED")
-        .with_polling_interval(1000)
-        // Terminate immediately after first successful response
+        .with_polling_interval(1)
         .with_termination_condition(
             "(function(){ return $.output.response.statusCode == 200; })();",
         );
