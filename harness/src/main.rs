@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use conductor::client::ConductorClient;
 use conductor::configuration::Configuration;
+use conductor::metrics::MetricsSettings;
 use conductor::models::{TaskDef, WorkflowDef, WorkflowTask};
 use conductor::worker::TaskHandler;
 
@@ -136,6 +137,18 @@ async fn main() {
             process::exit(1);
         }
     };
+
+    let metrics_port: u16 = std::env::var("HARNESS_METRICS_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(9991);
+
+    handler.enable_metrics(
+        MetricsSettings::new()
+            .with_http_port(metrics_port)
+            .with_metrics_path("/metrics"),
+    );
+    println!("Prometheus metrics server started on port {}", metrics_port);
 
     for def in SIMULATED_WORKERS {
         let worker = SimulatedTaskWorker::new(
