@@ -99,11 +99,7 @@ impl TestStats {
         let max_us = self.max_execution_time_us.load(Ordering::SeqCst);
         let concurrency_errors = self.concurrency_errors.load(Ordering::SeqCst);
 
-        let avg_us = if executed > 0 {
-            total_us / executed as u64
-        } else {
-            0
-        };
+        let avg_us = total_us.checked_div(executed as u64).unwrap_or(0);
 
         println!("\n╔══════════════════════════════════════════════════════════════╗");
         println!("║                    PERFORMANCE TEST RESULTS                   ║");

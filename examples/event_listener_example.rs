@@ -139,11 +139,7 @@ impl StatsCollector {
         let failed = self.tasks_failed.load(Ordering::SeqCst);
         let total_time = self.total_execution_time_ms.load(Ordering::SeqCst);
 
-        let avg_time = if completed > 0 {
-            total_time / completed
-        } else {
-            0
-        };
+        let avg_time = total_time.checked_div(completed).unwrap_or(0);
 
         println!("\n=== Worker Statistics ===");
         println!("  Total polls: {}", polls);

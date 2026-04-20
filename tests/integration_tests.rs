@@ -162,7 +162,7 @@ async fn test_workflow_execution() {
         .with_input_value("input", "test_value");
 
     let workflow_run = workflow_client
-        .execute_workflow(&request, Duration::from_secs(30))
+        .execute_workflow(&request, Duration::from_secs(25))
         .await
         .unwrap();
 
@@ -326,7 +326,7 @@ async fn test_multiple_workers() {
     // Execute workflow
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
     let workflow_run = workflow_client
-        .execute_workflow(&request, Duration::from_secs(30))
+        .execute_workflow(&request, Duration::from_secs(25))
         .await
         .unwrap();
 
@@ -370,7 +370,7 @@ async fn test_http_task_workflow() {
     // Execute workflow
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
     let result = workflow_client
-        .execute_workflow(&request, Duration::from_secs(30))
+        .execute_workflow(&request, Duration::from_secs(25))
         .await
         .unwrap();
 
@@ -418,7 +418,7 @@ async fn test_inline_javascript_task() {
     // Execute workflow
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
     let result = workflow_client
-        .execute_workflow(&request, Duration::from_secs(30))
+        .execute_workflow(&request, Duration::from_secs(25))
         .await
         .unwrap();
 
@@ -461,7 +461,7 @@ async fn test_fork_join_workflow() {
     // Execute workflow
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
     let result = workflow_client
-        .execute_workflow(&request, Duration::from_secs(30))
+        .execute_workflow(&request, Duration::from_secs(25))
         .await
         .unwrap();
 
@@ -511,7 +511,7 @@ async fn test_switch_task_workflow() {
         .with_input_value("choice", "A");
 
     let result = workflow_client
-        .execute_workflow(&request, Duration::from_secs(30))
+        .execute_workflow(&request, Duration::from_secs(25))
         .await
         .unwrap();
 
@@ -555,7 +555,7 @@ async fn test_do_while_workflow() {
     // Execute workflow
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
     let result = workflow_client
-        .execute_workflow(&request, Duration::from_secs(30))
+        .execute_workflow(&request, Duration::from_secs(25))
         .await
         .unwrap();
 
@@ -703,7 +703,7 @@ async fn test_http_poll_task() {
     // Execute workflow
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
     let result = workflow_client
-        .execute_workflow(&request, Duration::from_secs(30))
+        .execute_workflow(&request, Duration::from_secs(25))
         .await
         .unwrap();
 
