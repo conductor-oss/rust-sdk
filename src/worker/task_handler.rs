@@ -66,11 +66,21 @@ impl TaskHandler {
         self.event_dispatcher.register(listener);
     }
 
-    /// Enable metrics collection
+    /// Enable metrics collection.
+    ///
+    /// Registers a [`MetricsCollector`] both as a task-runner event listener
+    /// (to populate task/workflow metrics) *and* as the
+    /// [`HttpMetricsObserver`](crate::http::HttpMetricsObserver) for the
+    /// underlying [`ApiClient`] (to populate
+    /// `http_api_client_request_seconds`). The observer swap is visible to
+    /// every `ApiClient` clone vended from this handler, including those
+    /// returned by [`conductor_client`](Self::conductor_client).
     pub fn enable_metrics(&mut self, settings: MetricsSettings) {
         let collector = Arc::new(MetricsCollector::new(settings));
         self.event_dispatcher
             .register(collector.clone() as Arc<dyn TaskRunnerEventsListener>);
+        self.api_client
+            .set_http_metrics(collector.clone() as Arc<dyn crate::http::HttpMetricsObserver>);
         self.metrics_collector = Some(collector);
     }
 
@@ -94,9 +104,15 @@ impl TaskHandler {
         MetadataClient::new(self.api_client.clone())
     }
 
-    /// Get the Conductor client
+    /// Get the Conductor client wired to this handler's event dispatcher.
+    ///
+    /// Sharing the dispatcher means `WorkflowStarted` /
+    /// `WorkflowStartFailure` events emitted by the returned client's
+    /// `WorkflowClient` flow into the same `MetricsCollector` that
+    /// [`enable_metrics`](Self::enable_metrics) installed.
     pub fn conductor_client(&self) -> ConductorClient {
         ConductorClient::from_api_client(self.api_client.clone())
+            .with_event_dispatcher(self.event_dispatcher.clone())
     }
 
     /// Get a schema client

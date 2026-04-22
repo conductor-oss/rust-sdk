@@ -21,7 +21,12 @@ pub struct MetricsSettings {
     /// Update interval for metrics
     pub update_interval: Duration,
 
-    /// Namespace prefix for all metrics
+    /// Optional namespace prefix for all metric names. Defaults to `""` so
+    /// that metric names emitted by this SDK match the canonical Conductor
+    /// SDK metric catalog used by the Java, Go, and Python SDKs (which do
+    /// not prefix metric names). Set this via [`Self::with_namespace`] if you
+    /// need to isolate Conductor SDK metrics from other metrics sharing the
+    /// same Prometheus registry.
     pub namespace: String,
 }
 
@@ -33,7 +38,7 @@ impl Default for MetricsSettings {
             metrics_path: "/metrics".to_string(),
             health_path: "/health".to_string(),
             update_interval: Duration::from_secs(1),
-            namespace: "conductor".to_string(),
+            namespace: String::new(),
         }
     }
 }
@@ -84,7 +89,7 @@ mod tests {
         let settings = MetricsSettings::default();
         assert!(settings.enabled);
         assert_eq!(settings.metrics_path, "/metrics");
-        assert_eq!(settings.namespace, "conductor");
+        assert_eq!(settings.namespace, "");
     }
 
     #[test]

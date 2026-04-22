@@ -6,6 +6,7 @@ use std::time::Duration;
 use tracing::{debug, info};
 
 use crate::error::Result;
+use crate::events::{exception_label, EventDispatcher, WorkflowStartFailure, WorkflowStarted};
 use crate::http::ApiClient;
 use crate::models::{StartWorkflowRequest, Workflow, WorkflowDef};
 
@@ -13,12 +14,30 @@ use crate::models::{StartWorkflowRequest, Workflow, WorkflowDef};
 #[derive(Clone)]
 pub struct WorkflowClient {
     api: ApiClient,
+    /// Event dispatcher used to publish `WorkflowStarted` /
+    /// `WorkflowStartFailure`. Defaults to an empty dispatcher (no-op);
+    /// construct via [`WorkflowClient::new_with_events`] to hook metrics in.
+    events: EventDispatcher,
 }
 
 impl WorkflowClient {
-    /// Create a new workflow client
+    /// Create a new workflow client without an event dispatcher.
+    ///
+    /// The `WorkflowStarted` / `WorkflowStartFailure` events will still be
+    /// published, but no listeners will see them. Use
+    /// [`WorkflowClient::new_with_events`] to wire a shared dispatcher (e.g.
+    /// one owned by [`TaskHandler`](crate::worker::TaskHandler)) so the
+    /// `MetricsCollector` can observe workflow-start metrics.
     pub fn new(api: ApiClient) -> Self {
-        Self { api }
+        Self {
+            api,
+            events: EventDispatcher::default(),
+        }
+    }
+
+    /// Create a new workflow client wired to an existing [`EventDispatcher`].
+    pub fn new_with_events(api: ApiClient, events: EventDispatcher) -> Self {
+        Self { api, events }
     }
 
     /// Start a workflow asynchronously
@@ -28,15 +47,40 @@ impl WorkflowClient {
             "Starting workflow"
         );
 
-        let workflow_id: String = self.api.post_text("/workflow", request).await?;
+        // Compute input byte size up-front so it is available for both the
+        // success-path gauge and for the failure-path tracing. Uses the same
+        // JSON serialization that the transport will perform, so the reported
+        // bytes match what actually leaves this process.
+        let input_size_bytes = serde_json::to_vec(&request.input)
+            .map(|v| v.len())
+            .unwrap_or(0);
 
-        info!(
-            workflow_name = %request.name,
-            workflow_id = %workflow_id,
-            "Workflow started"
-        );
+        match self.api.post_text::<StartWorkflowRequest>("/workflow", request).await {
+            Ok(workflow_id) => {
+                info!(
+                    workflow_name = %request.name,
+                    workflow_id = %workflow_id,
+                    "Workflow started"
+                );
 
-        Ok(workflow_id)
+                self.events.publish_workflow_started(&WorkflowStarted::new(
+                    &request.name,
+                    request.version.unwrap_or(1),
+                    input_size_bytes,
+                ));
+
+                Ok(workflow_id)
+            }
+            Err(e) => {
+                let exception = exception_label(&e);
+                self.events
+                    .publish_workflow_start_failure(&WorkflowStartFailure::new(
+                        &request.name,
+                        exception,
+                    ));
+                Err(e)
+            }
+        }
     }
 
     /// Execute a workflow synchronously and wait for completion
