@@ -167,7 +167,7 @@ async fn main() {
     }
 
     let governor = Arc::new(WorkflowGovernor::new(
-        client.workflow_client(),
+        handler.conductor_client().workflow_client(),
         WORKFLOW_NAME.to_string(),
         workflows_per_sec,
     ));

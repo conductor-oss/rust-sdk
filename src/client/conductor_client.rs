@@ -3,6 +3,7 @@
 
 use crate::configuration::Configuration;
 use crate::error::Result;
+use crate::events::EventDispatcher;
 use crate::http::ApiClient;
 
 use super::{
@@ -17,18 +18,46 @@ use super::{
 #[derive(Clone)]
 pub struct ConductorClient {
     api: ApiClient,
+    /// Shared event dispatcher used by service clients that emit events
+    /// (currently [`WorkflowClient`]). Defaults to an empty dispatcher;
+    /// replace with [`Self::with_event_dispatcher`] to wire up listeners
+    /// such as the metrics collector.
+    events: EventDispatcher,
 }
 
 impl ConductorClient {
     /// Create a new Conductor client with the given configuration
     pub fn new(config: Configuration) -> Result<Self> {
         let api = ApiClient::new(config)?;
-        Ok(Self { api })
+        Ok(Self {
+            api,
+            events: EventDispatcher::default(),
+        })
     }
 
     /// Create from an existing API client
     pub fn from_api_client(api: ApiClient) -> Self {
-        Self { api }
+        Self {
+            api,
+            events: EventDispatcher::default(),
+        }
+    }
+
+    /// Share an [`EventDispatcher`] with this client so that service clients
+    /// (such as [`WorkflowClient`]) publish events to it.
+    ///
+    /// Typically used to route workflow-lifecycle events through the same
+    /// dispatcher as [`TaskHandler`](crate::worker::TaskHandler), allowing a
+    /// single `MetricsCollector` to observe both task- and workflow-level
+    /// metrics.
+    pub fn with_event_dispatcher(mut self, events: EventDispatcher) -> Self {
+        self.events = events;
+        self
+    }
+
+    /// Access the shared event dispatcher.
+    pub fn event_dispatcher(&self) -> &EventDispatcher {
+        &self.events
     }
 
     /// Get the task client for polling and updating tasks
@@ -43,7 +72,7 @@ impl ConductorClient {
 
     /// Get the workflow client for workflow operations
     pub fn workflow_client(&self) -> WorkflowClient {
-        WorkflowClient::new(self.api.clone())
+        WorkflowClient::new_with_events(self.api.clone(), self.events.clone())
     }
 
     /// Alias for workflow_client() - matches Python SDK naming
