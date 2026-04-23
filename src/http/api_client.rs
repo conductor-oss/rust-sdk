@@ -48,6 +48,10 @@ pub struct ApiClient {
     client: Client,
     config: Arc<RwLock<Configuration>>,
     base_url: String,
+    /// Path component of `base_url` (e.g. `"/api"`), prepended to endpoint
+    /// paths when recording the `uri` metric label so the label matches the
+    /// full request path as seen by all other SDKs.
+    base_path: String,
     /// Track consecutive auth failures for backoff
     auth_failures: Arc<RwLock<u32>>,
     /// Last time we attempted token refresh (for backoff)
@@ -79,10 +83,25 @@ impl ApiClient {
 
         let base_url = config.server_api_url.trim_end_matches('/').to_string();
 
+        // Extract the path component of the server URL so it can be prepended
+        // to endpoint paths in metric labels.
+        // "http://host:8080/api" → "/api", "http://host:8080" → ""
+        let base_path = base_url
+            .find("://")
+            .and_then(|scheme_end| {
+                let after_scheme = scheme_end + 3;
+                base_url[after_scheme..]
+                    .find('/')
+                    .map(|slash| after_scheme + slash)
+            })
+            .map(|abs_pos| base_url[abs_pos..].to_string())
+            .unwrap_or_default();
+
         Ok(Self {
             client,
             config: Arc::new(RwLock::new(config)),
             base_url,
+            base_path,
             auth_failures: Arc::new(RwLock::new(0)),
             last_refresh_attempt: Arc::new(RwLock::new(None)),
             token_refresh_lock: Arc::new(Mutex::new(())),
@@ -133,8 +152,9 @@ impl ApiClient {
             duration_ms = %duration.as_millis(),
             "API request completed"
         );
+        let uri_label = format!("{}{}", self.base_path, path);
         self.http_metrics()
-            .observe(method, path, status_str, duration);
+            .observe(method, &uri_label, status_str, duration);
     }
 
     /// Convenience: call [`record_request`](Self::record_request) with a

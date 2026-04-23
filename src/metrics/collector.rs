@@ -209,7 +209,7 @@ impl MetricsCollector {
             ns,
             "thread_uncaught_exceptions_total",
             "Count of panics escaping worker task bodies",
-            &["taskType", "exception"],
+            &["exception"],
         );
         let workflow_start_error_total = make_counter(
             &registry,
@@ -262,7 +262,7 @@ impl MetricsCollector {
             ns,
             "workflow_input_size_bytes",
             "Size of workflow input payload in bytes at start_workflow time",
-            &["workflowType"],
+            &["workflowType", "version"],
         );
         let active_workers = make_gauge(
             &registry,
@@ -548,13 +548,17 @@ impl TaskRunnerEventsListener for MetricsCollector {
 
     fn on_thread_uncaught_exception(&self, event: &ThreadUncaughtException) {
         self.thread_uncaught_exceptions_total
-            .with_label_values(&[&event.task_type, &event.exception])
+            .with_label_values(&[&event.exception])
             .inc();
     }
 
     fn on_workflow_started(&self, event: &WorkflowStarted) {
+        let version_str = event
+            .version
+            .map(|v| v.to_string())
+            .unwrap_or_default();
         self.workflow_input_size_bytes
-            .with_label_values(&[&event.workflow_type])
+            .with_label_values(&[&event.workflow_type, &version_str])
             .set(event.input_size_bytes as f64);
     }
 
@@ -674,7 +678,7 @@ mod tests {
     fn test_workflow_metrics() {
         let collector = MetricsCollector::new(MetricsSettings::default());
 
-        collector.on_workflow_started(&WorkflowStarted::new("wf_a", 1, 128));
+        collector.on_workflow_started(&WorkflowStarted::new("wf_a", Some(1), 128));
         collector.on_workflow_start_failure(&WorkflowStartFailure::new("wf_b", "Server"));
 
         let output = collector.gather();
