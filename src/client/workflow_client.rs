@@ -65,7 +65,7 @@ impl WorkflowClient {
 
                 self.events.publish_workflow_started(&WorkflowStarted::new(
                     &request.name,
-                    request.version.unwrap_or(1),
+                    request.version,
                     input_size_bytes,
                 ));
 

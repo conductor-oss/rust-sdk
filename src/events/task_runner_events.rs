@@ -418,7 +418,7 @@ impl TaskRunnerEvent for ThreadUncaughtException {
 #[derive(Debug, Clone)]
 pub struct WorkflowStarted {
     pub workflow_type: String,
-    pub version: i32,
+    pub version: Option<i32>,
     pub input_size_bytes: usize,
     pub timestamp: DateTime<Utc>,
 }
@@ -426,7 +426,7 @@ pub struct WorkflowStarted {
 impl WorkflowStarted {
     pub fn new(
         workflow_type: impl Into<String>,
-        version: i32,
+        version: Option<i32>,
         input_size_bytes: usize,
     ) -> Self {
         Self {
