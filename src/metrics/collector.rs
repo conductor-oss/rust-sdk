@@ -5,7 +5,7 @@
 //!
 //! Metric names, label names, label values, and types here are intentionally
 //! identical to the Java, Go, and Python SDKs. See `sdk-metrics-harmonization.md`
-//! in the `longrunning-wfstest` repo for the source-of-truth catalog.
+//! at https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md
 
 use parking_lot::RwLock;
 use prometheus::{CounterVec, GaugeVec, HistogramOpts, HistogramVec, Opts, Registry};
