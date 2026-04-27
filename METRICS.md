@@ -5,7 +5,7 @@ monitor worker performance, API requests, and task execution.
 
 All metric names, label names, label values, and Prometheus types emitted by
 this SDK match the canonical catalog in
-[`sdk-metrics-harmonization.md`](https://github.com/conductor-oss/longrunning-wfstest/blob/main/sdk-metrics-harmonization.md).
+[`sdk-metrics-harmonization.md`](https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md).
 Because the Rust SDK is unreleased, there are no legacy/deprecated metric
 names to carry forward — the emitted surface is canonical on day one.
 
