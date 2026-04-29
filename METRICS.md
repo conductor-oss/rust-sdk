@@ -38,13 +38,15 @@ names to carry forward — the emitted surface is canonical on day one.
 | `task_execute_time_seconds` | Histogram | `taskType`, `status` | User worker function wall-clock. |
 | `task_update_time_seconds` | Histogram | `taskType`, `status` | Latency of the `UpdateTask` call (including retries). |
 | `http_api_client_request_seconds` | Histogram | `method`, `uri`, `status` | Latency of every Conductor API HTTP request. `status` is the HTTP status code as a string, or `"0"` for network errors. |
-| `task_result_size_bytes` | Gauge | `taskType` | Last-seen serialized task-result size. |
-| `workflow_input_size_bytes` | Gauge | `workflowType`, `version` | Last-seen serialized `StartWorkflowRequest.input` size. `version` is the workflow version as a string, or `""` when unset. |
+| `task_result_size_bytes` | Histogram | `taskType` | Serialized byte size of task result output. |
+| `workflow_input_size_bytes` | Histogram | `workflowType`, `version` | Serialized byte size of workflow input. `version` is the workflow version as a string, or `""` when unset. |
 | `active_workers` | Gauge | `taskType` | Current number of in-flight task executions. |
 
-The Histogram bucket set is the canonical
-`(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)`
-seconds.
+Time histograms use the canonical seconds bucket set:
+`(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)`.
+
+Size histograms use the canonical size bucket set:
+`(100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000)` bytes.
 
 ### Label values
 

@@ -31,6 +31,9 @@ const SECONDS_BUCKETS: &[f64] = &[
     0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
 ];
 
+/// Canonical size histogram buckets — identical to Java/Go/Python SDKs.
+const SIZE_BUCKETS: &[f64] = &[100.0, 1_000.0, 10_000.0, 100_000.0, 1_000_000.0, 10_000_000.0];
+
 /// Prometheus metrics collector implementing the canonical Conductor SDK
 /// metric catalog.
 ///
@@ -61,9 +64,11 @@ pub struct MetricsCollector {
     task_update_time_seconds: HistogramVec,
     http_api_client_request_seconds: HistogramVec,
 
+    // -- Size Histograms --
+    task_result_size_bytes: HistogramVec,
+    workflow_input_size_bytes: HistogramVec,
+
     // -- Gauges --
-    task_result_size_bytes: GaugeVec,
-    workflow_input_size_bytes: GaugeVec,
     active_workers: GaugeVec,
 
     // Internal tracking — keeps the `active_workers` gauge in sync with the
@@ -88,18 +93,19 @@ fn make_counter(
     counter
 }
 
-/// Helper: build a histogram with the canonical SDK buckets.
-fn make_histogram(
+/// Helper: build a histogram with the given bucket set.
+fn make_histogram_with_buckets(
     registry: &Registry,
     namespace: &str,
     name: &'static str,
     help: &'static str,
     labels: &[&str],
+    buckets: &[f64],
 ) -> HistogramVec {
     let histogram = HistogramVec::new(
         HistogramOpts::new(name, help)
             .namespace(namespace)
-            .buckets(SECONDS_BUCKETS.to_vec()),
+            .buckets(buckets.to_vec()),
         labels,
     )
     .unwrap_or_else(|e| panic!("Failed to create histogram {name}: {e}"));
@@ -107,6 +113,28 @@ fn make_histogram(
         .register(Box::new(histogram.clone()))
         .unwrap_or_else(|e| panic!("Failed to register histogram {name}: {e}"));
     histogram
+}
+
+/// Helper: build a time histogram with the canonical seconds bucket set.
+fn make_histogram(
+    registry: &Registry,
+    namespace: &str,
+    name: &'static str,
+    help: &'static str,
+    labels: &[&str],
+) -> HistogramVec {
+    make_histogram_with_buckets(registry, namespace, name, help, labels, SECONDS_BUCKETS)
+}
+
+/// Helper: build a size histogram with the canonical size bucket set.
+fn make_size_histogram(
+    registry: &Registry,
+    namespace: &str,
+    name: &'static str,
+    help: &'static str,
+    labels: &[&str],
+) -> HistogramVec {
+    make_histogram_with_buckets(registry, namespace, name, help, labels, SIZE_BUCKETS)
 }
 
 /// Helper: build a gauge vector.
@@ -249,21 +277,23 @@ impl MetricsCollector {
             &["method", "uri", "status"],
         );
 
-        // Gauges
-        let task_result_size_bytes = make_gauge(
+        // Size Histograms
+        let task_result_size_bytes = make_size_histogram(
             &registry,
             ns,
             "task_result_size_bytes",
-            "Size of task result payload in bytes",
+            "Serialized byte size of task result output",
             &["taskType"],
         );
-        let workflow_input_size_bytes = make_gauge(
+        let workflow_input_size_bytes = make_size_histogram(
             &registry,
             ns,
             "workflow_input_size_bytes",
-            "Size of workflow input payload in bytes at start_workflow time",
+            "Serialized byte size of workflow input",
             &["workflowType", "version"],
         );
+
+        // Gauges
         let active_workers = make_gauge(
             &registry,
             ns,
@@ -512,7 +542,7 @@ impl TaskRunnerEventsListener for MetricsCollector {
         if let Some(size) = event.output_size_bytes {
             self.task_result_size_bytes
                 .with_label_values(&[&event.task_type])
-                .set(size as f64);
+                .observe(size as f64);
         }
 
         self.decrement_active(&event.task_type);
@@ -559,7 +589,7 @@ impl TaskRunnerEventsListener for MetricsCollector {
             .unwrap_or_default();
         self.workflow_input_size_bytes
             .with_label_values(&[&event.workflow_type, &version_str])
-            .set(event.input_size_bytes as f64);
+            .observe(event.input_size_bytes as f64);
     }
 
     fn on_workflow_start_failure(&self, event: &WorkflowStartFailure) {
@@ -649,7 +679,9 @@ mod tests {
 
         let output = collector.gather();
         assert!(output.contains("task_execute_time_seconds"));
-        assert!(output.contains("task_result_size_bytes"));
+        assert!(output.contains("task_result_size_bytes_bucket"));
+        assert!(output.contains("task_result_size_bytes_count"));
+        assert!(output.contains("task_result_size_bytes_sum"));
         assert!(output.contains("task_execution_started_total"));
     }
 
@@ -682,7 +714,9 @@ mod tests {
         collector.on_workflow_start_failure(&WorkflowStartFailure::new("wf_b", "Server"));
 
         let output = collector.gather();
-        assert!(output.contains("workflow_input_size_bytes"));
+        assert!(output.contains("workflow_input_size_bytes_bucket"));
+        assert!(output.contains("workflow_input_size_bytes_count"));
+        assert!(output.contains("workflow_input_size_bytes_sum"));
         assert!(output.contains("workflowType=\"wf_a\""));
         assert!(output.contains("workflow_start_error_total"));
         assert!(output.contains("workflowType=\"wf_b\""));
