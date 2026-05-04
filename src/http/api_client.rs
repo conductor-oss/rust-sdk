@@ -138,13 +138,7 @@ impl ApiClient {
     /// `status_str` is the HTTP status code rendered as a string, or `"0"`
     /// for pre-response transport errors.
     #[inline]
-    fn record_request(
-        &self,
-        method: &str,
-        path: &str,
-        status_str: &str,
-        duration: Duration,
-    ) {
+    fn record_request(&self, method: &str, path: &str, status_str: &str, duration: Duration) {
         debug!(
             method = method,
             url = %format!("{}{}", self.base_url, path),

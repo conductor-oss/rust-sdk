@@ -5,7 +5,7 @@
 //!
 //! Metric names, label names, label values, and types here are intentionally
 //! identical to the Java, Go, and Python SDKs. See `sdk-metrics-harmonization.md`
-//! at https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md
+//! at <https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md>
 
 use parking_lot::RwLock;
 use prometheus::{CounterVec, GaugeVec, HistogramOpts, HistogramVec, Opts, Registry};
@@ -32,7 +32,14 @@ const SECONDS_BUCKETS: &[f64] = &[
 ];
 
 /// Canonical size histogram buckets — identical to Java/Go/Python SDKs.
-const SIZE_BUCKETS: &[f64] = &[100.0, 1_000.0, 10_000.0, 100_000.0, 1_000_000.0, 10_000_000.0];
+const SIZE_BUCKETS: &[f64] = &[
+    100.0,
+    1_000.0,
+    10_000.0,
+    100_000.0,
+    1_000_000.0,
+    10_000_000.0,
+];
 
 /// Prometheus metrics collector implementing the canonical Conductor SDK
 /// metric catalog.
@@ -583,10 +590,7 @@ impl TaskRunnerEventsListener for MetricsCollector {
     }
 
     fn on_workflow_started(&self, event: &WorkflowStarted) {
-        let version_str = event
-            .version
-            .map(|v| v.to_string())
-            .unwrap_or_default();
+        let version_str = event.version.map(|v| v.to_string()).unwrap_or_default();
         self.workflow_input_size_bytes
             .with_label_values(&[&event.workflow_type, &version_str])
             .observe(event.input_size_bytes as f64);

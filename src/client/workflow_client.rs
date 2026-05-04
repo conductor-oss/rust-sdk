@@ -55,7 +55,11 @@ impl WorkflowClient {
             .map(|v| v.len())
             .unwrap_or(0);
 
-        match self.api.post_text::<StartWorkflowRequest>("/workflow", request).await {
+        match self
+            .api
+            .post_text::<StartWorkflowRequest>("/workflow", request)
+            .await
+        {
             Ok(workflow_id) => {
                 info!(
                     workflow_name = %request.name,
