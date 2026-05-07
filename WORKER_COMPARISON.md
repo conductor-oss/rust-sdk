@@ -111,6 +111,12 @@ let tasks = task_client.batch_poll(..., available_slots, ...).await?;
 
 ### Prometheus Metrics
 
+> **Note:** The table below is a historical snapshot from when the Python SDK
+> was emitting its pre-harmonization (legacy) metrics surface. Worker metrics
+> have since been harmonized across all Conductor SDKs under a single canonical
+> catalog. For the complete and current Rust SDK metrics catalog, see
+> [METRICS.md](METRICS.md).
+
 | Metric | Python | Rust |
 |--------|--------|------|
 | `task_poll_total` | ✅ | ✅ |

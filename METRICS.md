@@ -15,6 +15,7 @@ names to carry forward — the emitted surface is canonical on day one.
 - [Configuration](#configuration)
 - [Intentional divergences](#intentional-divergences)
 - [Examples](#examples)
+- [Troubleshooting](#troubleshooting)
 
 ## Quick Reference
 
@@ -153,3 +154,44 @@ task_execute_time_seconds_count{taskType="my_worker",status="SUCCESS"} 42
 # Workflow start error
 workflow_start_error_total{workflowType="my_wf",exception="Server"} 2
 ```
+
+## Troubleshooting
+
+### Metrics are empty
+
+- Verify that `TaskHandler::enable_metrics` is called before `handler.start()`.
+- Verify workers have polled or executed at least one task. Metrics are created
+  lazily when the corresponding event occurs, so a freshly started worker with
+  no traffic will have no series.
+- Confirm the scrape endpoint is reachable at the expected host and port
+  (default: `http://localhost:9991/metrics`).
+
+### Missing HTTP or workflow metrics
+
+- `http_api_client_request_seconds` is recorded by the `HttpMetricsObserver`
+  installed on `ApiClient` by `enable_metrics`. If `enable_metrics` is not
+  called, no HTTP metrics are emitted.
+- `workflow_start_error_total` and `workflow_input_size_bytes` require the
+  `WorkflowClient` to be obtained via `handler.conductor_client()` so that
+  events flow through the shared `EventDispatcher`. A standalone
+  `ConductorClient` created separately from the handler will not emit these
+  metrics.
+
+### High cardinality
+
+- The `uri` label on `http_api_client_request_seconds` carries the
+  interpolated request path, which may include worker names or task IDs.
+  Operators who need bounded cardinality should apply a Prometheus
+  `metric_relabel_configs` rule at scrape time. See the
+  [uri label note](#uri-label--interpolated-path-not-templated) above.
+- Avoid embedding user identifiers or unbounded values in task type, workflow
+  type, or external payload labels.
+
+### No legacy/canonical gating
+
+Unlike the Python, Go, Java, JavaScript, and Ruby SDKs, the Rust SDK has no
+released legacy metrics surface. It ships the canonical catalog directly with
+no `WORKER_CANONICAL_METRICS` environment variable and no factory/switchout
+pattern. If you operate a mixed fleet of Conductor workers across multiple
+SDKs, the other SDKs require `WORKER_CANONICAL_METRICS=true` to emit the
+same metric names and shapes that the Rust SDK emits by default.

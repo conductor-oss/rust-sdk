@@ -892,44 +892,25 @@ handler.add_event_listener(Arc::new(MyListener));
 
 ## Metrics
 
-### MetricsSettings
+The `MetricsCollector` in `src/metrics/collector.rs` implements the full
+canonical Prometheus catalog using the `prometheus` crate. It is wired into
+the worker framework via `TaskHandler::enable_metrics`, which registers it as
+both a `TaskRunnerEventsListener` (for task-level events) and as the
+`HttpMetricsObserver` on `ApiClient` (for HTTP request latency). An optional
+built-in HTTP server exposes `/metrics` and `/health` endpoints for scraping.
 
 ```rust
-use conductor::MetricsSettings;
+use conductor::metrics::MetricsSettings;
 
-let settings = MetricsSettings::default()
-    .with_http_port(9090)           // Serve metrics on :9090/metrics
-    .with_metrics_path("/metrics")
-    .with_namespace("conductor")
-    .with_update_interval(Duration::from_secs(5));
+handler.enable_metrics(
+    MetricsSettings::new()
+        .with_http_port(9090)
+        .with_metrics_path("/metrics"),
+);
 ```
 
-### Prometheus Metrics
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `conductor_task_poll_total` | Counter | `task_type` | Total poll attempts |
-| `conductor_task_poll_error_total` | Counter | `task_type`, `error_type` | Poll errors |
-| `conductor_task_execute_error_total` | Counter | `task_type`, `error_type` | Execution errors |
-| `conductor_task_update_error_total` | Counter | `task_type` | Update errors |
-| `conductor_task_paused_total` | Counter | `task_type` | Polls while paused |
-| `conductor_task_poll_time_seconds` | Histogram | `task_type`, `status` | Poll latency |
-| `conductor_task_execute_time_seconds` | Histogram | `task_type`, `status` | Execution time |
-| `conductor_task_result_size_bytes` | Gauge | `task_type` | Result payload size |
-| `conductor_active_workers` | Gauge | `task_type` | Active worker count |
-
-### Accessing Metrics
-
-```rust
-// Via HTTP endpoint (if configured)
-// GET http://localhost:9090/metrics
-
-// Programmatically
-if let Some(collector) = handler.metrics_collector() {
-    let metrics_text = collector.gather();
-    println!("{}", metrics_text);
-}
-```
+See [METRICS.md](METRICS.md) for the complete metric catalog, labels, bucket
+sets, intentional divergences, and example scrape output.
 
 ---
 
