@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use crate::error::Result;
-use crate::http::ApiClient;
+use crate::http::{ApiClient, ApiPath};
 use serde::{Deserialize, Serialize};
 
 /// Client for event operations (queue configurations)
@@ -73,7 +73,7 @@ impl EventClient {
             "/event/queue/config/{}/{}",
             queue_config.queue_type, queue_config.queue_name
         );
-        self.api.delete_no_content(&path).await
+        self.api.delete_no_content(ApiPath::templated(&path, "/event/queue/config/{queueType}/{queueName}")).await
     }
 
     /// Get a Kafka queue configuration by topic
@@ -91,7 +91,7 @@ impl EventClient {
         queue_name: &str,
     ) -> Result<QueueConfiguration> {
         let path = format!("/event/queue/config/{}/{}", queue_type, queue_name);
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/event/queue/config/{queueType}/{queueName}")).await
     }
 
     /// Create or update a queue configuration
@@ -101,14 +101,13 @@ impl EventClient {
             queue_config.queue_type, queue_config.queue_name
         );
         self.api
-            .put_no_response(&path, &queue_config.configuration)
+            .put_no_response(ApiPath::templated(&path, "/event/queue/config/{queueType}/{queueName}"), &queue_config.configuration)
             .await
     }
 
     /// Get all queue configurations
     pub async fn get_all_queue_configurations(&self) -> Result<Vec<QueueConfiguration>> {
-        let path = "/event/queue/config";
-        self.api.get(path).await
+        self.api.get("/event/queue/config").await
     }
 
     /// Get event handlers for a specific event
@@ -122,31 +121,28 @@ impl EventClient {
             urlencoding::encode(event),
             active_only
         );
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/event/{event}")).await
     }
 
     /// Get all event handlers
     pub async fn get_all_event_handlers(&self) -> Result<Vec<serde_json::Value>> {
-        let path = "/event";
-        self.api.get(path).await
+        self.api.get("/event").await
     }
 
     /// Register an event handler
     pub async fn register_event_handler(&self, event_handler: &serde_json::Value) -> Result<()> {
-        let path = "/event";
-        self.api.post_no_response(path, event_handler).await
+        self.api.post_no_response("/event", event_handler).await
     }
 
     /// Update an event handler
     pub async fn update_event_handler(&self, event_handler: &serde_json::Value) -> Result<()> {
-        let path = "/event";
-        self.api.put_no_response(path, event_handler).await
+        self.api.put_no_response("/event", event_handler).await
     }
 
     /// Remove an event handler
     pub async fn remove_event_handler(&self, name: &str) -> Result<()> {
         let path = format!("/event/{}", name);
-        self.api.delete_no_content(&path).await
+        self.api.delete_no_content(ApiPath::templated(&path, "/event/{event}")).await
     }
 }
 

@@ -5,7 +5,7 @@ use std::ops::Deref;
 use tracing::{debug, info};
 
 use crate::error::Result;
-use crate::http::ApiClient;
+use crate::http::{ApiClient, ApiPath};
 use crate::models::MetadataTag;
 
 use super::MetadataClient;
@@ -62,7 +62,7 @@ impl OrkesMetadataClient {
         );
 
         let path = format!("/metadata/workflow/{}/tags", workflow_name);
-        self.api.post_no_response(&path, &[tag]).await?;
+        self.api.post_no_response(ApiPath::templated(&path, "/metadata/workflow/{workflowName}/tags"), &[tag]).await?;
 
         info!(
             workflow_name = %workflow_name,
@@ -76,7 +76,7 @@ impl OrkesMetadataClient {
     /// Get all tags for a workflow definition
     pub async fn get_workflow_tags(&self, workflow_name: &str) -> Result<Vec<MetadataTag>> {
         let path = format!("/metadata/workflow/{}/tags", workflow_name);
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/metadata/workflow/{workflowName}/tags")).await
     }
 
     /// Set tags for a workflow definition (replaces existing tags)
@@ -88,7 +88,7 @@ impl OrkesMetadataClient {
         );
 
         let path = format!("/metadata/workflow/{}/tags", workflow_name);
-        self.api.put_no_response(&path, tags).await?;
+        self.api.put_no_response(ApiPath::templated(&path, "/metadata/workflow/{workflowName}/tags"), tags).await?;
 
         info!(
             workflow_name = %workflow_name,
@@ -108,7 +108,7 @@ impl OrkesMetadataClient {
         );
 
         let path = format!("/metadata/workflow/{}/tags", workflow_name);
-        self.api.delete_with_body(&path, &[tag]).await?;
+        self.api.delete_with_body(ApiPath::templated(&path, "/metadata/workflow/{workflowName}/tags"), &[tag]).await?;
 
         info!(
             workflow_name = %workflow_name,
@@ -130,7 +130,7 @@ impl OrkesMetadataClient {
         );
 
         let path = format!("/metadata/taskdefs/{}/tags", task_name);
-        self.api.post_no_response(&path, &[tag]).await?;
+        self.api.post_no_response(ApiPath::templated(&path, "/metadata/taskdefs/{taskName}/tags"), &[tag]).await?;
 
         info!(
             task_name = %task_name,
@@ -144,7 +144,7 @@ impl OrkesMetadataClient {
     /// Get all tags for a task definition
     pub async fn get_task_tags(&self, task_name: &str) -> Result<Vec<MetadataTag>> {
         let path = format!("/metadata/taskdefs/{}/tags", task_name);
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/metadata/taskdefs/{taskName}/tags")).await
     }
 
     /// Set tags for a task definition (replaces existing tags)
@@ -156,7 +156,7 @@ impl OrkesMetadataClient {
         );
 
         let path = format!("/metadata/taskdefs/{}/tags", task_name);
-        self.api.put_no_response(&path, tags).await?;
+        self.api.put_no_response(ApiPath::templated(&path, "/metadata/taskdefs/{taskName}/tags"), tags).await?;
 
         info!(
             task_name = %task_name,
@@ -176,7 +176,7 @@ impl OrkesMetadataClient {
         );
 
         let path = format!("/metadata/taskdefs/{}/tags", task_name);
-        self.api.delete_with_body(&path, &[tag]).await?;
+        self.api.delete_with_body(ApiPath::templated(&path, "/metadata/taskdefs/{taskName}/tags"), &[tag]).await?;
 
         info!(
             task_name = %task_name,

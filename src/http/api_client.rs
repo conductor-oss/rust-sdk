@@ -21,6 +21,43 @@ struct TokenResponse {
 /// Maximum consecutive auth failures before stopping retry attempts
 const MAX_AUTH_FAILURES: u32 = 5;
 
+/// Pairs a resolved request path with a bounded-cardinality metric template.
+///
+/// For **static** endpoints (no dynamic segments) simply pass a `&str` —
+/// the [`From<&str>`] impl uses the same string for both the request path
+/// and the metric label.
+///
+/// For **dynamic** endpoints use [`ApiPath::templated`] to supply the
+/// resolved path alongside its template:
+///
+/// ```ignore
+/// let path = format!("/workflow/{}", workflow_id);
+/// api.get(ApiPath::templated(&path, "/workflow/{workflowId}")).await
+/// ```
+pub struct ApiPath<'a> {
+    pub(crate) path: &'a str,
+    pub(crate) metric_uri: &'a str,
+}
+
+impl<'a> ApiPath<'a> {
+    /// Use when the resolved path differs from the metric template.
+    pub fn templated(path: &'a str, template: &'a str) -> Self {
+        Self {
+            path,
+            metric_uri: template,
+        }
+    }
+}
+
+impl<'a> From<&'a str> for ApiPath<'a> {
+    fn from(path: &'a str) -> Self {
+        Self {
+            path,
+            metric_uri: path,
+        }
+    }
+}
+
 /// HTTP API client for Conductor server
 ///
 /// Thread-safe and cloneable. Multiple clones share the same connection pool
@@ -48,10 +85,6 @@ pub struct ApiClient {
     client: Client,
     config: Arc<RwLock<Configuration>>,
     base_url: String,
-    /// Path component of `base_url` (e.g. `"/api"`), prepended to endpoint
-    /// paths when recording the `uri` metric label so the label matches the
-    /// full request path as seen by all other SDKs.
-    base_path: String,
     /// Track consecutive auth failures for backoff
     auth_failures: Arc<RwLock<u32>>,
     /// Last time we attempted token refresh (for backoff)
@@ -83,25 +116,10 @@ impl ApiClient {
 
         let base_url = config.server_api_url.trim_end_matches('/').to_string();
 
-        // Extract the path component of the server URL so it can be prepended
-        // to endpoint paths in metric labels.
-        // "http://host:8080/api" → "/api", "http://host:8080" → ""
-        let base_path = base_url
-            .find("://")
-            .and_then(|scheme_end| {
-                let after_scheme = scheme_end + 3;
-                base_url[after_scheme..]
-                    .find('/')
-                    .map(|slash| after_scheme + slash)
-            })
-            .map(|abs_pos| base_url[abs_pos..].to_string())
-            .unwrap_or_default();
-
         Ok(Self {
             client,
             config: Arc::new(RwLock::new(config)),
             base_url,
-            base_path,
             auth_failures: Arc::new(RwLock::new(0)),
             last_refresh_attempt: Arc::new(RwLock::new(None)),
             token_refresh_lock: Arc::new(Mutex::new(())),
@@ -134,11 +152,20 @@ impl ApiClient {
 
     /// Unified post-request bookkeeping: tracing log + observer callback.
     ///
-    /// `path` should be the interpolated request path (no query string).
+    /// `path` is the interpolated request path (for the tracing log).
+    /// `metric_uri` is the bounded-cardinality path template used as the
+    /// `uri` label (e.g. `/tasks/poll/batch/{taskType}`).
     /// `status_str` is the HTTP status code rendered as a string, or `"0"`
     /// for pre-response transport errors.
     #[inline]
-    fn record_request(&self, method: &str, path: &str, status_str: &str, duration: Duration) {
+    fn record_request(
+        &self,
+        method: &str,
+        path: &str,
+        metric_uri: &str,
+        status_str: &str,
+        duration: Duration,
+    ) {
         debug!(
             method = method,
             url = %format!("{}{}", self.base_url, path),
@@ -146,16 +173,22 @@ impl ApiClient {
             duration_ms = %duration.as_millis(),
             "API request completed"
         );
-        let uri_label = format!("{}{}", self.base_path, path);
         self.http_metrics()
-            .observe(method, &uri_label, status_str, duration);
+            .observe(method, metric_uri, status_str, duration);
     }
 
     /// Convenience: call [`record_request`](Self::record_request) with a
     /// successful response's status code.
     #[inline]
-    fn record_response(&self, method: &str, path: &str, status: StatusCode, duration: Duration) {
-        self.record_request(method, path, status.as_str(), duration);
+    fn record_response(
+        &self,
+        method: &str,
+        path: &str,
+        metric_uri: &str,
+        status: StatusCode,
+        duration: Duration,
+    ) {
+        self.record_request(method, path, metric_uri, status.as_str(), duration);
     }
 
     /// Send a prepared request, recording the outcome (success *and* transport
@@ -168,59 +201,71 @@ impl ApiClient {
         &self,
         method: &str,
         path: &str,
+        metric_uri: &str,
         request: reqwest::RequestBuilder,
     ) -> Result<Response> {
         let start = Instant::now();
         let result = request.send().await;
         let duration = start.elapsed();
         match &result {
-            Ok(resp) => self.record_response(method, path, resp.status(), duration),
-            Err(_) => self.record_request(method, path, "0", duration),
+            Ok(resp) => self.record_response(method, path, metric_uri, resp.status(), duration),
+            Err(_) => self.record_request(method, path, metric_uri, "0", duration),
         }
         result.map_err(ConductorError::Http)
     }
 
     /// GET request
-    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        self.request::<(), T>(reqwest::Method::GET, path, None)
+    pub async fn get<T: DeserializeOwned>(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+    ) -> Result<T> {
+        let p = path.into();
+        self.request::<(), T>(reqwest::Method::GET, p.path, p.metric_uri, None)
             .await
     }
 
     /// GET request with query parameters
     pub async fn get_with_params<T: DeserializeOwned>(
         &self,
-        path: &str,
+        path: impl Into<ApiPath<'_>>,
         params: &[(&str, &str)],
     ) -> Result<T> {
-        let url = format!("{}{}", self.base_url, path);
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.get(&url);
         request = self.add_auth_header(request).await?;
         request = request.query(params);
 
-        let response = self.send_observed("GET", path, request).await?;
+        let response = self.send_observed("GET", p.path, p.metric_uri, request).await?;
         self.handle_response(response).await
     }
 
     /// POST request
     pub async fn post<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
-        path: &str,
+        path: impl Into<ApiPath<'_>>,
         body: &B,
     ) -> Result<T> {
-        self.request_with_body(reqwest::Method::POST, path, body)
+        let p = path.into();
+        self.request_with_body(reqwest::Method::POST, p.path, p.metric_uri, body)
             .await
     }
 
     /// POST request returning raw text
-    pub async fn post_text<B: Serialize>(&self, path: &str, body: &B) -> Result<String> {
-        let url = format!("{}{}", self.base_url, path);
+    pub async fn post_text<B: Serialize>(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+        body: &B,
+    ) -> Result<String> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed("POST", path, request).await?;
+        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() {
@@ -233,27 +278,36 @@ impl ApiClient {
     /// PUT request
     pub async fn put<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
-        path: &str,
+        path: impl Into<ApiPath<'_>>,
         body: &B,
     ) -> Result<T> {
-        self.request_with_body(reqwest::Method::PUT, path, body)
+        let p = path.into();
+        self.request_with_body(reqwest::Method::PUT, p.path, p.metric_uri, body)
             .await
     }
 
     /// DELETE request
-    pub async fn delete<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        self.request::<(), T>(reqwest::Method::DELETE, path, None)
+    pub async fn delete<T: DeserializeOwned>(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+    ) -> Result<T> {
+        let p = path.into();
+        self.request::<(), T>(reqwest::Method::DELETE, p.path, p.metric_uri, None)
             .await
     }
 
     /// DELETE request with no response body
-    pub async fn delete_no_content(&self, path: &str) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+    pub async fn delete_no_content(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+    ) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.delete(&url);
         request = self.add_auth_header(request).await?;
 
-        let response = self.send_observed("DELETE", path, request).await?;
+        let response = self.send_observed("DELETE", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() || status == StatusCode::NO_CONTENT {
@@ -266,16 +320,17 @@ impl ApiClient {
     /// DELETE request with body
     pub async fn delete_with_body<B: Serialize + ?Sized>(
         &self,
-        path: &str,
+        path: impl Into<ApiPath<'_>>,
         body: &B,
     ) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.delete(&url);
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed("DELETE", path, request).await?;
+        let response = self.send_observed("DELETE", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() || status == StatusCode::NO_CONTENT {
@@ -286,14 +341,19 @@ impl ApiClient {
     }
 
     /// DELETE request with query parameters
-    pub async fn delete_with_params(&self, path: &str, params: &[(&str, &str)]) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+    pub async fn delete_with_params(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+        params: &[(&str, &str)],
+    ) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.delete(&url);
         request = self.add_auth_header(request).await?;
         request = request.query(params);
 
-        let response = self.send_observed("DELETE", path, request).await?;
+        let response = self.send_observed("DELETE", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() || status == StatusCode::NO_CONTENT {
@@ -306,16 +366,17 @@ impl ApiClient {
     /// POST request with no response
     pub async fn post_no_response<B: Serialize + ?Sized>(
         &self,
-        path: &str,
+        path: impl Into<ApiPath<'_>>,
         body: &B,
     ) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed("POST", path, request).await?;
+        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() {
@@ -326,24 +387,32 @@ impl ApiClient {
     }
 
     /// POST request with no body
-    pub async fn post_no_body<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let url = format!("{}{}", self.base_url, path);
+    pub async fn post_no_body<T: DeserializeOwned>(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+    ) -> Result<T> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
 
-        let response = self.send_observed("POST", path, request).await?;
+        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
         self.handle_response(response).await
     }
 
     /// POST request with no body and no response
-    pub async fn post_no_body_no_response(&self, path: &str) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+    pub async fn post_no_body_no_response(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+    ) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
 
-        let response = self.send_observed("POST", path, request).await?;
+        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() {
@@ -354,14 +423,19 @@ impl ApiClient {
     }
 
     /// PUT request with no response
-    pub async fn put_no_response<B: Serialize + ?Sized>(&self, path: &str, body: &B) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+    pub async fn put_no_response<B: Serialize + ?Sized>(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+        body: &B,
+    ) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.put(&url);
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed("PUT", path, request).await?;
+        let response = self.send_observed("PUT", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() {
@@ -372,15 +446,20 @@ impl ApiClient {
     }
 
     /// PUT request with raw text body
-    pub async fn put_raw(&self, path: &str, body: &str) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+    pub async fn put_raw(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+        body: &str,
+    ) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.put(&url);
         request = self.add_auth_header(request).await?;
         request = request.body(body.to_string());
         request = request.header("Content-Type", "text/plain");
 
-        let response = self.send_observed("PUT", path, request).await?;
+        let response = self.send_observed("PUT", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() {
@@ -393,29 +472,31 @@ impl ApiClient {
     /// POST request with JSON body and query parameters
     pub async fn post_with_params<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
-        path: &str,
+        path: impl Into<ApiPath<'_>>,
         body: &B,
         params: &[(&str, &str)],
     ) -> Result<T> {
-        let url = format!("{}{}", self.base_url, path);
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
         request = request.query(params);
         request = request.json(body);
 
-        let response = self.send_observed("POST", path, request).await?;
+        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
         self.handle_response(response).await
     }
 
     /// POST request with raw text body and query parameters
     pub async fn post_raw_with_params(
         &self,
-        path: &str,
+        path: impl Into<ApiPath<'_>>,
         body: &str,
         params: &[(&str, &str)],
     ) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
@@ -423,7 +504,7 @@ impl ApiClient {
         request = request.body(body.to_string());
         request = request.header("Content-Type", "text/plain");
 
-        let response = self.send_observed("POST", path, request).await?;
+        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() {
@@ -436,11 +517,12 @@ impl ApiClient {
     /// PUT request with raw text body and query parameters
     pub async fn put_raw_with_params(
         &self,
-        path: &str,
+        path: impl Into<ApiPath<'_>>,
         body: &str,
         params: &[(&str, &str)],
     ) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.put(&url);
         request = self.add_auth_header(request).await?;
@@ -448,7 +530,7 @@ impl ApiClient {
         request = request.body(body.to_string());
         request = request.header("Content-Type", "text/plain");
 
-        let response = self.send_observed("PUT", path, request).await?;
+        let response = self.send_observed("PUT", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() {
@@ -459,13 +541,17 @@ impl ApiClient {
     }
 
     /// GET request with no response
-    pub async fn get_no_response(&self, path: &str) -> Result<()> {
-        let url = format!("{}{}", self.base_url, path);
+    pub async fn get_no_response(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+    ) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.get(&url);
         request = self.add_auth_header(request).await?;
 
-        let response = self.send_observed("GET", path, request).await?;
+        let response = self.send_observed("GET", p.path, p.metric_uri, request).await?;
         let status = response.status();
 
         if status.is_success() {
@@ -480,6 +566,7 @@ impl ApiClient {
         &self,
         method: reqwest::Method,
         path: &str,
+        metric_uri: &str,
         body: Option<&B>,
     ) -> Result<T> {
         let url = format!("{}{}", self.base_url, path);
@@ -492,7 +579,7 @@ impl ApiClient {
             request = request.json(b);
         }
 
-        let response = self.send_observed(&method_str, path, request).await?;
+        let response = self.send_observed(&method_str, path, metric_uri, request).await?;
         let status = response.status();
 
         // If 401, try refreshing token and retry once
@@ -506,7 +593,7 @@ impl ApiClient {
                 request = request.json(b);
             }
 
-            let response = self.send_observed(&method_str, path, request).await?;
+            let response = self.send_observed(&method_str, path, metric_uri, request).await?;
             return self.handle_response(response).await;
         }
 
@@ -518,6 +605,7 @@ impl ApiClient {
         &self,
         method: reqwest::Method,
         path: &str,
+        metric_uri: &str,
         body: &B,
     ) -> Result<T> {
         let url = format!("{}{}", self.base_url, path);
@@ -527,7 +615,7 @@ impl ApiClient {
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed(&method_str, path, request).await?;
+        let response = self.send_observed(&method_str, path, metric_uri, request).await?;
         let status = response.status();
 
         // If 401, try refreshing token and retry once
@@ -538,7 +626,7 @@ impl ApiClient {
             request = self.add_auth_header(request).await?;
             request = request.json(body);
 
-            let response = self.send_observed(&method_str, path, request).await?;
+            let response = self.send_observed(&method_str, path, metric_uri, request).await?;
             return self.handle_response(response).await;
         }
 
@@ -739,7 +827,7 @@ impl ApiClient {
         });
 
         let response = match self
-            .send_observed("POST", "/token", self.client.post(&url).json(&body))
+            .send_observed("POST", "/token", "/token", self.client.post(&url).json(&body))
             .await
         {
             Ok(resp) => resp,
@@ -830,7 +918,7 @@ impl ApiClient {
         let url = format!("{}/token", self.base_url);
         let body = serde_json::json!({"keyId": "probe", "keySecret": "probe"});
         let is_oss = match self
-            .send_observed("POST", "/token", self.client.post(&url).json(&body))
+            .send_observed("POST", "/token", "/token", self.client.post(&url).json(&body))
             .await
         {
             Ok(resp) => resp.status() == StatusCode::NOT_FOUND,

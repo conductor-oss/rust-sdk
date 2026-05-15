@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use crate::error::Result;
-use crate::http::ApiClient;
+use crate::http::{ApiClient, ApiPath};
 use crate::models::{MetadataTag, PromptTemplate};
 use std::collections::HashMap;
 
@@ -70,7 +70,7 @@ impl PromptClient {
 
         let params_ref: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
         self.api
-            .post_raw_with_params(&path, prompt_template, &params_ref)
+            .post_raw_with_params(ApiPath::templated(&path, "/prompts/{promptName}"), prompt_template, &params_ref)
             .await
     }
 
@@ -102,7 +102,7 @@ impl PromptClient {
 
         let params_ref: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
         self.api
-            .put_raw_with_params(&path, prompt_template, &params_ref)
+            .put_raw_with_params(ApiPath::templated(&path, "/prompts/{promptName}/{version}"), prompt_template, &params_ref)
             .await
     }
 
@@ -113,14 +113,14 @@ impl PromptClient {
     /// * `new_version` - If true, creates new versions for existing prompts; if false, updates existing versions
     pub async fn save_prompts(&self, prompts: &[PromptTemplate], new_version: bool) -> Result<()> {
         let path = format!("/prompts?newVersion={}", new_version);
-        let _: serde_json::Value = self.api.post(&path, prompts).await?;
+        let _: serde_json::Value = self.api.post(ApiPath::templated(&path, "/prompts"), prompts).await?;
         Ok(())
     }
 
     /// Retrieves the latest version of a prompt template by name
     pub async fn get_prompt(&self, prompt_name: &str) -> Result<PromptTemplate> {
         let path = format!("/prompts/{}", prompt_name);
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/prompts/{promptName}")).await
     }
 
     /// Retrieves a specific version of a prompt template
@@ -134,7 +134,7 @@ impl PromptClient {
         version: i32,
     ) -> Result<PromptTemplate> {
         let path = format!("/prompts/{}/{}", prompt_name, version);
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/prompts/{promptName}/{version}")).await
     }
 
     /// Retrieves all versions of a specific prompt template
@@ -146,19 +146,18 @@ impl PromptClient {
     /// List of all versions of the prompt template, ordered by version number
     pub async fn get_all_prompt_versions(&self, prompt_name: &str) -> Result<Vec<PromptTemplate>> {
         let path = format!("/prompts/{}/versions", prompt_name);
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/prompts/{promptName}/versions")).await
     }
 
     /// Retrieves all prompt templates (latest versions only)
     pub async fn get_prompts(&self) -> Result<Vec<PromptTemplate>> {
-        let path = "/prompts";
-        self.api.get(path).await
+        self.api.get("/prompts").await
     }
 
     /// Deletes all versions of a prompt template
     pub async fn delete_prompt(&self, prompt_name: &str) -> Result<()> {
         let path = format!("/prompts/{}", prompt_name);
-        self.api.delete_no_content(&path).await
+        self.api.delete_no_content(ApiPath::templated(&path, "/prompts/{promptName}")).await
     }
 
     /// Deletes a specific version of a prompt template
@@ -168,7 +167,7 @@ impl PromptClient {
     /// * `version` - The version number to delete
     pub async fn delete_prompt_version(&self, prompt_name: &str, version: i32) -> Result<()> {
         let path = format!("/prompts/{}/{}", prompt_name, version);
-        self.api.delete_no_content(&path).await
+        self.api.delete_no_content(ApiPath::templated(&path, "/prompts/{promptName}/{version}")).await
     }
 
     // ==================== Tag management ====================
@@ -179,7 +178,7 @@ impl PromptClient {
         prompt_name: &str,
     ) -> Result<Vec<MetadataTag>> {
         let path = format!("/prompts/{}/tags", prompt_name);
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/prompts/{promptName}/tags")).await
     }
 
     /// Adds or updates tags for a prompt template
@@ -189,7 +188,7 @@ impl PromptClient {
         tags: &[MetadataTag],
     ) -> Result<()> {
         let path = format!("/prompts/{}/tags", prompt_name);
-        self.api.put_no_response(&path, tags).await
+        self.api.put_no_response(ApiPath::templated(&path, "/prompts/{promptName}/tags"), tags).await
     }
 
     /// Deletes specific tags from a prompt template
@@ -199,7 +198,7 @@ impl PromptClient {
         tags: &[MetadataTag],
     ) -> Result<()> {
         let path = format!("/prompts/{}/tags", prompt_name);
-        self.api.delete_with_body(&path, tags).await
+        self.api.delete_with_body(ApiPath::templated(&path, "/prompts/{promptName}/tags"), tags).await
     }
 
     // ==================== Testing ====================
@@ -230,8 +229,6 @@ impl PromptClient {
         top_p: f32,
         stop_words: Option<&[String]>,
     ) -> Result<String> {
-        let path = "/prompts/test";
-
         let mut body = serde_json::json!({
             "prompt": prompt_text,
             "promptVariables": variables,
@@ -245,7 +242,7 @@ impl PromptClient {
             body["stopWords"] = serde_json::json!(sw);
         }
 
-        self.api.post(path, &body).await
+        self.api.post("/prompts/test", &body).await
     }
 }
 

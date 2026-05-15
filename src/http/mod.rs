@@ -4,5 +4,5 @@
 mod api_client;
 mod metrics;
 
-pub use api_client::ApiClient;
+pub use api_client::{ApiClient, ApiPath};
 pub use metrics::{HttpMetricsObserver, NoopHttpMetricsObserver};

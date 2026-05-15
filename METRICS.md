@@ -16,6 +16,7 @@ names to carry forward — the emitted surface is canonical on day one.
 - [Intentional divergences](#intentional-divergences)
 - [Examples](#examples)
 - [Troubleshooting](#troubleshooting)
+- [Detailed Technical Notes](#detailed-technical-notes)
 
 ## Quick Reference
 
@@ -55,27 +56,27 @@ Size histograms use the canonical size bucket set:
 - `status` on `http_api_client_request_seconds`: HTTP status code rendered as
   a string (e.g. `"200"`), or `"0"` when the transport layer fails before
   receiving a status.
-- `uri`: the full interpolated request path (server path prefix + endpoint
-  path) without query string (e.g. `/api/tasks/poll/batch/my_worker` when
-  the server URL is `http://host:8080/api`). See the note below about
-  Phase 4 path templating.
+- `uri`: the API-relative path template without the server URL's path prefix
+  (e.g. `/tasks/poll/batch/{taskType}`, not `/api/tasks/poll/batch/my_worker`).
+  Dynamic path segments retain their `{placeholder}` tokens so that metric
+  label cardinality is bounded. See the
+  [path template note](#uri-label--path-templates) below.
 - `exception`: the unqualified `ConductorError` variant name
   (`Http`, `Json`, `Auth`, `Server`, …), the short type name for non-
   `ConductorError` errors, or `"Panic"` for uncaught panics.
 
-### `uri` label — interpolated path, not templated
+### `uri` label — path templates
 
-Like the Java / Go / Python SDKs in Phase 1 of the harmonization plan, the
-`uri` label on `http_api_client_request_seconds` carries the **interpolated**
-request path including the server URL's path prefix (e.g.
-`/api/tasks/poll/batch/my_task` when `CONDUCTOR_SERVER_URL` ends in `/api`),
-not the templated path (`/api/tasks/poll/batch/{taskType}`).
-High-cardinality worker names or task IDs will therefore appear in the label.
+The `uri` label on `http_api_client_request_seconds` carries the **path
+template** (e.g. `/tasks/poll/batch/{taskType}`) rather than the
+fully-resolved request path. The server URL's path prefix (e.g. `/api`) is
+never included. This keeps metric cardinality bounded regardless of how many
+unique workflow IDs, task types, or other dynamic path segments flow through
+the SDK.
 
-Operators who need bounded cardinality today should apply a Prometheus
-`metric_relabel_configs` rule at scrape time that rewrites well-known
-parametric path segments. Template extraction is tracked as **Phase 4** of the
-canonical SDK metrics harmonization plan.
+All Conductor SDKs (Go, Java, Python, Ruby, Rust) now follow this convention.
+See [Detailed Technical Notes](#detailed-technical-notes) at the end of this
+document for per-SDK implementation details.
 
 ## Configuration
 
@@ -138,11 +139,11 @@ runnable end-to-end demo that spins up workers, serves `/metrics` on a
 configurable port, and exercises every metric in the catalog.
 
 ```prometheus
-# HTTP API client request latency
-http_api_client_request_seconds_bucket{method="GET",uri="/tasks/poll/batch/my_worker",status="200",le="0.1"} 97
-http_api_client_request_seconds_bucket{method="GET",uri="/tasks/poll/batch/my_worker",status="200",le="+Inf"} 100
-http_api_client_request_seconds_count{method="GET",uri="/tasks/poll/batch/my_worker",status="200"} 100
-http_api_client_request_seconds_sum{method="GET",uri="/tasks/poll/batch/my_worker",status="200"} 8.21
+# HTTP API client request latency (uri is the path template, not the resolved path)
+http_api_client_request_seconds_bucket{method="GET",uri="/tasks/poll/batch/{taskType}",status="200",le="0.1"} 97
+http_api_client_request_seconds_bucket{method="GET",uri="/tasks/poll/batch/{taskType}",status="200",le="+Inf"} 100
+http_api_client_request_seconds_count{method="GET",uri="/tasks/poll/batch/{taskType}",status="200"} 100
+http_api_client_request_seconds_sum{method="GET",uri="/tasks/poll/batch/{taskType}",status="200"} 8.21
 
 # Task poll
 task_poll_total{taskType="my_worker"} 124
@@ -179,11 +180,10 @@ workflow_start_error_total{workflowType="my_wf",exception="Server"} 2
 
 ### High cardinality
 
-- The `uri` label on `http_api_client_request_seconds` carries the
-  interpolated request path, which may include worker names or task IDs.
-  Operators who need bounded cardinality should apply a Prometheus
-  `metric_relabel_configs` rule at scrape time. See the
-  [uri label note](#uri-label--interpolated-path-not-templated) above.
+- The `uri` label on `http_api_client_request_seconds` uses path templates
+  (e.g. `/workflow/{workflowId}`) to keep cardinality bounded. If you see
+  fully-resolved paths in your metrics, verify that HTTP requests are going
+  through the SDK's `ApiClient` rather than a standalone HTTP client.
 - Avoid embedding user identifiers or unbounded values in task type, workflow
   type, or external payload labels.
 
@@ -195,3 +195,35 @@ no `WORKER_CANONICAL_METRICS` environment variable and no factory/switchout
 pattern. If you operate a mixed fleet of Conductor workers across multiple
 SDKs, the other SDKs require `WORKER_CANONICAL_METRICS=true` to emit the
 same metric names and shapes that the Rust SDK emits by default.
+
+---
+
+## Detailed Technical Notes
+
+### Path template `uri` label — cross-SDK implementation
+
+All Conductor SDKs preserve the API resource path template before path
+parameter substitution and use it as the `uri` label on
+`http_api_client_request_seconds`. This prevents cardinality explosion from
+dynamic path segments (UUIDs, task type names, etc.) and excludes the server
+URL's base path prefix.
+
+Each SDK implements this using the mechanism most natural to its HTTP stack:
+
+| SDK | Mechanism | Where template is captured | Where template is consumed |
+|---|---|---|---|
+| **Go** | `context.WithValue` with `pathTemplateKey` / `rawPathKey` | Each API resource method calls `metrics.WithPathTemplate(ctx, template)` before building the resolved URL. `executeCall` sets `WithRawPath` as fallback. | `metricsRoundTripper.RoundTrip` reads template from context; prefers template > rawPath > URL path. |
+| **Java** | OkHttp `Request.tag(PathTemplateTag.class)` | `ConductorClient.buildRequest()` saves the un-substituted path as a `PathTemplateTag` on the request before replacing path params. | `ApiClientMetricsInterceptor` reads the tag at response time; falls back to `request.url().encodedPath()`. |
+| **Python** | `metric_uri` keyword argument | `api_client.__call_api_no_retry()` saves `resource_path` before substitution and passes it as `metric_uri` through the call chain. | `CanonicalMetricsCollector.record_api_request_time()` prefers `metric_uri` over the resolved `uri`. |
+| **Ruby** | `metric_uri` keyword argument | `ApiClient#call_api_no_retry` saves `resource_path` before substitution and passes it as `metric_uri:` to `RestClient#request`. | `RestClient#emit_http_event` uses `metric_uri` when present; falls back to `URI.parse(url).request_uri`. |
+| **Rust** | `ApiPath` struct with `impl Into<ApiPath<'_>>` on public `ApiClient` methods | Static paths pass a plain `&str` (the `From<&str>` impl uses the same string for both path and metric label). Dynamic paths use `ApiPath::templated(&path, "/template/{id}")`. | `ApiClient::record_request` passes `metric_uri` directly to `HttpMetricsObserver::observe` as the `uri` label. |
+
+In all cases the template string is the API-relative resource path (e.g.
+`/workflow/{workflowId}`), never the fully-qualified URL or the base-path-
+prefixed path. This means:
+
+- `/workflow/{workflowId}` rather than `/api/workflow/abc-123-def`
+- `/tasks/poll/batch/{taskType}` rather than `/tasks/poll/batch/my_worker`
+
+Endpoints without path parameters (e.g. `/tasks/search`) use the raw resource
+path directly, which is already a stable template.

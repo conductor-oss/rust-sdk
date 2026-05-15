@@ -8,6 +8,11 @@
 //! (e.g. the [`MetricsCollector`](crate::metrics::MetricsCollector) from the
 //! `metrics` module) can record `http_api_client_request_seconds` without the
 //! HTTP layer depending on the metrics layer.
+//!
+//! The `uri` value passed to [`HttpMetricsObserver::observe`] is a
+//! bounded-cardinality **path template** (e.g. `/tasks/poll/batch/{taskType}`)
+//! rather than the interpolated request path. The server base-path prefix
+//! (e.g. `/api`) is not included.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,9 +26,10 @@ pub trait HttpMetricsObserver: Send + Sync {
     /// Record a completed HTTP request.
     ///
     /// - `method`: uppercase HTTP verb (e.g. `"GET"`).
-    /// - `uri`: interpolated request path, *without* query string (e.g.
-    ///   `/tasks/poll/batch/my_worker`). Template extraction is tracked as
-    ///   Phase 4 of the canonical SDK metrics harmonization plan.
+    /// - `uri`: bounded-cardinality path template, *without* query string
+    ///   (e.g. `/tasks/poll/batch/{taskType}`). Dynamic segments such as
+    ///   workflow IDs or task names are replaced by `{placeholder}` tokens.
+    ///   The server base-path prefix (e.g. `/api`) is **not** included.
     /// - `status`: HTTP status code as a string, or `"0"` if the transport
     ///   failed before a status was received.
     /// - `duration`: wall-clock time from send to response-received (or error).

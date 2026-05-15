@@ -7,7 +7,7 @@ use tracing::{debug, info};
 
 use crate::error::Result;
 use crate::events::{exception_label, EventDispatcher, WorkflowStartFailure, WorkflowStarted};
-use crate::http::ApiClient;
+use crate::http::{ApiClient, ApiPath};
 use crate::models::{StartWorkflowRequest, Workflow, WorkflowDef};
 
 /// Client for workflow operations
@@ -122,7 +122,10 @@ impl WorkflowClient {
             request_id,
         };
 
-        let workflow: Workflow = self.api.post(&path, &exec_request).await?;
+        let workflow: Workflow = self
+            .api
+            .post(ApiPath::templated(&path, "/workflow/execute/{name}/{version}"), &exec_request)
+            .await?;
 
         info!(
             workflow_name = %request.name,
@@ -137,7 +140,7 @@ impl WorkflowClient {
     /// Get workflow by ID
     pub async fn get_workflow(&self, workflow_id: &str, include_tasks: bool) -> Result<Workflow> {
         let path = format!("/workflow/{}?includeTasks={}", workflow_id, include_tasks);
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/workflow/{workflowId}")).await
     }
 
     /// Get workflow status
@@ -151,7 +154,7 @@ impl WorkflowClient {
             "/workflow/{}/status?includeOutput={}&includeVariables={}",
             workflow_id, include_output, include_variables
         );
-        self.api.get(&path).await
+        self.api.get(ApiPath::templated(&path, "/workflow/{workflowId}/status")).await
     }
 
     /// Terminate a running workflow
@@ -170,20 +173,31 @@ impl WorkflowClient {
             path.push_str(&format!("&reason={}", urlencoding::encode(r)));
         }
 
-        self.api.delete_no_content(&path).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/workflow/{workflowId}"))
+            .await
     }
 
     /// Pause a running workflow
     pub async fn pause_workflow(&self, workflow_id: &str) -> Result<()> {
         let path = format!("/workflow/{}/pause", workflow_id);
-        let _: serde_json::Value = self.api.put(&path, &serde_json::Value::Null).await?;
+        let _: serde_json::Value = self
+            .api
+            .put(ApiPath::templated(&path, "/workflow/{workflowId}/pause"), &serde_json::Value::Null)
+            .await?;
         Ok(())
     }
 
     /// Resume a paused workflow
     pub async fn resume_workflow(&self, workflow_id: &str) -> Result<()> {
         let path = format!("/workflow/{}/resume", workflow_id);
-        let _: serde_json::Value = self.api.put(&path, &serde_json::Value::Null).await?;
+        let _: serde_json::Value = self
+            .api
+            .put(
+                ApiPath::templated(&path, "/workflow/{workflowId}/resume"),
+                &serde_json::Value::Null,
+            )
+            .await?;
         Ok(())
     }
 
@@ -197,7 +211,13 @@ impl WorkflowClient {
             "/workflow/{}/retry?resumeSubworkflowTasks={}",
             workflow_id, resume_subworkflow_tasks
         );
-        let _: serde_json::Value = self.api.post(&path, &serde_json::Value::Null).await?;
+        let _: serde_json::Value = self
+            .api
+            .post(
+                ApiPath::templated(&path, "/workflow/{workflowId}/retry"),
+                &serde_json::Value::Null,
+            )
+            .await?;
         Ok(())
     }
 
@@ -207,7 +227,13 @@ impl WorkflowClient {
             "/workflow/{}/restart?useLatestDefinitions={}",
             workflow_id, use_latest_def
         );
-        let _: serde_json::Value = self.api.post(&path, &serde_json::Value::Null).await?;
+        let _: serde_json::Value = self
+            .api
+            .post(
+                ApiPath::templated(&path, "/workflow/{workflowId}/restart"),
+                &serde_json::Value::Null,
+            )
+            .await?;
         Ok(())
     }
 
@@ -237,7 +263,9 @@ impl WorkflowClient {
             workflow_input,
         };
 
-        self.api.post(&path, &request).await
+        self.api
+            .post(ApiPath::templated(&path, "/workflow/{workflowId}/rerun"), &request)
+            .await
     }
 
     /// Update workflow variables
@@ -247,7 +275,9 @@ impl WorkflowClient {
         variables: HashMap<String, serde_json::Value>,
     ) -> Result<Workflow> {
         let path = format!("/workflow/{}/variables", workflow_id);
-        self.api.post(&path, &variables).await
+        self.api
+            .post(ApiPath::templated(&path, "/workflow/{workflowId}/variables"), &variables)
+            .await
     }
 
     /// Skip a task in a running workflow
@@ -257,7 +287,13 @@ impl WorkflowClient {
         #[derive(serde::Serialize)]
         struct SkipRequest {}
 
-        let _: serde_json::Value = self.api.put(&path, &SkipRequest {}).await?;
+        let _: serde_json::Value = self
+            .api
+            .put(
+                ApiPath::templated(&path, "/workflow/{workflowId}/skiptask/{taskRefName}"),
+                &SkipRequest {},
+            )
+            .await?;
         Ok(())
     }
 
@@ -280,7 +316,9 @@ impl WorkflowClient {
 
         let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
-        self.api.get_with_params("/workflow/search", &params).await
+        self.api
+            .get_with_params("/workflow/search", &params)
+            .await
     }
 
     /// Search for workflows V2 (returns full workflow objects)
@@ -321,8 +359,7 @@ impl WorkflowClient {
         &self,
         workflow_ids: &[String],
     ) -> Result<HashMap<String, serde_json::Value>> {
-        let path = "/workflow/bulk/pause";
-        self.api.put(path, workflow_ids).await
+        self.api.put("/workflow/bulk/pause", workflow_ids).await
     }
 
     /// Bulk resume workflows
@@ -330,8 +367,7 @@ impl WorkflowClient {
         &self,
         workflow_ids: &[String],
     ) -> Result<HashMap<String, serde_json::Value>> {
-        let path = "/workflow/bulk/resume";
-        self.api.put(path, workflow_ids).await
+        self.api.put("/workflow/bulk/resume", workflow_ids).await
     }
 
     /// Bulk restart workflows
@@ -344,7 +380,9 @@ impl WorkflowClient {
             "/workflow/bulk/restart?useLatestDefinitions={}",
             use_latest_def
         );
-        self.api.post(&path, workflow_ids).await
+        self.api
+            .post(ApiPath::templated(&path, "/workflow/bulk/restart"), workflow_ids)
+            .await
     }
 
     /// Bulk retry workflows
@@ -352,8 +390,7 @@ impl WorkflowClient {
         &self,
         workflow_ids: &[String],
     ) -> Result<HashMap<String, serde_json::Value>> {
-        let path = "/workflow/bulk/retry";
-        self.api.post(path, workflow_ids).await
+        self.api.post("/workflow/bulk/retry", workflow_ids).await
     }
 
     /// Bulk terminate workflows
@@ -366,7 +403,9 @@ impl WorkflowClient {
         if let Some(r) = reason {
             path.push_str(&format!("?reason={}", urlencoding::encode(r)));
         }
-        self.api.post(&path, workflow_ids).await
+        self.api
+            .post(ApiPath::templated(&path, "/workflow/bulk/terminate"), workflow_ids)
+            .await
     }
 
     /// Get running workflows by name
@@ -408,18 +447,24 @@ impl WorkflowClient {
             );
         }
 
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(&path, "/workflow/running/{workflowName}"))
+            .await
     }
 
     /// Delete a workflow execution
     pub async fn delete_workflow(&self, workflow_id: &str, archive: bool) -> Result<()> {
         let path = format!("/workflow/{}?archiveWorkflow={}", workflow_id, archive);
-        self.api.delete_no_content(&path).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/workflow/{workflowId}"))
+            .await
     }
 
     /// Test a workflow (dry run)
     pub async fn test_workflow(&self, request: &TestWorkflowRequest) -> Result<Workflow> {
-        self.api.post("/workflow/test", request).await
+        self.api
+            .post("/workflow/test", request)
+            .await
     }
 
     /// Remove/delete a workflow
@@ -439,7 +484,12 @@ impl WorkflowClient {
             "/workflow/{}/correlated?includeClosed={}&includeTasks={}",
             workflow_name, include_completed, include_tasks
         );
-        self.api.post(&path, correlation_ids).await
+        self.api
+            .post(
+                ApiPath::templated(&path, "/workflow/{workflowName}/correlated"),
+                correlation_ids,
+            )
+            .await
     }
 
     /// Get workflows by correlation IDs in batch
@@ -453,7 +503,9 @@ impl WorkflowClient {
             "/workflow/correlated/batch?includeClosed={}&includeTasks={}",
             include_completed, include_tasks
         );
-        self.api.post(&path, batch_request).await
+        self.api
+            .post(ApiPath::templated(&path, "/workflow/correlated/batch"), batch_request)
+            .await
     }
 
     /// Update workflow state
@@ -481,7 +533,9 @@ impl WorkflowClient {
             path.push_str(&params.join("&"));
         }
 
-        self.api.post(&path, update_request).await
+        self.api
+            .post(ApiPath::templated(&path, "/workflow/{workflowId}/state"), update_request)
+            .await
     }
 
     /// Execute workflow with return strategy
@@ -524,7 +578,12 @@ impl WorkflowClient {
             path.push_str(&params.join("&"));
         }
 
-        self.api.post(&path, request).await
+        self.api
+            .post(
+                ApiPath::templated(&path, "/workflow/execute/{name}/{version}"),
+                request,
+            )
+            .await
     }
 }
 
