@@ -179,18 +179,19 @@ async fn main() {
         let handle = tokio::spawn(async move { probe.run().await });
 
         let governor = Arc::new(
-            WorkflowGovernor::new(workflow_client, WORKFLOW_NAME.to_string(), workflows_per_sec)
-                .with_id_sink(tx),
+            WorkflowGovernor::new(
+                workflow_client,
+                WORKFLOW_NAME.to_string(),
+                workflows_per_sec,
+            )
+            .with_id_sink(tx),
         );
         let governor_handle = tokio::spawn({
             let governor = Arc::clone(&governor);
             async move { governor.run().await }
         });
 
-        println!(
-            "WorkflowStatusProbe enabled at {}/sec",
-            probe_rate,
-        );
+        println!("WorkflowStatusProbe enabled at {}/sec", probe_rate,);
 
         Some((governor_handle, handle))
     } else {

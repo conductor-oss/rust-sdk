@@ -79,7 +79,10 @@ impl TaskClient {
 
         let tasks: Vec<Task> = self
             .api
-            .get_with_params(ApiPath::templated(&path, "/tasks/poll/batch/{taskType}"), &params)
+            .get_with_params(
+                ApiPath::templated(&path, "/tasks/poll/batch/{taskType}"),
+                &params,
+            )
             .await?;
 
         debug!(
@@ -152,7 +155,9 @@ impl TaskClient {
     /// Get task by ID
     pub async fn get_task(&self, task_id: &str) -> Result<Task> {
         let path = format!("/tasks/{}", task_id);
-        self.api.get(ApiPath::templated(&path, "/tasks/{taskId}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/tasks/{taskId}"))
+            .await
     }
 
     /// Get tasks in progress for a task type
@@ -175,14 +180,20 @@ impl TaskClient {
 
         let path = format!("/tasks/in_progress/{}", task_type);
         self.api
-            .get_with_params(ApiPath::templated(&path, "/tasks/in_progress/{taskType}"), &params)
+            .get_with_params(
+                ApiPath::templated(&path, "/tasks/in_progress/{taskType}"),
+                &params,
+            )
             .await
     }
 
     /// Add a log to a task
     pub async fn add_task_log(&self, task_id: &str, log: &str) -> Result<()> {
         let path = format!("/tasks/{}/log", task_id);
-        let _: serde_json::Value = self.api.post(ApiPath::templated(&path, "/tasks/{taskId}/log"), &log).await?;
+        let _: serde_json::Value = self
+            .api
+            .post(ApiPath::templated(&path, "/tasks/{taskId}/log"), &log)
+            .await?;
         Ok(())
     }
 
@@ -192,7 +203,9 @@ impl TaskClient {
         task_id: &str,
     ) -> Result<Vec<crate::models::task::TaskExecLog>> {
         let path = format!("/tasks/{}/log", task_id);
-        self.api.get(ApiPath::templated(&path, "/tasks/{taskId}/log")).await
+        self.api
+            .get(ApiPath::templated(&path, "/tasks/{taskId}/log"))
+            .await
     }
 
     /// Get task queue sizes
@@ -201,14 +214,19 @@ impl TaskClient {
         task_types: &[&str],
     ) -> Result<std::collections::HashMap<String, i64>> {
         let params: Vec<(&str, &str)> = task_types.iter().map(|t| ("taskType", *t)).collect();
-        self.api.get_with_params("/tasks/queue/sizes", &params).await
+        self.api
+            .get_with_params("/tasks/queue/sizes", &params)
+            .await
     }
 
     /// Remove task from queue
     pub async fn remove_task_from_queue(&self, task_type: &str, task_id: &str) -> Result<()> {
         let path = format!("/tasks/queue/{}/{}", task_type, task_id);
         self.api
-            .delete_no_content(ApiPath::templated(&path, "/tasks/queue/{taskType}/{taskId}"))
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/tasks/queue/{taskType}/{taskId}",
+            ))
             .await
     }
 
@@ -281,7 +299,10 @@ impl TaskClient {
     pub async fn get_task_poll_data(&self, task_type: &str) -> Result<Vec<PollData>> {
         let path = format!("/tasks/queue/polldata/{}", task_type);
         self.api
-            .get(ApiPath::templated(&path, "/tasks/queue/polldata/{taskType}"))
+            .get(ApiPath::templated(
+                &path,
+                "/tasks/queue/polldata/{taskType}",
+            ))
             .await
     }
 
@@ -314,9 +335,7 @@ impl TaskClient {
 
         let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
-        self.api
-            .get_with_params("/tasks/search", &params)
-            .await
+        self.api.get_with_params("/tasks/search", &params).await
     }
 
     /// Search for tasks V2 (returns full task objects)
@@ -338,9 +357,7 @@ impl TaskClient {
 
         let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
-        self.api
-            .get_with_params("/tasks/search-v2", &params)
-            .await
+        self.api.get_with_params("/tasks/search-v2", &params).await
     }
 
     /// Requeue pending tasks

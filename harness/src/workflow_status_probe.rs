@@ -1,8 +1,8 @@
 // Copyright 2024 Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-use std::collections::VecDeque;
 use conductor::client::WorkflowClient;
+use std::collections::VecDeque;
 use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
 

@@ -82,13 +82,20 @@ impl MetadataClient {
             format!("/metadata/workflow/{}", name)
         };
 
-        self.api.get(ApiPath::templated(&path, "/metadata/workflow/{name}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/metadata/workflow/{name}"))
+            .await
     }
 
     /// Get all versions of a workflow definition
     pub async fn get_all_workflow_def_versions(&self, name: &str) -> Result<Vec<WorkflowDef>> {
         let path = format!("/metadata/workflow/{}/versions", name);
-        self.api.get(ApiPath::templated(&path, "/metadata/workflow/{name}/versions")).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/metadata/workflow/{name}/versions",
+            ))
+            .await
     }
 
     /// Get all workflow definitions
@@ -104,7 +111,12 @@ impl MetadataClient {
     /// Delete a workflow definition
     pub async fn delete_workflow_def(&self, name: &str, version: i32) -> Result<()> {
         let path = format!("/metadata/workflow/{}/{}", name, version);
-        self.api.delete_no_content(ApiPath::templated(&path, "/metadata/workflow/{name}/{version}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/metadata/workflow/{name}/{version}",
+            ))
+            .await
     }
 
     // ==================== Task Definitions ====================
@@ -145,7 +157,9 @@ impl MetadataClient {
     /// Get a task definition by name
     pub async fn get_task_def(&self, name: &str) -> Result<TaskDef> {
         let path = format!("/metadata/taskdefs/{}", name);
-        self.api.get(ApiPath::templated(&path, "/metadata/taskdefs/{name}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/metadata/taskdefs/{name}"))
+            .await
     }
 
     /// Get all task definitions
@@ -156,7 +170,9 @@ impl MetadataClient {
     /// Delete a task definition
     pub async fn delete_task_def(&self, name: &str) -> Result<()> {
         let path = format!("/metadata/taskdefs/{}", name);
-        self.api.delete_no_content(ApiPath::templated(&path, "/metadata/taskdefs/{name}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/metadata/taskdefs/{name}"))
+            .await
     }
 
     /// Check if a task definition exists

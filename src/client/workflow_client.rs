@@ -124,7 +124,10 @@ impl WorkflowClient {
 
         let workflow: Workflow = self
             .api
-            .post(ApiPath::templated(&path, "/workflow/execute/{name}/{version}"), &exec_request)
+            .post(
+                ApiPath::templated(&path, "/workflow/execute/{name}/{version}"),
+                &exec_request,
+            )
             .await?;
 
         info!(
@@ -140,7 +143,9 @@ impl WorkflowClient {
     /// Get workflow by ID
     pub async fn get_workflow(&self, workflow_id: &str, include_tasks: bool) -> Result<Workflow> {
         let path = format!("/workflow/{}?includeTasks={}", workflow_id, include_tasks);
-        self.api.get(ApiPath::templated(&path, "/workflow/{workflowId}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/workflow/{workflowId}"))
+            .await
     }
 
     /// Get workflow status
@@ -154,7 +159,9 @@ impl WorkflowClient {
             "/workflow/{}/status?includeOutput={}&includeVariables={}",
             workflow_id, include_output, include_variables
         );
-        self.api.get(ApiPath::templated(&path, "/workflow/{workflowId}/status")).await
+        self.api
+            .get(ApiPath::templated(&path, "/workflow/{workflowId}/status"))
+            .await
     }
 
     /// Terminate a running workflow
@@ -183,7 +190,10 @@ impl WorkflowClient {
         let path = format!("/workflow/{}/pause", workflow_id);
         let _: serde_json::Value = self
             .api
-            .put(ApiPath::templated(&path, "/workflow/{workflowId}/pause"), &serde_json::Value::Null)
+            .put(
+                ApiPath::templated(&path, "/workflow/{workflowId}/pause"),
+                &serde_json::Value::Null,
+            )
             .await?;
         Ok(())
     }
@@ -264,7 +274,10 @@ impl WorkflowClient {
         };
 
         self.api
-            .post(ApiPath::templated(&path, "/workflow/{workflowId}/rerun"), &request)
+            .post(
+                ApiPath::templated(&path, "/workflow/{workflowId}/rerun"),
+                &request,
+            )
             .await
     }
 
@@ -276,7 +289,10 @@ impl WorkflowClient {
     ) -> Result<Workflow> {
         let path = format!("/workflow/{}/variables", workflow_id);
         self.api
-            .post(ApiPath::templated(&path, "/workflow/{workflowId}/variables"), &variables)
+            .post(
+                ApiPath::templated(&path, "/workflow/{workflowId}/variables"),
+                &variables,
+            )
             .await
     }
 
@@ -316,9 +332,7 @@ impl WorkflowClient {
 
         let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
-        self.api
-            .get_with_params("/workflow/search", &params)
-            .await
+        self.api.get_with_params("/workflow/search", &params).await
     }
 
     /// Search for workflows V2 (returns full workflow objects)
@@ -381,7 +395,10 @@ impl WorkflowClient {
             use_latest_def
         );
         self.api
-            .post(ApiPath::templated(&path, "/workflow/bulk/restart"), workflow_ids)
+            .post(
+                ApiPath::templated(&path, "/workflow/bulk/restart"),
+                workflow_ids,
+            )
             .await
     }
 
@@ -404,7 +421,10 @@ impl WorkflowClient {
             path.push_str(&format!("?reason={}", urlencoding::encode(r)));
         }
         self.api
-            .post(ApiPath::templated(&path, "/workflow/bulk/terminate"), workflow_ids)
+            .post(
+                ApiPath::templated(&path, "/workflow/bulk/terminate"),
+                workflow_ids,
+            )
             .await
     }
 
@@ -448,7 +468,10 @@ impl WorkflowClient {
         }
 
         self.api
-            .get(ApiPath::templated(&path, "/workflow/running/{workflowName}"))
+            .get(ApiPath::templated(
+                &path,
+                "/workflow/running/{workflowName}",
+            ))
             .await
     }
 
@@ -462,9 +485,7 @@ impl WorkflowClient {
 
     /// Test a workflow (dry run)
     pub async fn test_workflow(&self, request: &TestWorkflowRequest) -> Result<Workflow> {
-        self.api
-            .post("/workflow/test", request)
-            .await
+        self.api.post("/workflow/test", request).await
     }
 
     /// Remove/delete a workflow
@@ -504,7 +525,10 @@ impl WorkflowClient {
             include_completed, include_tasks
         );
         self.api
-            .post(ApiPath::templated(&path, "/workflow/correlated/batch"), batch_request)
+            .post(
+                ApiPath::templated(&path, "/workflow/correlated/batch"),
+                batch_request,
+            )
             .await
     }
 
@@ -534,7 +558,10 @@ impl WorkflowClient {
         }
 
         self.api
-            .post(ApiPath::templated(&path, "/workflow/{workflowId}/state"), update_request)
+            .post(
+                ApiPath::templated(&path, "/workflow/{workflowId}/state"),
+                update_request,
+            )
             .await
     }
 

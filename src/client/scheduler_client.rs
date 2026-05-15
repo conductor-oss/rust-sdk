@@ -21,13 +21,17 @@ impl SchedulerClient {
 
     /// Save (create or update) a schedule
     pub async fn save_schedule(&self, request: &SaveScheduleRequest) -> Result<()> {
-        self.api.post_no_response("/scheduler/schedules", request).await
+        self.api
+            .post_no_response("/scheduler/schedules", request)
+            .await
     }
 
     /// Get a schedule by name
     pub async fn get_schedule(&self, name: &str) -> Result<WorkflowSchedule> {
         let path = format!("/scheduler/schedules/{}", name);
-        self.api.get(ApiPath::templated(&path, "/scheduler/schedules/{name}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/scheduler/schedules/{name}"))
+            .await
     }
 
     /// Get all schedules, optionally filtered by workflow name
@@ -65,19 +69,28 @@ impl SchedulerClient {
         }
 
         let params_ref: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        self.api.get_with_params("/scheduler/nextFewSchedules", &params_ref).await
+        self.api
+            .get_with_params("/scheduler/nextFewSchedules", &params_ref)
+            .await
     }
 
     /// Delete a schedule
     pub async fn delete_schedule(&self, name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{}", name);
-        self.api.delete_no_content(ApiPath::templated(&path, "/scheduler/schedules/{name}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/scheduler/schedules/{name}"))
+            .await
     }
 
     /// Pause a schedule
     pub async fn pause_schedule(&self, name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{}/pause", name);
-        self.api.get_no_response(ApiPath::templated(&path, "/scheduler/schedules/{name}/pause")).await
+        self.api
+            .get_no_response(ApiPath::templated(
+                &path,
+                "/scheduler/schedules/{name}/pause",
+            ))
+            .await
     }
 
     /// Pause all schedules
@@ -88,7 +101,12 @@ impl SchedulerClient {
     /// Resume a schedule
     pub async fn resume_schedule(&self, name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{}/resume", name);
-        self.api.get_no_response(ApiPath::templated(&path, "/scheduler/schedules/{name}/resume")).await
+        self.api
+            .get_no_response(ApiPath::templated(
+                &path,
+                "/scheduler/schedules/{name}/resume",
+            ))
+            .await
     }
 
     /// Resume all schedules
@@ -124,7 +142,9 @@ impl SchedulerClient {
         }
 
         let params_ref: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        self.api.get_with_params("/scheduler/search/executions", &params_ref).await
+        self.api
+            .get_with_params("/scheduler/search/executions", &params_ref)
+            .await
     }
 
     /// Requeue all execution records
@@ -135,19 +155,34 @@ impl SchedulerClient {
     /// Set tags for a schedule
     pub async fn set_scheduler_tags(&self, tags: &[MetadataTag], name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{}/tags", name);
-        self.api.put_no_response(ApiPath::templated(&path, "/scheduler/schedules/{name}/tags"), tags).await
+        self.api
+            .put_no_response(
+                ApiPath::templated(&path, "/scheduler/schedules/{name}/tags"),
+                tags,
+            )
+            .await
     }
 
     /// Get tags for a schedule
     pub async fn get_scheduler_tags(&self, name: &str) -> Result<Vec<MetadataTag>> {
         let path = format!("/scheduler/schedules/{}/tags", name);
-        self.api.get(ApiPath::templated(&path, "/scheduler/schedules/{name}/tags")).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/scheduler/schedules/{name}/tags",
+            ))
+            .await
     }
 
     /// Delete tags from a schedule
     pub async fn delete_scheduler_tags(&self, tags: &[MetadataTag], name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{}/tags", name);
-        self.api.delete_with_body(ApiPath::templated(&path, "/scheduler/schedules/{name}/tags"), tags).await
+        self.api
+            .delete_with_body(
+                ApiPath::templated(&path, "/scheduler/schedules/{name}/tags"),
+                tags,
+            )
+            .await
     }
 }
 

@@ -37,7 +37,9 @@ impl AuthorizationClient {
     /// Get an application by ID
     pub async fn get_application(&self, application_id: &str) -> Result<ConductorApplication> {
         let path = format!("/applications/{}", application_id);
-        self.api.get(ApiPath::templated(&path, "/applications/{applicationId}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/applications/{applicationId}"))
+            .await
     }
 
     /// List all applications
@@ -52,19 +54,28 @@ impl AuthorizationClient {
         application_id: &str,
     ) -> Result<ConductorApplication> {
         let path = format!("/applications/{}", application_id);
-        self.api.put(ApiPath::templated(&path, "/applications/{applicationId}"), request).await
+        self.api
+            .put(
+                ApiPath::templated(&path, "/applications/{applicationId}"),
+                request,
+            )
+            .await
     }
 
     /// Delete an application
     pub async fn delete_application(&self, application_id: &str) -> Result<()> {
         let path = format!("/applications/{}", application_id);
-        self.api.delete_no_content(ApiPath::templated(&path, "/applications/{applicationId}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/applications/{applicationId}"))
+            .await
     }
 
     /// Get application ID by access key ID
     pub async fn get_app_by_access_key_id(&self, access_key_id: &str) -> Result<String> {
         let path = format!("/applications/key/{}", access_key_id);
-        self.api.get(ApiPath::templated(&path, "/applications/key/{accessKeyId}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/applications/key/{accessKeyId}"))
+            .await
     }
 
     /// Add a role to application user
@@ -74,7 +85,12 @@ impl AuthorizationClient {
         role: &str,
     ) -> Result<()> {
         let path = format!("/applications/{}/roles/{}", application_id, role);
-        self.api.post_no_body_no_response(ApiPath::templated(&path, "/applications/{applicationId}/roles/{role}")).await
+        self.api
+            .post_no_body_no_response(ApiPath::templated(
+                &path,
+                "/applications/{applicationId}/roles/{role}",
+            ))
+            .await
     }
 
     /// Remove a role from application user
@@ -84,7 +100,12 @@ impl AuthorizationClient {
         role: &str,
     ) -> Result<()> {
         let path = format!("/applications/{}/roles/{}", application_id, role);
-        self.api.delete_no_content(ApiPath::templated(&path, "/applications/{applicationId}/roles/{role}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/applications/{applicationId}/roles/{role}",
+            ))
+            .await
     }
 
     /// Set tags for an application
@@ -94,13 +115,23 @@ impl AuthorizationClient {
         application_id: &str,
     ) -> Result<()> {
         let path = format!("/applications/{}/tags", application_id);
-        self.api.put_no_response(ApiPath::templated(&path, "/applications/{applicationId}/tags"), tags).await
+        self.api
+            .put_no_response(
+                ApiPath::templated(&path, "/applications/{applicationId}/tags"),
+                tags,
+            )
+            .await
     }
 
     /// Get tags for an application
     pub async fn get_application_tags(&self, application_id: &str) -> Result<Vec<MetadataTag>> {
         let path = format!("/applications/{}/tags", application_id);
-        self.api.get(ApiPath::templated(&path, "/applications/{applicationId}/tags")).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/applications/{applicationId}/tags",
+            ))
+            .await
     }
 
     /// Delete tags from an application
@@ -110,19 +141,34 @@ impl AuthorizationClient {
         application_id: &str,
     ) -> Result<()> {
         let path = format!("/applications/{}/tags", application_id);
-        self.api.delete_with_body(ApiPath::templated(&path, "/applications/{applicationId}/tags"), tags).await
+        self.api
+            .delete_with_body(
+                ApiPath::templated(&path, "/applications/{applicationId}/tags"),
+                tags,
+            )
+            .await
     }
 
     /// Create an access key for an application
     pub async fn create_access_key(&self, application_id: &str) -> Result<CreatedAccessKey> {
         let path = format!("/applications/{}/accessKeys", application_id);
-        self.api.post_no_body(ApiPath::templated(&path, "/applications/{applicationId}/accessKeys")).await
+        self.api
+            .post_no_body(ApiPath::templated(
+                &path,
+                "/applications/{applicationId}/accessKeys",
+            ))
+            .await
     }
 
     /// Get access keys for an application
     pub async fn get_access_keys(&self, application_id: &str) -> Result<Vec<AccessKey>> {
         let path = format!("/applications/{}/accessKeys", application_id);
-        self.api.get(ApiPath::templated(&path, "/applications/{applicationId}/accessKeys")).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/applications/{applicationId}/accessKeys",
+            ))
+            .await
     }
 
     /// Toggle the status of an access key
@@ -135,13 +181,23 @@ impl AuthorizationClient {
             "/applications/{}/accessKeys/{}/status",
             application_id, key_id
         );
-        self.api.post_no_body(ApiPath::templated(&path, "/applications/{applicationId}/accessKeys/{keyId}/status")).await
+        self.api
+            .post_no_body(ApiPath::templated(
+                &path,
+                "/applications/{applicationId}/accessKeys/{keyId}/status",
+            ))
+            .await
     }
 
     /// Delete an access key
     pub async fn delete_access_key(&self, application_id: &str, key_id: &str) -> Result<()> {
         let path = format!("/applications/{}/accessKeys/{}", application_id, key_id);
-        self.api.delete_no_content(ApiPath::templated(&path, "/applications/{applicationId}/accessKeys/{keyId}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/applications/{applicationId}/accessKeys/{keyId}",
+            ))
+            .await
     }
 
     // ===========================
@@ -155,19 +211,25 @@ impl AuthorizationClient {
         user_id: &str,
     ) -> Result<ConductorUser> {
         let path = format!("/users/{}", user_id);
-        self.api.put(ApiPath::templated(&path, "/users/{userId}"), request).await
+        self.api
+            .put(ApiPath::templated(&path, "/users/{userId}"), request)
+            .await
     }
 
     /// Get a user by ID
     pub async fn get_user(&self, user_id: &str) -> Result<ConductorUser> {
         let path = format!("/users/{}", user_id);
-        self.api.get(ApiPath::templated(&path, "/users/{userId}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/users/{userId}"))
+            .await
     }
 
     /// List all users
     pub async fn list_users(&self, apps: bool) -> Result<Vec<ConductorUser>> {
         if apps {
-            self.api.get_with_params("/users", &[("apps", "true")]).await
+            self.api
+                .get_with_params("/users", &[("apps", "true")])
+                .await
         } else {
             self.api.get("/users").await
         }
@@ -176,7 +238,9 @@ impl AuthorizationClient {
     /// Delete a user
     pub async fn delete_user(&self, user_id: &str) -> Result<()> {
         let path = format!("/users/{}", user_id);
-        self.api.delete_no_content(ApiPath::templated(&path, "/users/{userId}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/users/{userId}"))
+            .await
     }
 
     /// Get permissions granted to a user
@@ -185,7 +249,9 @@ impl AuthorizationClient {
         user_id: &str,
     ) -> Result<Vec<GrantedPermission>> {
         let path = format!("/users/{}/permissions", user_id);
-        self.api.get(ApiPath::templated(&path, "/users/{userId}/permissions")).await
+        self.api
+            .get(ApiPath::templated(&path, "/users/{userId}/permissions"))
+            .await
     }
 
     /// Check if user has permissions over a target
@@ -199,7 +265,12 @@ impl AuthorizationClient {
             "/users/{}/permissions/{}/{}",
             user_id, target_type, target_id
         );
-        self.api.get(ApiPath::templated(&path, "/users/{userId}/permissions/{targetType}/{targetId}")).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/users/{userId}/permissions/{targetType}/{targetId}",
+            ))
+            .await
     }
 
     // ===========================
@@ -213,13 +284,17 @@ impl AuthorizationClient {
         group_id: &str,
     ) -> Result<Group> {
         let path = format!("/groups/{}", group_id);
-        self.api.put(ApiPath::templated(&path, "/groups/{groupId}"), request).await
+        self.api
+            .put(ApiPath::templated(&path, "/groups/{groupId}"), request)
+            .await
     }
 
     /// Get a group by ID
     pub async fn get_group(&self, group_id: &str) -> Result<Group> {
         let path = format!("/groups/{}", group_id);
-        self.api.get(ApiPath::templated(&path, "/groups/{groupId}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/groups/{groupId}"))
+            .await
     }
 
     /// List all groups
@@ -230,7 +305,9 @@ impl AuthorizationClient {
     /// Delete a group
     pub async fn delete_group(&self, group_id: &str) -> Result<()> {
         let path = format!("/groups/{}", group_id);
-        self.api.delete_no_content(ApiPath::templated(&path, "/groups/{groupId}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/groups/{groupId}"))
+            .await
     }
 
     /// Get permissions granted to a group
@@ -239,37 +316,61 @@ impl AuthorizationClient {
         group_id: &str,
     ) -> Result<Vec<GrantedPermission>> {
         let path = format!("/groups/{}/permissions", group_id);
-        self.api.get(ApiPath::templated(&path, "/groups/{groupId}/permissions")).await
+        self.api
+            .get(ApiPath::templated(&path, "/groups/{groupId}/permissions"))
+            .await
     }
 
     /// Add a user to a group
     pub async fn add_user_to_group(&self, group_id: &str, user_id: &str) -> Result<()> {
         let path = format!("/groups/{}/users/{}", group_id, user_id);
-        self.api.post_no_body_no_response(ApiPath::templated(&path, "/groups/{groupId}/users/{userId}")).await
+        self.api
+            .post_no_body_no_response(ApiPath::templated(
+                &path,
+                "/groups/{groupId}/users/{userId}",
+            ))
+            .await
     }
 
     /// Add multiple users to a group
     pub async fn add_users_to_group(&self, group_id: &str, user_ids: &[String]) -> Result<()> {
         let path = format!("/groups/{}/users", group_id);
-        self.api.post_no_response(ApiPath::templated(&path, "/groups/{groupId}/users"), user_ids).await
+        self.api
+            .post_no_response(
+                ApiPath::templated(&path, "/groups/{groupId}/users"),
+                user_ids,
+            )
+            .await
     }
 
     /// Get all users in a group
     pub async fn get_users_in_group(&self, group_id: &str) -> Result<Vec<ConductorUser>> {
         let path = format!("/groups/{}/users", group_id);
-        self.api.get(ApiPath::templated(&path, "/groups/{groupId}/users")).await
+        self.api
+            .get(ApiPath::templated(&path, "/groups/{groupId}/users"))
+            .await
     }
 
     /// Remove a user from a group
     pub async fn remove_user_from_group(&self, group_id: &str, user_id: &str) -> Result<()> {
         let path = format!("/groups/{}/users/{}", group_id, user_id);
-        self.api.delete_no_content(ApiPath::templated(&path, "/groups/{groupId}/users/{userId}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/groups/{groupId}/users/{userId}",
+            ))
+            .await
     }
 
     /// Remove multiple users from a group
     pub async fn remove_users_from_group(&self, group_id: &str, user_ids: &[String]) -> Result<()> {
         let path = format!("/groups/{}/users", group_id);
-        self.api.delete_with_body(ApiPath::templated(&path, "/groups/{groupId}/users"), user_ids).await
+        self.api
+            .delete_with_body(
+                ApiPath::templated(&path, "/groups/{groupId}/users"),
+                user_ids,
+            )
+            .await
     }
 
     // ===========================
@@ -288,7 +389,9 @@ impl AuthorizationClient {
             "target": target,
             "access": access
         });
-        self.api.post_no_response("/auth/authorization", &body).await
+        self.api
+            .post_no_response("/auth/authorization", &body)
+            .await
     }
 
     /// Get permissions for a target
@@ -303,7 +406,12 @@ impl AuthorizationClient {
             target_type_str.trim_matches('"'),
             target.id
         );
-        self.api.get(ApiPath::templated(&path, "/auth/authorization/{targetType}/{targetId}")).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/auth/authorization/{targetType}/{targetId}",
+            ))
+            .await
     }
 
     /// Remove permissions from a subject over a target
@@ -318,7 +426,9 @@ impl AuthorizationClient {
             "target": target,
             "access": access
         });
-        self.api.delete_with_body("/auth/authorization", &body).await
+        self.api
+            .delete_with_body("/auth/authorization", &body)
+            .await
     }
 
     // ===========================
@@ -353,7 +463,9 @@ impl AuthorizationClient {
     /// Get a role by name
     pub async fn get_role(&self, role_name: &str) -> Result<serde_json::Value> {
         let path = format!("/roles/{}", role_name);
-        self.api.get(ApiPath::templated(&path, "/roles/{roleName}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/roles/{roleName}"))
+            .await
     }
 
     /// Update a custom role
@@ -363,13 +475,17 @@ impl AuthorizationClient {
         request: &serde_json::Value,
     ) -> Result<serde_json::Value> {
         let path = format!("/roles/{}", role_name);
-        self.api.put(ApiPath::templated(&path, "/roles/{roleName}"), request).await
+        self.api
+            .put(ApiPath::templated(&path, "/roles/{roleName}"), request)
+            .await
     }
 
     /// Delete a custom role
     pub async fn delete_role(&self, role_name: &str) -> Result<()> {
         let path = format!("/roles/{}", role_name);
-        self.api.delete_no_content(ApiPath::templated(&path, "/roles/{roleName}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/roles/{roleName}"))
+            .await
     }
 
     // ===========================
@@ -409,7 +525,12 @@ impl AuthorizationClient {
     /// Get API Gateway authentication configuration by ID
     pub async fn get_gateway_auth_config(&self, config_id: &str) -> Result<serde_json::Value> {
         let path = format!("/api-gateway/auth-config/{}", config_id);
-        self.api.get(ApiPath::templated(&path, "/api-gateway/auth-config/{configId}")).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/api-gateway/auth-config/{configId}",
+            ))
+            .await
     }
 
     /// List all API Gateway authentication configurations
@@ -424,13 +545,23 @@ impl AuthorizationClient {
         auth_config: &serde_json::Value,
     ) -> Result<serde_json::Value> {
         let path = format!("/api-gateway/auth-config/{}", config_id);
-        self.api.put(ApiPath::templated(&path, "/api-gateway/auth-config/{configId}"), auth_config).await
+        self.api
+            .put(
+                ApiPath::templated(&path, "/api-gateway/auth-config/{configId}"),
+                auth_config,
+            )
+            .await
     }
 
     /// Delete API Gateway authentication configuration
     pub async fn delete_gateway_auth_config(&self, config_id: &str) -> Result<()> {
         let path = format!("/api-gateway/auth-config/{}", config_id);
-        self.api.delete_no_content(ApiPath::templated(&path, "/api-gateway/auth-config/{configId}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/api-gateway/auth-config/{configId}",
+            ))
+            .await
     }
 }
 

@@ -26,7 +26,10 @@ impl SchemaClient {
     pub async fn get_schema(&self, schema_name: &str, version: i32) -> Result<SchemaDef> {
         let path = format!("/schema/{}", schema_name);
         self.api
-            .get_with_params(ApiPath::templated(&path, "/schema/{schemaName}"), &[("version", &version.to_string())])
+            .get_with_params(
+                ApiPath::templated(&path, "/schema/{schemaName}"),
+                &[("version", &version.to_string())],
+            )
             .await
     }
 
@@ -39,14 +42,19 @@ impl SchemaClient {
     pub async fn delete_schema(&self, schema_name: &str, version: i32) -> Result<()> {
         let path = format!("/schema/{}", schema_name);
         self.api
-            .delete_with_params(ApiPath::templated(&path, "/schema/{schemaName}"), &[("version", &version.to_string())])
+            .delete_with_params(
+                ApiPath::templated(&path, "/schema/{schemaName}"),
+                &[("version", &version.to_string())],
+            )
             .await
     }
 
     /// Delete all versions of a schema by name
     pub async fn delete_schema_by_name(&self, schema_name: &str) -> Result<()> {
         let path = format!("/schema/{}/all", schema_name);
-        self.api.delete_no_content(ApiPath::templated(&path, "/schema/{schemaName}/all")).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/schema/{schemaName}/all"))
+            .await
     }
 }
 

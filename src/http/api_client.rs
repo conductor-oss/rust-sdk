@@ -215,10 +215,7 @@ impl ApiClient {
     }
 
     /// GET request
-    pub async fn get<T: DeserializeOwned>(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-    ) -> Result<T> {
+    pub async fn get<T: DeserializeOwned>(&self, path: impl Into<ApiPath<'_>>) -> Result<T> {
         let p = path.into();
         self.request::<(), T>(reqwest::Method::GET, p.path, p.metric_uri, None)
             .await
@@ -237,7 +234,9 @@ impl ApiClient {
         request = self.add_auth_header(request).await?;
         request = request.query(params);
 
-        let response = self.send_observed("GET", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("GET", p.path, p.metric_uri, request)
+            .await?;
         self.handle_response(response).await
     }
 
@@ -265,7 +264,9 @@ impl ApiClient {
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("POST", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() {
@@ -287,27 +288,23 @@ impl ApiClient {
     }
 
     /// DELETE request
-    pub async fn delete<T: DeserializeOwned>(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-    ) -> Result<T> {
+    pub async fn delete<T: DeserializeOwned>(&self, path: impl Into<ApiPath<'_>>) -> Result<T> {
         let p = path.into();
         self.request::<(), T>(reqwest::Method::DELETE, p.path, p.metric_uri, None)
             .await
     }
 
     /// DELETE request with no response body
-    pub async fn delete_no_content(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-    ) -> Result<()> {
+    pub async fn delete_no_content(&self, path: impl Into<ApiPath<'_>>) -> Result<()> {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.delete(&url);
         request = self.add_auth_header(request).await?;
 
-        let response = self.send_observed("DELETE", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("DELETE", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() || status == StatusCode::NO_CONTENT {
@@ -330,7 +327,9 @@ impl ApiClient {
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed("DELETE", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("DELETE", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() || status == StatusCode::NO_CONTENT {
@@ -353,7 +352,9 @@ impl ApiClient {
         request = self.add_auth_header(request).await?;
         request = request.query(params);
 
-        let response = self.send_observed("DELETE", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("DELETE", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() || status == StatusCode::NO_CONTENT {
@@ -376,7 +377,9 @@ impl ApiClient {
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("POST", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() {
@@ -397,22 +400,23 @@ impl ApiClient {
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
 
-        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("POST", p.path, p.metric_uri, request)
+            .await?;
         self.handle_response(response).await
     }
 
     /// POST request with no body and no response
-    pub async fn post_no_body_no_response(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-    ) -> Result<()> {
+    pub async fn post_no_body_no_response(&self, path: impl Into<ApiPath<'_>>) -> Result<()> {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
 
-        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("POST", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() {
@@ -435,7 +439,9 @@ impl ApiClient {
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed("PUT", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("PUT", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() {
@@ -446,11 +452,7 @@ impl ApiClient {
     }
 
     /// PUT request with raw text body
-    pub async fn put_raw(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-        body: &str,
-    ) -> Result<()> {
+    pub async fn put_raw(&self, path: impl Into<ApiPath<'_>>, body: &str) -> Result<()> {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
@@ -459,7 +461,9 @@ impl ApiClient {
         request = request.body(body.to_string());
         request = request.header("Content-Type", "text/plain");
 
-        let response = self.send_observed("PUT", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("PUT", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() {
@@ -484,7 +488,9 @@ impl ApiClient {
         request = request.query(params);
         request = request.json(body);
 
-        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("POST", p.path, p.metric_uri, request)
+            .await?;
         self.handle_response(response).await
     }
 
@@ -504,7 +510,9 @@ impl ApiClient {
         request = request.body(body.to_string());
         request = request.header("Content-Type", "text/plain");
 
-        let response = self.send_observed("POST", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("POST", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() {
@@ -530,7 +538,9 @@ impl ApiClient {
         request = request.body(body.to_string());
         request = request.header("Content-Type", "text/plain");
 
-        let response = self.send_observed("PUT", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("PUT", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() {
@@ -541,17 +551,16 @@ impl ApiClient {
     }
 
     /// GET request with no response
-    pub async fn get_no_response(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-    ) -> Result<()> {
+    pub async fn get_no_response(&self, path: impl Into<ApiPath<'_>>) -> Result<()> {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.get(&url);
         request = self.add_auth_header(request).await?;
 
-        let response = self.send_observed("GET", p.path, p.metric_uri, request).await?;
+        let response = self
+            .send_observed("GET", p.path, p.metric_uri, request)
+            .await?;
         let status = response.status();
 
         if status.is_success() {
@@ -579,7 +588,9 @@ impl ApiClient {
             request = request.json(b);
         }
 
-        let response = self.send_observed(&method_str, path, metric_uri, request).await?;
+        let response = self
+            .send_observed(&method_str, path, metric_uri, request)
+            .await?;
         let status = response.status();
 
         // If 401, try refreshing token and retry once
@@ -593,7 +604,9 @@ impl ApiClient {
                 request = request.json(b);
             }
 
-            let response = self.send_observed(&method_str, path, metric_uri, request).await?;
+            let response = self
+                .send_observed(&method_str, path, metric_uri, request)
+                .await?;
             return self.handle_response(response).await;
         }
 
@@ -615,7 +628,9 @@ impl ApiClient {
         request = self.add_auth_header(request).await?;
         request = request.json(body);
 
-        let response = self.send_observed(&method_str, path, metric_uri, request).await?;
+        let response = self
+            .send_observed(&method_str, path, metric_uri, request)
+            .await?;
         let status = response.status();
 
         // If 401, try refreshing token and retry once
@@ -626,7 +641,9 @@ impl ApiClient {
             request = self.add_auth_header(request).await?;
             request = request.json(body);
 
-            let response = self.send_observed(&method_str, path, metric_uri, request).await?;
+            let response = self
+                .send_observed(&method_str, path, metric_uri, request)
+                .await?;
             return self.handle_response(response).await;
         }
 
@@ -827,7 +844,12 @@ impl ApiClient {
         });
 
         let response = match self
-            .send_observed("POST", "/token", "/token", self.client.post(&url).json(&body))
+            .send_observed(
+                "POST",
+                "/token",
+                "/token",
+                self.client.post(&url).json(&body),
+            )
             .await
         {
             Ok(resp) => resp,
@@ -918,7 +940,12 @@ impl ApiClient {
         let url = format!("{}/token", self.base_url);
         let body = serde_json::json!({"keyId": "probe", "keySecret": "probe"});
         let is_oss = match self
-            .send_observed("POST", "/token", "/token", self.client.post(&url).json(&body))
+            .send_observed(
+                "POST",
+                "/token",
+                "/token",
+                self.client.post(&url).json(&body),
+            )
             .await
         {
             Ok(resp) => resp.status() == StatusCode::NOT_FOUND,

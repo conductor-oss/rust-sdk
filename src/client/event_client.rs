@@ -73,7 +73,12 @@ impl EventClient {
             "/event/queue/config/{}/{}",
             queue_config.queue_type, queue_config.queue_name
         );
-        self.api.delete_no_content(ApiPath::templated(&path, "/event/queue/config/{queueType}/{queueName}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/event/queue/config/{queueType}/{queueName}",
+            ))
+            .await
     }
 
     /// Get a Kafka queue configuration by topic
@@ -91,7 +96,12 @@ impl EventClient {
         queue_name: &str,
     ) -> Result<QueueConfiguration> {
         let path = format!("/event/queue/config/{}/{}", queue_type, queue_name);
-        self.api.get(ApiPath::templated(&path, "/event/queue/config/{queueType}/{queueName}")).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/event/queue/config/{queueType}/{queueName}",
+            ))
+            .await
     }
 
     /// Create or update a queue configuration
@@ -101,7 +111,10 @@ impl EventClient {
             queue_config.queue_type, queue_config.queue_name
         );
         self.api
-            .put_no_response(ApiPath::templated(&path, "/event/queue/config/{queueType}/{queueName}"), &queue_config.configuration)
+            .put_no_response(
+                ApiPath::templated(&path, "/event/queue/config/{queueType}/{queueName}"),
+                &queue_config.configuration,
+            )
             .await
     }
 
@@ -121,7 +134,9 @@ impl EventClient {
             urlencoding::encode(event),
             active_only
         );
-        self.api.get(ApiPath::templated(&path, "/event/{event}")).await
+        self.api
+            .get(ApiPath::templated(&path, "/event/{event}"))
+            .await
     }
 
     /// Get all event handlers
@@ -142,7 +157,9 @@ impl EventClient {
     /// Remove an event handler
     pub async fn remove_event_handler(&self, name: &str) -> Result<()> {
         let path = format!("/event/{}", name);
-        self.api.delete_no_content(ApiPath::templated(&path, "/event/{event}")).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/event/{event}"))
+            .await
     }
 }
 
