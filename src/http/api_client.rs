@@ -594,20 +594,22 @@ impl ApiClient {
         let status = response.status();
 
         // If 401, try refreshing token and retry once
-        if self.is_token_expired_error(status) && self.force_refresh_token().await.is_ok() {
+        if self.is_token_expired_error(status) {
             debug!(method = %method, url = %url, "Got 401, refreshing token and retrying");
 
-            let mut request = self.client.request(method.clone(), &url);
-            request = self.add_auth_header(request).await?;
+            if self.force_refresh_token().await.is_ok() {
+                let mut request = self.client.request(method.clone(), &url);
+                request = self.add_auth_header(request).await?;
 
-            if let Some(b) = body {
-                request = request.json(b);
+                if let Some(b) = body {
+                    request = request.json(b);
+                }
+
+                let response = self
+                    .send_observed(&method_str, path, metric_uri, request)
+                    .await?;
+                return self.handle_response(response).await;
             }
-
-            let response = self
-                .send_observed(&method_str, path, metric_uri, request)
-                .await?;
-            return self.handle_response(response).await;
         }
 
         self.handle_response(response).await
@@ -634,17 +636,19 @@ impl ApiClient {
         let status = response.status();
 
         // If 401, try refreshing token and retry once
-        if self.is_token_expired_error(status) && self.force_refresh_token().await.is_ok() {
+        if self.is_token_expired_error(status) {
             debug!(method = %method, url = %url, "Got 401, refreshing token and retrying");
 
-            let mut request = self.client.request(method.clone(), &url);
-            request = self.add_auth_header(request).await?;
-            request = request.json(body);
+            if self.force_refresh_token().await.is_ok() {
+                let mut request = self.client.request(method.clone(), &url);
+                request = self.add_auth_header(request).await?;
+                request = request.json(body);
 
-            let response = self
-                .send_observed(&method_str, path, metric_uri, request)
-                .await?;
-            return self.handle_response(response).await;
+                let response = self
+                    .send_observed(&method_str, path, metric_uri, request)
+                    .await?;
+                return self.handle_response(response).await;
+            }
         }
 
         self.handle_response(response).await
@@ -843,20 +847,20 @@ impl ApiClient {
             "keySecret": secret
         });
 
-        let response = match self
-            .send_observed(
-                "POST",
-                "/token",
-                "/token",
-                self.client.post(&url).json(&body),
-            )
-            .await
-        {
-            Ok(resp) => resp,
+        let response = match self.client.post(&url).json(&body).send().await {
+            Ok(resp) => {
+                debug!(
+                    method = "POST",
+                    url = %url,
+                    status = %resp.status(),
+                    "Token refresh request completed"
+                );
+                resp
+            }
             Err(e) => {
                 *self.auth_failures.write().await += 1;
                 error!(error = %e, "Network error during token refresh");
-                return Err(e);
+                return Err(ConductorError::Http(e));
             }
         };
 
@@ -939,15 +943,7 @@ impl ApiClient {
         // Probe /token
         let url = format!("{}/token", self.base_url);
         let body = serde_json::json!({"keyId": "probe", "keySecret": "probe"});
-        let is_oss = match self
-            .send_observed(
-                "POST",
-                "/token",
-                "/token",
-                self.client.post(&url).json(&body),
-            )
-            .await
-        {
+        let is_oss = match self.client.post(&url).json(&body).send().await {
             Ok(resp) => resp.status() == StatusCode::NOT_FOUND,
             Err(_) => false,
         };
