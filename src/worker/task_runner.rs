@@ -353,14 +353,9 @@ impl TaskRunner {
 
             // `worker`, `config`, and `task` are moved into the panic-catching
             // boundary and cannot be accessed in the cleanup code below.
-            let outcome = Self::execute_catching_panic(
-                worker,
-                &task_client,
-                &event_dispatcher,
-                config,
-                task,
-            )
-            .await;
+            let outcome =
+                Self::execute_catching_panic(worker, &task_client, &event_dispatcher, config, task)
+                    .await;
 
             // Cleanup: only atomics, locks, and event_dispatcher are accessible
             running_tasks.lock().remove(&task_id);
