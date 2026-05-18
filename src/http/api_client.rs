@@ -10,7 +10,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::configuration::Configuration;
 use crate::error::{ConductorError, Result};
-use crate::http::metrics::{HttpMetricsObserver, NoopHttpMetricsObserver};
+use crate::http::metrics::HttpMetricsObserver;
 
 /// Token response from authentication endpoint
 #[derive(Debug, serde::Deserialize)]
@@ -93,12 +93,10 @@ pub struct ApiClient {
     token_refresh_lock: Arc<Mutex<()>>,
     /// Cached result of OSS detection (None = not yet probed)
     is_oss: Arc<RwLock<Option<bool>>>,
-    /// Shared HTTP metrics observer. Starts as a no-op; can be replaced at
-    /// runtime via [`ApiClient::set_http_metrics`] so that a
-    /// `MetricsCollector` built later (e.g. inside `TaskHandler::enable_metrics`)
-    /// can observe requests made by clients already vended from this
-    /// `ApiClient` (since clones share the same inner `Arc`).
-    http_metrics: Arc<parking_lot::RwLock<Arc<dyn HttpMetricsObserver>>>,
+    /// HTTP metrics observer, set once at construction time. `None` when
+    /// the client is created standalone (without a `TaskHandler`).
+    /// `Some` when created via [`ApiClient::with_http_observer`].
+    http_metrics: Option<Arc<dyn HttpMetricsObserver>>,
 }
 
 impl ApiClient {
@@ -124,7 +122,7 @@ impl ApiClient {
             last_refresh_attempt: Arc::new(RwLock::new(None)),
             token_refresh_lock: Arc::new(Mutex::new(())),
             is_oss: Arc::new(RwLock::new(None)),
-            http_metrics: Arc::new(parking_lot::RwLock::new(NoopHttpMetricsObserver::arc())),
+            http_metrics: None,
         })
     }
 
@@ -133,21 +131,16 @@ impl ApiClient {
         &self.base_url
     }
 
-    /// Install an [`HttpMetricsObserver`] that will be invoked after every
-    /// request completes. Replaces the previously-installed observer.
+    /// Create an API client with an HTTP metrics observer pre-installed.
     ///
-    /// This swap is visible to every clone of this `ApiClient` (they share the
-    /// same inner `Arc<RwLock<...>>`), so metrics can be enabled after service
-    /// clients have already been vended.
-    pub fn set_http_metrics(&self, observer: Arc<dyn HttpMetricsObserver>) {
-        *self.http_metrics.write() = observer;
-    }
-
-    /// Snapshot the current observer. Internal helper so we drop the read
-    /// lock before the request hot-path actually calls `observe`.
-    #[inline]
-    fn http_metrics(&self) -> Arc<dyn HttpMetricsObserver> {
-        Arc::clone(&self.http_metrics.read())
+    /// All clones of this client share the same observer via `Arc`.
+    pub fn with_http_observer(
+        config: Configuration,
+        observer: Arc<dyn HttpMetricsObserver>,
+    ) -> Result<Self> {
+        let mut client = Self::new(config)?;
+        client.http_metrics = Some(observer);
+        Ok(client)
     }
 
     /// Unified post-request bookkeeping: tracing log + observer callback.
@@ -173,8 +166,9 @@ impl ApiClient {
             duration_ms = %duration.as_millis(),
             "API request completed"
         );
-        self.http_metrics()
-            .observe(method, metric_uri, status_str, duration);
+        if let Some(obs) = &self.http_metrics {
+            obs.observe(method, metric_uri, status_str, duration);
+        }
     }
 
     /// Convenience: call [`record_request`](Self::record_request) with a

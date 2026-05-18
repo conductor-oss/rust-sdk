@@ -23,6 +23,17 @@ use crate::models::Task;
 
 use super::{Worker, WorkerOutput};
 
+/// Result of a task execution attempt, including panics.
+///
+/// Returned by [`TaskRunner::execute_catching_panic`] so the caller can
+/// handle success, regular errors, and panics without accessing any
+/// state that was inside the `AssertUnwindSafe` boundary.
+enum TaskOutcome {
+    Ok,
+    Err(crate::error::ConductorError),
+    Panic(String),
+}
+
 /// Task runner for a single worker type
 pub struct TaskRunner {
     worker: Arc<dyn Worker>,
@@ -340,38 +351,36 @@ impl TaskRunner {
             active_task_count.fetch_add(1, Ordering::SeqCst);
             running_tasks.lock().insert(task_id.clone());
 
-            // Catch panics escaping the worker so we can publish
-            // `ThreadUncaughtException` and still clean up tracking state.
-            // Tokio's default panic behavior is to unwind the task; we need
-            // observability before the unwind reaches the reactor.
-            let outcome = AssertUnwindSafe(Self::execute_and_update_task(
-                &worker,
+            // `worker`, `config`, and `task` are moved into the panic-catching
+            // boundary and cannot be accessed in the cleanup code below.
+            let outcome = Self::execute_catching_panic(
+                worker,
                 &task_client,
                 &event_dispatcher,
-                &config,
+                config,
                 task,
-            ))
-            .catch_unwind()
+            )
             .await;
 
-            // Cleanup: remove from tracking
+            // Cleanup: only atomics, locks, and event_dispatcher are accessible
             running_tasks.lock().remove(&task_id);
             active_task_count.fetch_sub(1, Ordering::SeqCst);
             spawned_task_count.fetch_sub(1, Ordering::SeqCst);
 
             match outcome {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => {
+                TaskOutcome::Ok => {}
+                TaskOutcome::Err(e) => {
                     error!(
                         task_id = %task_id,
                         error = %e,
                         "Task execution failed"
                     );
                 }
-                Err(_panic_payload) => {
+                TaskOutcome::Panic(panic_msg) => {
                     error!(
                         task_id = %task_id,
                         task_type = %task_type,
+                        panic_message = %panic_msg,
                         "Uncaught panic in worker task"
                     );
                     event_dispatcher.publish_thread_uncaught_exception(
@@ -380,6 +389,42 @@ impl TaskRunner {
                 }
             }
         });
+    }
+
+    /// Execute a task inside a panic-catching boundary.
+    ///
+    /// `worker`, `config`, and `task` are consumed so that the caller
+    /// cannot access them after a potential panic — only the returned
+    /// [`TaskOutcome`] carries the information needed for logging and
+    /// event publishing.
+    async fn execute_catching_panic(
+        worker: Arc<dyn Worker>,
+        task_client: &TaskClient,
+        event_dispatcher: &EventDispatcher,
+        config: Arc<WorkerConfig>,
+        task: Task,
+    ) -> TaskOutcome {
+        match AssertUnwindSafe(Self::execute_and_update_task(
+            &worker,
+            task_client,
+            event_dispatcher,
+            &config,
+            task,
+        ))
+        .catch_unwind()
+        .await
+        {
+            Ok(Ok(())) => TaskOutcome::Ok,
+            Ok(Err(e)) => TaskOutcome::Err(e),
+            Err(panic_payload) => {
+                let msg = panic_payload
+                    .downcast_ref::<String>()
+                    .map(|s| s.as_str())
+                    .or_else(|| panic_payload.downcast_ref::<&str>().copied())
+                    .unwrap_or("<non-string panic>");
+                TaskOutcome::Panic(msg.to_string())
+            }
+        }
     }
 
     /// Execute a task and update the result

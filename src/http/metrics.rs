@@ -14,7 +14,6 @@
 //! rather than the interpolated request path. The server base-path prefix
 //! (e.g. `/api`) is not included.
 
-use std::sync::Arc;
 use std::time::Duration;
 
 /// Observer invoked by [`ApiClient`](super::ApiClient) after every request
@@ -34,18 +33,4 @@ pub trait HttpMetricsObserver: Send + Sync {
     ///   failed before a status was received.
     /// - `duration`: wall-clock time from send to response-received (or error).
     fn observe(&self, method: &str, uri: &str, status: &str, duration: Duration);
-}
-
-/// No-op observer installed by default.
-pub struct NoopHttpMetricsObserver;
-
-impl HttpMetricsObserver for NoopHttpMetricsObserver {
-    fn observe(&self, _method: &str, _uri: &str, _status: &str, _duration: Duration) {}
-}
-
-impl NoopHttpMetricsObserver {
-    /// Return a shared no-op observer instance.
-    pub fn arc() -> Arc<dyn HttpMetricsObserver> {
-        Arc::new(Self)
-    }
 }
