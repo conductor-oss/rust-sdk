@@ -587,6 +587,12 @@ impl TaskRunnerEventsListener for MetricsCollector {
         self.thread_uncaught_exceptions_total
             .with_label_values(&[&event.exception])
             .inc();
+
+        // A panic bypasses the normal TaskExecutionCompleted / TaskExecutionFailure
+        // path, so we must decrement here to keep the gauge accurate. Safe if the
+        // task_type was never started (get_mut returns None) or if the count is
+        // already 0 (clamped by max(0) inside decrement_active).
+        self.decrement_active(&event.task_type);
     }
 
     fn on_workflow_started(&self, event: &WorkflowStarted) {
