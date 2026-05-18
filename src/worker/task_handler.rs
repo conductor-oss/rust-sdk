@@ -81,11 +81,8 @@ impl TaskHandler {
         let collector = Arc::new(MetricsCollector::new(settings));
         self.event_dispatcher
             .register(collector.clone() as Arc<dyn TaskRunnerEventsListener>);
-        self.api_client = ApiClient::with_http_observer(
-            self.config.clone(),
-            collector.clone() as Arc<dyn crate::http::HttpMetricsObserver>,
-        )
-        .expect("ApiClient creation should not fail on previously valid config");
+        self.api_client
+            .set_http_observer(collector.clone() as Arc<dyn crate::http::HttpMetricsObserver>);
         self.metrics_collector = Some(collector);
     }
 

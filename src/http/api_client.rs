@@ -93,9 +93,8 @@ pub struct ApiClient {
     token_refresh_lock: Arc<Mutex<()>>,
     /// Cached result of OSS detection (None = not yet probed)
     is_oss: Arc<RwLock<Option<bool>>>,
-    /// HTTP metrics observer, set once at construction time. `None` when
-    /// the client is created standalone (without a `TaskHandler`).
-    /// `Some` when created via [`ApiClient::with_http_observer`].
+    /// HTTP metrics observer. `None` when the client is created standalone
+    /// (without a `TaskHandler`). `Some` after [`set_http_observer`](Self::set_http_observer).
     http_metrics: Option<Arc<dyn HttpMetricsObserver>>,
 }
 
@@ -131,16 +130,11 @@ impl ApiClient {
         &self.base_url
     }
 
-    /// Create an API client with an HTTP metrics observer pre-installed.
+    /// Install an HTTP metrics observer on an existing client.
     ///
-    /// All clones of this client share the same observer via `Arc`.
-    pub fn with_http_observer(
-        config: Configuration,
-        observer: Arc<dyn HttpMetricsObserver>,
-    ) -> Result<Self> {
-        let mut client = Self::new(config)?;
-        client.http_metrics = Some(observer);
-        Ok(client)
+    /// All subsequent clones share the same observer via `Arc`.
+    pub fn set_http_observer(&mut self, observer: Arc<dyn HttpMetricsObserver>) {
+        self.http_metrics = Some(observer);
     }
 
     /// Unified post-request bookkeeping: tracing log + observer callback.
