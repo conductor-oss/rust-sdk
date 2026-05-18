@@ -200,25 +200,23 @@ same metric names and shapes that the Rust SDK emits by default.
 
 ## Detailed Technical Notes
 
-### Path template `uri` label — cross-SDK implementation
+### Path template `uri` label — how it works
 
-All Conductor SDKs preserve the API resource path template before path
-parameter substitution and use it as the `uri` label on
-`http_api_client_request_seconds`. This prevents cardinality explosion from
-dynamic path segments (UUIDs, task type names, etc.) and excludes the server
-URL's base path prefix.
+The `uri` label on `http_api_client_request_seconds` carries a path
+**template** rather than the fully-resolved request path, preventing
+cardinality explosion from dynamic path segments (UUIDs, task type names,
+etc.). The server URL's base path prefix (e.g. `/api`) is never included.
 
-Each SDK implements this using the mechanism most natural to its HTTP stack:
+The Rust SDK implements this via the `ApiPath` struct. Public `ApiClient`
+methods accept `impl Into<ApiPath<'_>>`, which pairs a resolved request
+path with a bounded-cardinality metric template. For static endpoints
+(no dynamic segments), callers pass a plain `&str` — the `From<&str>` impl
+uses the same string for both the request path and the metric label. For
+dynamic endpoints, callers use `ApiPath::templated(&path, "/template/{id}")`
+to supply both. `ApiClient::record_request` then passes the template to
+`HttpMetricsObserver::observe` as the `uri` label.
 
-| SDK | Mechanism | Where template is captured | Where template is consumed |
-|---|---|---|---|
-| **Go** | `context.WithValue` with `pathTemplateKey` / `rawPathKey` | Each API resource method calls `metrics.WithPathTemplate(ctx, template)` before building the resolved URL. `executeCall` sets `WithRawPath` as fallback. | `metricsRoundTripper.RoundTrip` reads template from context; prefers template > rawPath > URL path. |
-| **Java** | OkHttp `Request.tag(PathTemplateTag.class)` | `ConductorClient.buildRequest()` saves the un-substituted path as a `PathTemplateTag` on the request before replacing path params. | `ApiClientMetricsInterceptor` reads the tag at response time; falls back to `request.url().encodedPath()`. |
-| **Python** | `metric_uri` keyword argument | `api_client.__call_api_no_retry()` saves `resource_path` before substitution and passes it as `metric_uri` through the call chain. | `CanonicalMetricsCollector.record_api_request_time()` prefers `metric_uri` over the resolved `uri`. |
-| **Ruby** | `metric_uri` keyword argument | `ApiClient#call_api_no_retry` saves `resource_path` before substitution and passes it as `metric_uri:` to `RestClient#request`. | `RestClient#emit_http_event` uses `metric_uri` when present; falls back to `URI.parse(url).request_uri`. |
-| **Rust** | `ApiPath` struct with `impl Into<ApiPath<'_>>` on public `ApiClient` methods | Static paths pass a plain `&str` (the `From<&str>` impl uses the same string for both path and metric label). Dynamic paths use `ApiPath::templated(&path, "/template/{id}")`. | `ApiClient::record_request` passes `metric_uri` directly to `HttpMetricsObserver::observe` as the `uri` label. |
-
-In all cases the template string is the API-relative resource path (e.g.
+The template string is always the API-relative resource path (e.g.
 `/workflow/{workflowId}`), never the fully-qualified URL or the base-path-
 prefixed path. This means:
 
