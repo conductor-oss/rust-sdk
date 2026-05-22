@@ -2,10 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::collections::HashSet;
+use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use futures::FutureExt;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 
@@ -13,12 +15,24 @@ use crate::client::TaskClient;
 use crate::configuration::{resolve_worker_config, WorkerConfig};
 use crate::error::Result;
 use crate::events::{
-    EventDispatcher, PollCompleted, PollFailure, PollStarted, TaskExecutionCompleted,
-    TaskExecutionFailure, TaskExecutionStarted, TaskUpdateFailure,
+    exception_label, EventDispatcher, PollCompleted, PollFailure, PollSkippedPaused, PollStarted,
+    TaskExecutionCompleted, TaskExecutionFailure, TaskExecutionStarted, TaskUpdateCompleted,
+    TaskUpdateFailure, ThreadUncaughtException,
 };
 use crate::models::Task;
 
 use super::{Worker, WorkerOutput};
+
+/// Result of a task execution attempt, including panics.
+///
+/// Returned by [`TaskRunner::execute_catching_panic`] so the caller can
+/// handle success, regular errors, and panics without accessing any
+/// state that was inside the `AssertUnwindSafe` boundary.
+enum TaskOutcome {
+    Ok,
+    Err(crate::error::ConductorError),
+    Panic(String),
+}
 
 /// Task runner for a single worker type
 pub struct TaskRunner {
@@ -193,6 +207,11 @@ impl TaskRunner {
     async fn run_once(&self) -> Result<()> {
         // Check if paused
         if self.paused.load(Ordering::SeqCst) {
+            self.event_dispatcher
+                .publish_poll_skipped_paused(&PollSkippedPaused::new(
+                    &self.config.task_definition_name,
+                    &self.config.worker_id,
+                ));
             tokio::time::sleep(Duration::from_millis(100)).await;
             return Ok(());
         }
@@ -268,13 +287,15 @@ impl TaskRunner {
                 }
             }
             Err(e) => {
-                // Publish poll failure event
+                let exception = exception_label(&e);
+
                 self.event_dispatcher
                     .publish_poll_failure(&PollFailure::new(
                         &self.config.task_definition_name,
                         &self.config.worker_id,
                         poll_duration,
                         e.to_string(),
+                        exception,
                     ));
 
                 self.consecutive_empty_polls.fetch_add(1, Ordering::SeqCst);
@@ -311,6 +332,8 @@ impl TaskRunner {
         let running_tasks = Arc::clone(&self.running_tasks);
         let spawned_task_count = Arc::clone(&self.spawned_task_count);
 
+        let task_type = self.config.task_definition_name.clone();
+
         tokio::spawn(async move {
             // Acquire semaphore permit FIRST - this is the actual concurrency control
             let _permit = match semaphore.acquire().await {
@@ -328,28 +351,75 @@ impl TaskRunner {
             active_task_count.fetch_add(1, Ordering::SeqCst);
             running_tasks.lock().insert(task_id.clone());
 
-            let result = Self::execute_and_update_task(
-                &worker,
-                &task_client,
-                &event_dispatcher,
-                &config,
-                task,
-            )
-            .await;
+            // `worker`, `config`, and `task` are moved into the panic-catching
+            // boundary and cannot be accessed in the cleanup code below.
+            let outcome =
+                Self::execute_catching_panic(worker, &task_client, &event_dispatcher, config, task)
+                    .await;
 
-            // Cleanup: remove from tracking
+            // Cleanup: only atomics, locks, and event_dispatcher are accessible
             running_tasks.lock().remove(&task_id);
             active_task_count.fetch_sub(1, Ordering::SeqCst);
             spawned_task_count.fetch_sub(1, Ordering::SeqCst);
 
-            if let Err(e) = result {
-                error!(
-                    task_id = %task_id,
-                    error = %e,
-                    "Task execution failed"
-                );
+            match outcome {
+                TaskOutcome::Ok => {}
+                TaskOutcome::Err(e) => {
+                    error!(
+                        task_id = %task_id,
+                        error = %e,
+                        "Task execution failed"
+                    );
+                }
+                TaskOutcome::Panic(panic_msg) => {
+                    error!(
+                        task_id = %task_id,
+                        task_type = %task_type,
+                        panic_message = %panic_msg,
+                        "Uncaught panic in worker task"
+                    );
+                    event_dispatcher.publish_thread_uncaught_exception(
+                        &ThreadUncaughtException::new(&task_type, "Panic"),
+                    );
+                }
             }
         });
+    }
+
+    /// Execute a task inside a panic-catching boundary.
+    ///
+    /// `worker`, `config`, and `task` are consumed so that the caller
+    /// cannot access them after a potential panic — only the returned
+    /// [`TaskOutcome`] carries the information needed for logging and
+    /// event publishing.
+    async fn execute_catching_panic(
+        worker: Arc<dyn Worker>,
+        task_client: &TaskClient,
+        event_dispatcher: &EventDispatcher,
+        config: Arc<WorkerConfig>,
+        task: Task,
+    ) -> TaskOutcome {
+        match AssertUnwindSafe(Self::execute_and_update_task(
+            &worker,
+            task_client,
+            event_dispatcher,
+            &config,
+            task,
+        ))
+        .catch_unwind()
+        .await
+        {
+            Ok(Ok(())) => TaskOutcome::Ok,
+            Ok(Err(e)) => TaskOutcome::Err(e),
+            Err(panic_payload) => {
+                let msg = panic_payload
+                    .downcast_ref::<String>()
+                    .map(|s| s.as_str())
+                    .or_else(|| panic_payload.downcast_ref::<&str>().copied())
+                    .unwrap_or("<non-string panic>");
+                TaskOutcome::Panic(msg.to_string())
+            }
+        }
     }
 
     /// Execute a task and update the result
@@ -414,8 +484,9 @@ impl TaskRunner {
             }
             Err(e) => {
                 let error_msg = e.to_string();
+                let exception = exception_label(&e);
+                let is_retryable = e.is_retryable();
 
-                // Publish execution failure event
                 event_dispatcher.publish_task_execution_failure(&TaskExecutionFailure::new(
                     task_type,
                     task_id,
@@ -423,7 +494,8 @@ impl TaskRunner {
                     &config.worker_id,
                     exec_duration,
                     &error_msg,
-                    e.is_retryable(),
+                    exception,
+                    is_retryable,
                 ));
 
                 WorkerOutput::Failed(error_msg).into_task_result(&task, &config.worker_id)
@@ -431,20 +503,33 @@ impl TaskRunner {
         };
 
         // Update task with retry
+        let update_start = Instant::now();
         match task_client.update_task_with_retry(&task_result, 4).await {
             Ok(_) => {
+                let update_duration = update_start.elapsed();
                 debug!(task_id = %task_id, "Task updated successfully");
+
+                event_dispatcher.publish_task_update_completed(&TaskUpdateCompleted::new(
+                    task_type,
+                    task_id,
+                    workflow_id,
+                    &config.worker_id,
+                    update_duration,
+                ));
             }
             Err(e) => {
+                let update_duration = update_start.elapsed();
                 error!(task_id = %task_id, error = %e, "Failed to update task after retries");
+                let exception = exception_label(&e);
 
-                // Publish task update failure event
                 event_dispatcher.publish_task_update_failure(&TaskUpdateFailure::new(
                     task_type,
                     task_id,
                     workflow_id,
                     &config.worker_id,
+                    update_duration,
                     e.to_string(),
+                    exception,
                     4,
                 ));
             }

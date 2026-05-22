@@ -3,12 +3,14 @@
 
 use conductor::client::WorkflowClient;
 use conductor::models::StartWorkflowRequest;
+use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
 
 pub struct WorkflowGovernor {
     workflow_client: WorkflowClient,
     workflow_name: String,
     workflows_per_second: usize,
+    id_sink: Option<mpsc::Sender<String>>,
 }
 
 impl WorkflowGovernor {
@@ -21,7 +23,13 @@ impl WorkflowGovernor {
             workflow_client,
             workflow_name,
             workflows_per_second,
+            id_sink: None,
         }
+    }
+
+    pub fn with_id_sink(mut self, tx: mpsc::Sender<String>) -> Self {
+        self.id_sink = Some(tx);
+        self
     }
 
     pub async fn run(&self) {
@@ -41,9 +49,16 @@ impl WorkflowGovernor {
     async fn start_batch(&self) {
         for _ in 0..self.workflows_per_second {
             let request = StartWorkflowRequest::new(&self.workflow_name).with_version(1);
-            if let Err(e) = self.workflow_client.start_workflow(&request).await {
-                println!("Governor: error starting workflows: {}", e);
-                return;
+            match self.workflow_client.start_workflow(&request).await {
+                Ok(workflow_id) => {
+                    if let Some(ref tx) = self.id_sink {
+                        let _ = tx.try_send(workflow_id);
+                    }
+                }
+                Err(e) => {
+                    println!("Governor: error starting workflows: {}", e);
+                    return;
+                }
             }
         }
         println!(

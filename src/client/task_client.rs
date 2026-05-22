@@ -5,7 +5,7 @@ use std::time::Duration;
 use tracing::{debug, warn};
 
 use crate::error::{ConductorError, Result};
-use crate::http::ApiClient;
+use crate::http::{ApiClient, ApiPath};
 use crate::models::{Task, TaskResult};
 
 /// Client for task operations (polling and updates)
@@ -37,7 +37,10 @@ impl TaskClient {
         }
 
         let path = format!("/tasks/poll/{}", task_type);
-        let result: Option<Task> = self.api.get_with_params(&path, &params).await?;
+        let result: Option<Task> = self
+            .api
+            .get_with_params(ApiPath::templated(&path, "/tasks/poll/{taskType}"), &params)
+            .await?;
         Ok(result)
     }
 
@@ -74,7 +77,13 @@ impl TaskClient {
             "Batch polling tasks"
         );
 
-        let tasks: Vec<Task> = self.api.get_with_params(&path, &params).await?;
+        let tasks: Vec<Task> = self
+            .api
+            .get_with_params(
+                ApiPath::templated(&path, "/tasks/poll/batch/{taskType}"),
+                &params,
+            )
+            .await?;
 
         debug!(
             task_type = task_type,
@@ -146,7 +155,9 @@ impl TaskClient {
     /// Get task by ID
     pub async fn get_task(&self, task_id: &str) -> Result<Task> {
         let path = format!("/tasks/{}", task_id);
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(&path, "/tasks/{taskId}"))
+            .await
     }
 
     /// Get tasks in progress for a task type
@@ -168,13 +179,21 @@ impl TaskClient {
         }
 
         let path = format!("/tasks/in_progress/{}", task_type);
-        self.api.get_with_params(&path, &params).await
+        self.api
+            .get_with_params(
+                ApiPath::templated(&path, "/tasks/in_progress/{taskType}"),
+                &params,
+            )
+            .await
     }
 
     /// Add a log to a task
     pub async fn add_task_log(&self, task_id: &str, log: &str) -> Result<()> {
         let path = format!("/tasks/{}/log", task_id);
-        let _: serde_json::Value = self.api.post(&path, &log).await?;
+        let _: serde_json::Value = self
+            .api
+            .post(ApiPath::templated(&path, "/tasks/{taskId}/log"), &log)
+            .await?;
         Ok(())
     }
 
@@ -184,7 +203,9 @@ impl TaskClient {
         task_id: &str,
     ) -> Result<Vec<crate::models::task::TaskExecLog>> {
         let path = format!("/tasks/{}/log", task_id);
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(&path, "/tasks/{taskId}/log"))
+            .await
     }
 
     /// Get task queue sizes
@@ -192,15 +213,21 @@ impl TaskClient {
         &self,
         task_types: &[&str],
     ) -> Result<std::collections::HashMap<String, i64>> {
-        let path = "/tasks/queue/sizes";
         let params: Vec<(&str, &str)> = task_types.iter().map(|t| ("taskType", *t)).collect();
-        self.api.get_with_params(path, &params).await
+        self.api
+            .get_with_params("/tasks/queue/sizes", &params)
+            .await
     }
 
     /// Remove task from queue
     pub async fn remove_task_from_queue(&self, task_type: &str, task_id: &str) -> Result<()> {
         let path = format!("/tasks/queue/{}/{}", task_type, task_id);
-        self.api.delete_no_content(&path).await
+        self.api
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/tasks/queue/{taskType}/{taskId}",
+            ))
+            .await
     }
 
     /// Update task by reference name
@@ -224,7 +251,12 @@ impl TaskClient {
         }
 
         // POST with output as body
-        self.api.post_text(&path, &output).await
+        self.api
+            .post_text(
+                ApiPath::templated(&path, "/tasks/{workflowId}/{taskRefName}/{status}"),
+                &output,
+            )
+            .await
     }
 
     /// Update task synchronously and return the updated workflow
@@ -248,7 +280,13 @@ impl TaskClient {
         }
 
         let params_ref: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        self.api.post_with_params(&path, &output, &params_ref).await
+        self.api
+            .post_with_params(
+                ApiPath::templated(&path, "/tasks/{workflowId}/{taskRefName}/{status}/sync"),
+                &output,
+                &params_ref,
+            )
+            .await
     }
 
     /// Get queue size for a specific task type
@@ -260,13 +298,17 @@ impl TaskClient {
     /// Get poll data for a task type
     pub async fn get_task_poll_data(&self, task_type: &str) -> Result<Vec<PollData>> {
         let path = format!("/tasks/queue/polldata/{}", task_type);
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/tasks/queue/polldata/{taskType}",
+            ))
+            .await
     }
 
     /// Get all poll data
     pub async fn get_all_poll_data(&self) -> Result<Vec<PollData>> {
-        let path = "/tasks/queue/polldata/all";
-        self.api.get(path).await
+        self.api.get("/tasks/queue/polldata/all").await
     }
 
     /// Get poll data (alias for get_task_poll_data)
@@ -321,7 +363,12 @@ impl TaskClient {
     /// Requeue pending tasks
     pub async fn requeue_pending_tasks(&self, task_type: &str) -> Result<String> {
         let path = format!("/tasks/queue/requeue/{}", task_type);
-        self.api.post_text(&path, &serde_json::Value::Null).await
+        self.api
+            .post_text(
+                ApiPath::templated(&path, "/tasks/queue/requeue/{taskType}"),
+                &serde_json::Value::Null,
+            )
+            .await
     }
 }
 

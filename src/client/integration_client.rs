@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use crate::error::Result;
-use crate::http::ApiClient;
+use crate::http::{ApiClient, ApiPath};
 use crate::models::{
     Integration, IntegrationApi, IntegrationApiUpdate, IntegrationUpdate, MetadataTag,
     PromptTemplate,
@@ -31,7 +31,12 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}/prompt/{}",
             ai_integration, model_name, prompt_name
         );
-        self.api.post_no_body_no_response(&path).await
+        self.api
+            .post_no_body_no_response(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/integration/{apiName}/prompt/{promptName}",
+            ))
+            .await
     }
 
     /// Delete a specific integration API
@@ -44,13 +49,20 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}",
             integration_name, api_name
         );
-        self.api.delete_no_content(&path).await
+        self.api
+            .delete_no_content(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/integration/{apiName}",
+            ))
+            .await
     }
 
     /// Delete an integration
     pub async fn delete_integration(&self, integration_name: &str) -> Result<()> {
         let path = format!("/integrations/provider/{}", integration_name);
-        self.api.delete_no_content(&path).await
+        self.api
+            .delete_no_content(ApiPath::templated(&path, "/integrations/provider/{name}"))
+            .await
     }
 
     /// Get an integration API
@@ -63,7 +75,12 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}",
             integration_name, api_name
         );
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/integration/{apiName}",
+            ))
+            .await
     }
 
     /// Get all APIs for an integration
@@ -72,19 +89,25 @@ impl IntegrationClient {
         integration_name: &str,
     ) -> Result<Vec<IntegrationApi>> {
         let path = format!("/integrations/provider/{}/integration", integration_name);
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/integration",
+            ))
+            .await
     }
 
     /// Get an integration
     pub async fn get_integration(&self, integration_name: &str) -> Result<Integration> {
         let path = format!("/integrations/provider/{}", integration_name);
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(&path, "/integrations/provider/{name}"))
+            .await
     }
 
     /// Get all integrations
     pub async fn get_integrations(&self) -> Result<Vec<Integration>> {
-        let path = "/integrations/provider";
-        self.api.get(path).await
+        self.api.get("/integrations/provider").await
     }
 
     /// Get prompts associated with an integration
@@ -97,7 +120,12 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}/prompt",
             ai_integration, model_name
         );
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/integration/{apiName}/prompt",
+            ))
+            .await
     }
 
     /// Get token usage for an integration API
@@ -110,7 +138,12 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}/metrics",
             integration_name, api_name
         );
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/integration/{apiName}/metrics",
+            ))
+            .await
     }
 
     /// Get token usage for an integration provider
@@ -119,7 +152,12 @@ impl IntegrationClient {
         name: &str,
     ) -> Result<serde_json::Value> {
         let path = format!("/integrations/provider/{}/metrics", name);
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/metrics",
+            ))
+            .await
     }
 
     /// Save (create or update) an integration API
@@ -133,7 +171,12 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}",
             integration_name, api_name
         );
-        self.api.put_no_response(&path, api_details).await
+        self.api
+            .put_no_response(
+                ApiPath::templated(&path, "/integrations/provider/{name}/integration/{apiName}"),
+                api_details,
+            )
+            .await
     }
 
     /// Save (create or update) an integration
@@ -143,7 +186,12 @@ impl IntegrationClient {
         integration_details: &IntegrationUpdate,
     ) -> Result<()> {
         let path = format!("/integrations/provider/{}", integration_name);
-        self.api.put_no_response(&path, integration_details).await
+        self.api
+            .put_no_response(
+                ApiPath::templated(&path, "/integrations/provider/{name}"),
+                integration_details,
+            )
+            .await
     }
 
     // Tags
@@ -159,7 +207,15 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}/tags",
             integration_name, api_name
         );
-        self.api.delete_with_body(&path, tags).await
+        self.api
+            .delete_with_body(
+                ApiPath::templated(
+                    &path,
+                    "/integrations/provider/{name}/integration/{apiName}/tags",
+                ),
+                tags,
+            )
+            .await
     }
 
     /// Delete a tag from an integration provider
@@ -169,7 +225,12 @@ impl IntegrationClient {
         name: &str,
     ) -> Result<()> {
         let path = format!("/integrations/provider/{}/tags", name);
-        self.api.delete_with_body(&path, tags).await
+        self.api
+            .delete_with_body(
+                ApiPath::templated(&path, "/integrations/provider/{name}/tags"),
+                tags,
+            )
+            .await
     }
 
     /// Set tags for an integration
@@ -183,7 +244,15 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}/tags",
             integration_name, api_name
         );
-        self.api.put_no_response(&path, tags).await
+        self.api
+            .put_no_response(
+                ApiPath::templated(
+                    &path,
+                    "/integrations/provider/{name}/integration/{apiName}/tags",
+                ),
+                tags,
+            )
+            .await
     }
 
     /// Set tags for an integration provider
@@ -193,7 +262,12 @@ impl IntegrationClient {
         name: &str,
     ) -> Result<()> {
         let path = format!("/integrations/provider/{}/tags", name);
-        self.api.put_no_response(&path, tags).await
+        self.api
+            .put_no_response(
+                ApiPath::templated(&path, "/integrations/provider/{name}/tags"),
+                tags,
+            )
+            .await
     }
 
     /// Get tags for an integration
@@ -206,13 +280,23 @@ impl IntegrationClient {
             "/integrations/provider/{}/integration/{}/tags",
             integration_name, api_name
         );
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/integration/{apiName}/tags",
+            ))
+            .await
     }
 
     /// Get tags for an integration provider
     pub async fn get_tags_for_integration_provider(&self, name: &str) -> Result<Vec<MetadataTag>> {
         let path = format!("/integrations/provider/{}/tags", name);
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/tags",
+            ))
+            .await
     }
 
     /// Get available APIs for an integration provider
@@ -221,19 +305,22 @@ impl IntegrationClient {
         integration_name: &str,
     ) -> Result<Vec<String>> {
         let path = format!("/integrations/provider/{}/models", integration_name);
-        self.api.get(&path).await
+        self.api
+            .get(ApiPath::templated(
+                &path,
+                "/integrations/provider/{name}/models",
+            ))
+            .await
     }
 
     /// Get all integration provider definitions
     pub async fn get_integration_provider_defs(&self) -> Result<Vec<serde_json::Value>> {
-        let path = "/integrations/def";
-        self.api.get(path).await
+        self.api.get("/integrations/def").await
     }
 
     /// Get all providers and their integrations
     pub async fn get_providers_and_integrations(&self) -> Result<serde_json::Value> {
-        let path = "/integrations";
-        self.api.get(path).await
+        self.api.get("/integrations").await
     }
 }
 

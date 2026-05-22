@@ -3,6 +3,7 @@
 
 mod simulated_task_worker;
 mod workflow_governor;
+mod workflow_status_probe;
 
 use std::process;
 use std::sync::Arc;
@@ -15,6 +16,7 @@ use conductor::worker::TaskHandler;
 
 use simulated_task_worker::SimulatedTaskWorker;
 use workflow_governor::WorkflowGovernor;
+use workflow_status_probe::WorkflowStatusProbe;
 
 const WORKFLOW_NAME: &str = "rust_simulated_tasks_workflow";
 
@@ -129,6 +131,7 @@ async fn main() {
     let workflows_per_sec = env_int_or_default("HARNESS_WORKFLOWS_PER_SEC", 2);
     let batch_size = env_int_or_default("HARNESS_BATCH_SIZE", 20);
     let poll_interval_ms = env_int_or_default("HARNESS_POLL_INTERVAL_MS", 100);
+    let probe_rate = env_int_or_default("HARNESS_PROBE_RATE_PER_SEC", 0);
 
     let mut handler = match TaskHandler::new(config) {
         Ok(h) => h,
@@ -166,25 +169,54 @@ async fn main() {
         process::exit(1);
     }
 
-    let governor = Arc::new(WorkflowGovernor::new(
-        client.workflow_client(),
-        WORKFLOW_NAME.to_string(),
-        workflows_per_sec,
-    ));
+    let workflow_client = handler.conductor_client().workflow_client();
 
-    let governor_handle = tokio::spawn({
-        let governor = Arc::clone(&governor);
-        async move {
-            governor.run().await;
-        }
-    });
+    // Build governor, optionally wired to the status probe
+    let probe_handle = if probe_rate > 0 {
+        let (tx, rx) = tokio::sync::mpsc::channel::<String>(512);
+
+        let probe = WorkflowStatusProbe::new(workflow_client.clone(), rx, probe_rate);
+        let handle = tokio::spawn(async move { probe.run().await });
+
+        let governor = Arc::new(
+            WorkflowGovernor::new(
+                workflow_client,
+                WORKFLOW_NAME.to_string(),
+                workflows_per_sec,
+            )
+            .with_id_sink(tx),
+        );
+        let governor_handle = tokio::spawn({
+            let governor = Arc::clone(&governor);
+            async move { governor.run().await }
+        });
+
+        println!("WorkflowStatusProbe enabled at {}/sec", probe_rate,);
+
+        Some((governor_handle, handle))
+    } else {
+        let governor = Arc::new(WorkflowGovernor::new(
+            workflow_client,
+            WORKFLOW_NAME.to_string(),
+            workflows_per_sec,
+        ));
+        let governor_handle = tokio::spawn({
+            let governor = Arc::clone(&governor);
+            async move { governor.run().await }
+        });
+
+        Some((governor_handle, tokio::spawn(async {})))
+    };
 
     tokio::signal::ctrl_c()
         .await
         .expect("Failed to listen for ctrl-c");
 
     println!("Shutting down...");
-    governor_handle.abort();
+    if let Some((gov, probe)) = probe_handle {
+        gov.abort();
+        probe.abort();
+    }
 
     if let Err(e) = handler.stop().await {
         eprintln!("Error stopping workers: {}", e);

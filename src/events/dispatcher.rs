@@ -6,8 +6,9 @@ use std::sync::Arc;
 use tracing::error;
 
 use super::{
-    PollCompleted, PollFailure, PollStarted, TaskExecutionCompleted, TaskExecutionFailure,
-    TaskExecutionStarted, TaskRunnerEventsListener, TaskUpdateFailure,
+    PollCompleted, PollFailure, PollSkippedPaused, PollStarted, TaskExecutionCompleted,
+    TaskExecutionFailure, TaskExecutionStarted, TaskRunnerEventsListener, TaskUpdateCompleted,
+    TaskUpdateFailure, ThreadUncaughtException, WorkflowStartFailure, WorkflowStarted,
 };
 
 /// Async event dispatcher for task runner events
@@ -64,7 +65,6 @@ impl EventDispatcher {
 
     /// Publish a poll started event
     pub fn publish_poll_started(&self, event: &PollStarted) {
-        // Clone listeners and release lock before calling listeners
         let listeners = self.get_listeners();
         for listener in listeners {
             if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -95,6 +95,18 @@ impl EventDispatcher {
                 listener.on_poll_failure(event);
             })) {
                 error!("Listener panicked on poll_failure: {:?}", e);
+            }
+        }
+    }
+
+    /// Publish a poll-skipped-due-to-pause event
+    pub fn publish_poll_skipped_paused(&self, event: &PollSkippedPaused) {
+        let listeners = self.get_listeners();
+        for listener in listeners {
+            if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                listener.on_poll_skipped_paused(event);
+            })) {
+                error!("Listener panicked on poll_skipped_paused: {:?}", e);
             }
         }
     }
@@ -135,6 +147,18 @@ impl EventDispatcher {
         }
     }
 
+    /// Publish a task update completed event
+    pub fn publish_task_update_completed(&self, event: &TaskUpdateCompleted) {
+        let listeners = self.get_listeners();
+        for listener in listeners {
+            if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                listener.on_task_update_completed(event);
+            })) {
+                error!("Listener panicked on task_update_completed: {:?}", e);
+            }
+        }
+    }
+
     /// Publish a task update failure event
     pub fn publish_task_update_failure(&self, event: &TaskUpdateFailure) {
         let listeners = self.get_listeners();
@@ -143,6 +167,42 @@ impl EventDispatcher {
                 listener.on_task_update_failure(event);
             })) {
                 error!("Listener panicked on task_update_failure: {:?}", e);
+            }
+        }
+    }
+
+    /// Publish an uncaught-panic event
+    pub fn publish_thread_uncaught_exception(&self, event: &ThreadUncaughtException) {
+        let listeners = self.get_listeners();
+        for listener in listeners {
+            if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                listener.on_thread_uncaught_exception(event);
+            })) {
+                error!("Listener panicked on thread_uncaught_exception: {:?}", e);
+            }
+        }
+    }
+
+    /// Publish a workflow started event
+    pub fn publish_workflow_started(&self, event: &WorkflowStarted) {
+        let listeners = self.get_listeners();
+        for listener in listeners {
+            if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                listener.on_workflow_started(event);
+            })) {
+                error!("Listener panicked on workflow_started: {:?}", e);
+            }
+        }
+    }
+
+    /// Publish a workflow start failure event
+    pub fn publish_workflow_start_failure(&self, event: &WorkflowStartFailure) {
+        let listeners = self.get_listeners();
+        for listener in listeners {
+            if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                listener.on_workflow_start_failure(event);
+            })) {
+                error!("Listener panicked on workflow_start_failure: {:?}", e);
             }
         }
     }

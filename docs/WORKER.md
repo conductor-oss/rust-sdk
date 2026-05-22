@@ -471,18 +471,20 @@ let worker = FnWorker::new("batch_processor", |task: Task| async move {
 use conductor::metrics::MetricsSettings;
 
 let mut handler = TaskHandler::new(config)?;
-handler.enable_metrics(MetricsSettings {
-    port: 9090,
-    enabled: true,
-});
+handler.enable_metrics(
+    MetricsSettings::new()
+        .with_http_port(9090)
+        .with_metrics_path("/metrics"),
+);
 ```
 
-Metrics available at `http://localhost:9090/metrics`:
+Metrics are available at `http://localhost:9090/metrics`. The SDK emits the
+full canonical Prometheus catalog (counters, histograms, and gauges) covering
+worker polling, task execution, task result updates, HTTP API client latency,
+and more.
 
-- `conductor_worker_tasks_polled_total` - Total tasks polled
-- `conductor_worker_tasks_executed_total` - Total tasks executed
-- `conductor_worker_task_duration_seconds` - Task execution duration
-- `conductor_worker_poll_errors_total` - Poll errors
+See [METRICS.md](../METRICS.md) for the complete metric catalog, label
+definitions, bucket sets, and configuration details.
 
 ### Event Listeners
 
