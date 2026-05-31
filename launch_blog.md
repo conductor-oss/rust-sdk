@@ -6,7 +6,7 @@ Rust gives you memory safety and raw performance. Tokio gives you incredible con
 
 Handling state, retries, and long-running processes in distributed systems is notoriously hard. You often end up writing boilerplate for database checkpoints, retry queues, and timeout handlers—distracting you from the actual business logic.
 
-Today, we’re excited to introduce the **[Orkes Conductor Rust SDK](https://github.com/conductor-oss/conductor-rust)**, a library that combines the safety and speed of Rust with the *durable execution* model of Netflix Conductor.
+Today, we’re excited to introduce the **[Orkes Conductor Rust SDK](https://github.com/conductor-oss/rust-sdk)**, a library that combines the safety and speed of Rust with the *durable execution* model of Netflix Conductor.
 
 ## For the Tokio Native: Built on the Shoulders of Giants
 
@@ -106,7 +106,7 @@ We've seen organizations run thousands of concurrent workflows on a fraction of 
 The Orkes Conductor Rust SDK is open source and ready for you to build unbreakable systems.
 
 *   **[Get the Crate](https://crates.io/crates/conductor)**
-*   **[Explore the Repository](https://github.com/conductor-oss/conductor-rust)**
+*   **[Explore the Repository](https://github.com/conductor-oss/rust-sdk)**
 *   **[Join our Slack Community](https://orkes.io/slack)**
 
 Whether you are migrating a fragile cron job or building the next generation of autonomous agents, we can't wait to see what you build with Rust and Conductor.

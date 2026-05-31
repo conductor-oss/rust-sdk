@@ -55,16 +55,16 @@ Or create `LICENSE` manually with the Apache 2.0 license text.
 
 Both crates need proper metadata. The current configuration already includes:
 
-**conductor-rust (main crate):**
+**conductor-sdk (main crate):**
 ```toml
 [package]
-name = "conductor-rust"
+name = "conductor-sdk"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 description = "Rust SDK for Netflix Conductor workflow orchestration"
 license = "Apache-2.0"
-repository = "https://github.com/conductor-oss/conductor-rust"
+repository = "https://github.com/conductor-oss/rust-sdk"
 keywords = ["conductor", "workflow", "orchestration", "microservices"]
 categories = ["api-bindings", "asynchronous"]
 readme = "README.md"
@@ -79,7 +79,7 @@ edition = "2021"
 rust-version = "1.75"
 description = "Procedural macros for Conductor Rust SDK"
 license = "Apache-2.0"
-repository = "https://github.com/conductor-oss/conductor-rust"
+repository = "https://github.com/conductor-oss/rust-sdk"
 ```
 
 ### 4. Add missing recommended fields (optional but recommended)
@@ -90,7 +90,7 @@ Consider adding these to `Cargo.toml`:
 [package]
 # ... existing fields ...
 authors = ["Orkes Inc. <info@orkes.io>"]
-documentation = "https://docs.rs/conductor-rust"
+documentation = "https://docs.rs/conductor-sdk"
 homepage = "https://conductor-oss.org"
 exclude = [
     ".github/*",
@@ -188,7 +188,7 @@ git push origin main --tags
 
 ### Order matters!
 
-The `conductor-macros` crate must be published **before** the main `conductor-rust` crate because the main crate depends on it.
+The `conductor-macros` crate must be published **before** the main `conductor-sdk` crate because the main crate depends on it.
 
 ### Step 1: Publish conductor-macros
 
@@ -212,7 +212,7 @@ conductor-macros = { path = "conductor-macros", optional = true }
 conductor-macros = { version = "0.1.0", optional = true }
 ```
 
-### Step 3: Publish conductor-rust
+### Step 3: Publish conductor-sdk
 
 ```shell
 cargo publish
@@ -244,7 +244,7 @@ While version is < 1.0.0:
 
 ### Version synchronization
 
-Keep `conductor-rust` and `conductor-macros` versions in sync:
+Keep `conductor-sdk` and `conductor-macros` versions in sync:
 - Both at `0.1.0`, `0.2.0`, etc.
 - Publish both even if only one changed (for consistency)
 
@@ -351,7 +351,7 @@ jobs:
           VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           sed -i 's|conductor-macros = { path = "conductor-macros"|conductor-macros = { version = "'$VERSION'"|' Cargo.toml
 
-      - name: Publish conductor-rust
+      - name: Publish conductor-sdk
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --token $CARGO_REGISTRY_TOKEN
@@ -398,8 +398,8 @@ cargo publish                       # Second!
 
 ### Useful links
 
-- **crates.io dashboard**: https://crates.io/crates/conductor-rust
-- **docs.rs**: https://docs.rs/conductor-rust
+- **crates.io dashboard**: https://crates.io/crates/conductor-sdk
+- **docs.rs**: https://docs.rs/conductor-sdk
 - **API tokens**: https://crates.io/settings/tokens
 - **Publishing guide**: https://doc.rust-lang.org/cargo/reference/publishing.html
 
@@ -408,7 +408,7 @@ cargo publish                       # Second!
 To add another owner (for team publishing):
 
 ```shell
-cargo owner --add <github-username> conductor-rust
+cargo owner --add <github-username> conductor-sdk
 cargo owner --add <github-username> conductor-macros
 ```
 
@@ -418,12 +418,12 @@ cargo owner --add <github-username> conductor-macros
 
 After publishing, verify:
 
-1. **Crate is visible**: https://crates.io/crates/conductor-rust
-2. **Docs are generated**: https://docs.rs/conductor-rust (may take a few minutes)
+1. **Crate is visible**: https://crates.io/crates/conductor-sdk
+2. **Docs are generated**: https://docs.rs/conductor-sdk (may take a few minutes)
 3. **Install works**:
    ```shell
    cargo new test-conductor && cd test-conductor
-   cargo add conductor-rust
+   cargo add conductor-sdk
    cargo build
    ```
 

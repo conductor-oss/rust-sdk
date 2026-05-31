@@ -148,7 +148,7 @@ Enable the `macros` feature in `Cargo.toml`:
 
 ```toml
 [dependencies]
-conductor-rust = { version = "0.1", features = ["macros"] }
+conductor = { version = "0.1", package = "conductor-sdk", features = ["macros"] }
 ```
 
 ```rust

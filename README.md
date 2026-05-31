@@ -1,9 +1,9 @@
 # Rust SDK for Conductor
 
-[![CI](https://github.com/conductor-oss/conductor-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/conductor-oss/conductor-rust/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/conductor-rust.svg)](https://crates.io/crates/conductor-rust)
+[![CI](https://github.com/conductor-oss/rust-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/conductor-oss/rust-sdk/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/conductor-sdk.svg)](https://crates.io/crates/conductor-sdk)
 [![Rust Versions](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/crates/l/conductor-rust.svg)](LICENSE)
+[![License](https://img.shields.io/crates/l/conductor-sdk.svg)](LICENSE)
 
 Rust SDK for [Conductor](https://www.conductor-oss.org/) (OSS and Orkes Conductor) — an orchestration platform for building distributed applications, AI agents, and workflow-driven microservices. Define workflows as code, run workers anywhere, and let Conductor handle retries, state management, and observability.
 
@@ -62,7 +62,9 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-conductor = "0.1"
+# The crate is published as `conductor-sdk`; rename it to `conductor` so
+# `use conductor::...` works in your code.
+conductor = { version = "0.1", package = "conductor-sdk" }
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -70,7 +72,7 @@ For the `#[worker]` macro (similar to Python's `@worker_task` decorator):
 
 ```toml
 [dependencies]
-conductor = { version = "0.1", features = ["macros"] }
+conductor = { version = "0.1", package = "conductor-sdk", features = ["macros"] }
 conductor-macros = "0.1"
 tokio = { version = "1", features = ["full"] }
 ```
@@ -442,7 +444,7 @@ End-to-end examples covering all APIs for each domain:
 
 ## Support
 
-- [Open an issue (SDK)](https://github.com/conductor-oss/conductor-rust/issues) for SDK bugs, questions, and feature requests
+- [Open an issue (SDK)](https://github.com/conductor-oss/rust-sdk/issues) for SDK bugs, questions, and feature requests
 - [Open an issue (Conductor server)](https://github.com/conductor-oss/conductor/issues) for Conductor OSS server issues
 - [Join the Conductor Slack](https://join.slack.com/t/orkes-conductor/shared_invite/zt-2vdbx239s-Eacdyqya9giNLHfrCavfaA) for community discussion and help
 - [Orkes Community Forum](https://community.orkes.io/) for Q&A

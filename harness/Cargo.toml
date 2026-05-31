@@ -9,7 +9,7 @@ name = "harness"
 path = "src/main.rs"
 
 [dependencies]
-conductor = { path = "..", package = "conductor-rust" }
+conductor = { path = "..", package = "conductor-sdk" }
 tokio = { version = "1.35", features = ["full", "macros", "rt-multi-thread", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

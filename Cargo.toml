@@ -1,13 +1,13 @@
 [package]
-name = "conductor-rust"
+name = "conductor-sdk"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Rust SDK for Netflix Conductor workflow orchestration"
 license = "Apache-2.0"
-repository = "https://github.com/conductor-oss/conductor-rust"
+repository = "https://github.com/conductor-oss/rust-sdk"
 homepage = "https://conductor-oss.org"
-documentation = "https://docs.rs/conductor-rust"
+documentation = "https://docs.rs/conductor-sdk"
 authors = ["Orkes, Inc. <info@orkes.io>"]
 keywords = ["conductor", "workflow", "orchestration", "microservices"]
 categories = ["api-bindings", "asynchronous"]

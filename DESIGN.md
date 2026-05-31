@@ -92,7 +92,7 @@ The Conductor Rust SDK is a comprehensive, async-first client library for Netfli
 ## Module Structure
 
 ```
-conductor-rust/
+rust-sdk/
 ├── src/
 │   ├── lib.rs                 # Public API exports
 │   ├── configuration/
@@ -384,7 +384,7 @@ For a more declarative style similar to Python's `@worker_task` decorator, enabl
 
 ```toml
 [dependencies]
-conductor-rust = { version = "0.1", features = ["macros"] }
+conductor = { version = "0.1", package = "conductor-sdk", features = ["macros"] }
 ```
 
 Then use the `#[worker]` attribute macro:

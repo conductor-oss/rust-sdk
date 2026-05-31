@@ -247,4 +247,4 @@ See the [examples](../examples/) directory for complete working examples:
 
 - [Conductor Documentation](https://orkes.io/content/docs)
 - [Orkes Cloud](https://orkes.io)
-- [GitHub Repository](https://github.com/conductor-oss/conductor-rust)
+- [GitHub Repository](https://github.com/conductor-oss/rust-sdk)
