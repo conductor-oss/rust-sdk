@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,13 +23,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Get version from tag
+      - name: Get version
         id: get_version
         run: |
-          # Extract version from tag (e.g., v0.1.0 -> 0.1.0)
-          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            VERSION="${VERSION#v}"  # Strip leading 'v' if provided
+          else
+            # Extract version from tag (e.g., v0.1.0 -> 0.1.0)
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Tag version: $VERSION"
+          echo "Release version: $VERSION"
       
       - name: Verify version matches Cargo.toml
         run: |
@@ -142,6 +153,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [validate, publish]
+    if: github.event_name == 'push'
     permissions:
       contents: write
     steps:
