@@ -53,20 +53,18 @@ jobs:
     name: Run Full Test Suite
     runs-on: ubuntu-latest
     needs: validate
-    
-    services:
-      conductor:
-        image: conductoross/conductor:latest
-        ports:
-          - 8080:8080
-          - 5000:5000
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    
+    env:
+      OSS_CONDUCTOR_VERSION: ${{ vars.E2E_TEST_OSS_CONDUCTOR_VERSION }}
+
     steps:
+      - name: Verify OSS Conductor version is set
+        run: |
+          if [ -z "$OSS_CONDUCTOR_VERSION" ]; then
+            echo "::error::No Conductor OSS image tag resolved. Set the E2E_TEST_OSS_CONDUCTOR_VERSION organization variable (and ensure its repository access policy includes this repo)."
+            exit 1
+          fi
+          echo "Using conductoross/conductor:$OSS_CONDUCTOR_VERSION"
+
       - uses: actions/checkout@v4
       
       - name: Install Rust
@@ -89,6 +87,9 @@ jobs:
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Start Conductor OSS stack
+        run: docker compose -f scripts/docker-compose-oss.yaml up -d
       
       - name: Wait for Conductor
         run: |
@@ -104,6 +105,10 @@ jobs:
         run: |
           cargo test --lib --all-features
           cargo test --tests --all-features -- --test-threads=1
+
+      - name: Dump Conductor logs
+        if: failure()
+        run: docker compose -f scripts/docker-compose-oss.yaml logs conductor-server
       
       - name: Run clippy
         run: |

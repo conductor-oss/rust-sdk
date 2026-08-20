@@ -1,7 +1,7 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-use crate::error::Result;
+use crate::error::{ConductorError, Result};
 use crate::http::{ApiClient, ApiPath};
 use crate::models::{
     MetadataTag, SaveScheduleRequest, SearchResultWorkflowScheduleExecution, WorkflowSchedule,
@@ -83,33 +83,59 @@ impl SchedulerClient {
     }
 
     /// Pause a schedule
+    ///
+    /// Per-schedule pause/resume is `PUT`-mapped on OSS Conductor but `GET`-only
+    /// on some Orkes Conductor deployments. PUT is tried first and a `405`
+    /// response falls back to GET, mirroring the python-sdk/csharp-sdk clients.
     pub async fn pause_schedule(&self, name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{}/pause", name);
-        self.api
-            .get_no_response(ApiPath::templated(
-                &path,
-                "/scheduler/schedules/{name}/pause",
-            ))
+        let template = "/scheduler/schedules/{name}/pause";
+        match self
+            .api
+            .put_no_response(ApiPath::templated(&path, template), &())
             .await
+        {
+            Err(ConductorError::Server { status: 405, .. }) => {
+                self.api
+                    .get_no_response(ApiPath::templated(&path, template))
+                    .await
+            }
+            result => result,
+        }
     }
 
     /// Pause all schedules
+    ///
+    /// Always `GET`-mapped (admin/debug endpoint), unlike the per-schedule
+    /// pause/resume calls above.
     pub async fn pause_all_schedules(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/pause").await
     }
 
     /// Resume a schedule
+    ///
+    /// See [`Self::pause_schedule`] for the PUT-with-GET-fallback rationale.
     pub async fn resume_schedule(&self, name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{}/resume", name);
-        self.api
-            .get_no_response(ApiPath::templated(
-                &path,
-                "/scheduler/schedules/{name}/resume",
-            ))
+        let template = "/scheduler/schedules/{name}/resume";
+        match self
+            .api
+            .put_no_response(ApiPath::templated(&path, template), &())
             .await
+        {
+            Err(ConductorError::Server { status: 405, .. }) => {
+                self.api
+                    .get_no_response(ApiPath::templated(&path, template))
+                    .await
+            }
+            result => result,
+        }
     }
 
     /// Resume all schedules
+    ///
+    /// Always `GET`-mapped (admin/debug endpoint), unlike the per-schedule
+    /// pause/resume calls above.
     pub async fn resume_all_schedules(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/resume").await
     }
@@ -148,6 +174,9 @@ impl SchedulerClient {
     }
 
     /// Requeue all execution records
+    ///
+    /// Always `GET`-mapped (admin/debug endpoint), unlike the per-schedule
+    /// pause/resume calls above.
     pub async fn requeue_all_execution_records(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/requeue").await
     }

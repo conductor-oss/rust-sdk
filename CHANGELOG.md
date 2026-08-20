@@ -18,3 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The Rust SDK is unreleased, so the emitted metric surface is canonical on day one; there is no legacy mode or migration path
 - `ApiClient` public methods accept `impl Into<ApiPath>` to pair resolved paths with bounded-cardinality metric templates -- see [METRICS.md](METRICS.md#detailed-technical-notes)
+- Integration tests: `orkes_client_tests.rs`'s secret read tests (`get`/`list`/`exists`) now assert for real against OSS Conductor, using a dummy env-backed secret seeded in `scripts/docker-compose-oss.yaml`; secret writes (`put`/`delete`) are asserted to fail with a real `501` on OSS (read-only backend) instead of being skipped
+
+### Fixed
+
+- `SchedulerClient::pause_all_schedules`, `resume_all_schedules`, and `requeue_all_execution_records` now correctly send `GET` (they had been incorrectly switched to `PUT`); `pause_schedule`/`resume_schedule` now try `PUT` first and fall back to `GET` on a `405`, matching OSS Conductor's routes while staying compatible with Orkes Conductor deployments that only accept `GET` on those two endpoints

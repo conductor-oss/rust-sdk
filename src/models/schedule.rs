@@ -15,6 +15,12 @@ pub struct WorkflowSchedule {
     pub cron_expression: String,
 
     /// Workflow name to execute
+    ///
+    /// The server response nests this inside `start_workflow_request.name`
+    /// rather than as a top-level field, so this always deserializes to the
+    /// default empty string -- kept for API compatibility, prefer
+    /// `start_workflow_request` for the actual value.
+    #[serde(default)]
     pub workflow_name: String,
 
     /// Workflow version to execute

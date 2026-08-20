@@ -4,14 +4,14 @@ Comprehensive test suite for the Conductor Rust SDK, ported from the Java SDK te
 
 ## Overview
 
-This test suite includes **100+ tests** covering:
+This test suite includes 100+ tests covering:
 
-- **Workflow Client** (23 tests) - Start, pause, resume, terminate, search, retry, bulk operations
+- **Workflow Client** (15 tests) - Start, pause, resume, terminate, search, retry, bulk operations
 - **Task Client** (15 tests) - Task updates, logging, queue operations, search, polling
-- **Metadata Client** (4 tests) - Task/workflow definitions, tagging
-- **Worker Framework** (8 tests) - Polling, concurrency, error handling, configuration
-- **Integration Tests** (30+ tests) - End-to-end workflow execution, system tasks
-- **Orkes Clients** (30+ test stubs) - Scheduler, Secret, Prompt, Event, Authorization
+- **Metadata / Integration Tests** - Task/workflow definitions, tagging, end-to-end workflow execution, system tasks
+- **Worker Framework** (10 tests) - Polling, concurrency, error handling, configuration
+- **Orkes Clients** (16 tests) - Scheduler, Secret, Prompt, Event clients
+- **Authorization Client** (11 tests) - RBAC (applications, users, groups, permissions, roles)
 
 ## Test Organization
 
@@ -23,25 +23,84 @@ tests/
 ├── task_client_tests.rs            # TaskClient tests
 ├── integration_tests.rs            # Core integration tests + metadata
 ├── worker_tests.rs                 # Worker framework tests
-├── orkes_client_tests.rs           # Orkes-specific client tests
+├── orkes_client_tests.rs           # Scheduler/Secret/Prompt/Event client tests
 ├── authorization_client_tests.rs   # Authorization/RBAC tests
 └── performance_test.rs             # Performance/load tests
 ```
+
+## Gating Orkes-Enterprise-only tests: `ApiClient::is_oss()`
+
+Rather than `#[ignore]` or a `conductor_available()` helper (neither exists in
+this codebase), tests that only work against Orkes Enterprise Conductor call
+`client.is_oss().await` at the top of the test body and return early if it's
+`true`:
+
+```rust
+#[tokio::test]
+async fn test_prompt_save_and_get() {
+    let config = test_config();
+    let client = ConductorClient::new(config).unwrap();
+    if client.is_oss().await {
+        println!("Skipping: Prompt API requires Orkes Enterprise Conductor");
+        return;
+    }
+    // ... real assertions, not soft-`eprintln!`-and-continue ...
+}
+```
+
+`is_oss()` probes `POST /token` once per client and caches the result: OSS
+Conductor returns 404 (the endpoint doesn't exist), Enterprise returns a
+non-404 (e.g. 401/403 for the dummy credentials used in the probe).
+
+The following are empirically confirmed (as of this writing) to not exist on
+plain OSS Conductor and are gated this way:
+
+- `authorization_client_tests.rs` — the entire file (applications, users,
+  groups, permissions, roles all 404 on OSS)
+- `orkes_client_tests.rs` — the Prompt client tests and
+  `test_event_queue_configuration`
+
+Scheduler and event-handler tests in `orkes_client_tests.rs` *are*
+OSS-compatible and run unconditionally against either server type.
+
+Secret tests are a middle case: OSS Conductor registers a full secrets CRUD
+controller by default (`conductor.integrations.ai.enabled=true` is the
+default), but only ships read-only `SecretsDAO` backends. Reads (`get`,
+`list`, `exists`) are asserted for real against an env-backed secret seeded
+via `CONDUCTOR_SECRET_RUST_SDK_INTEGRATION_TEST` in
+`scripts/docker-compose-oss.yaml`; writes (`put`/`delete`) are asserted to
+fail with a real `501` rather than being skipped. This is safe against an
+unauthenticated OSS server precisely because it's unauthenticated: OSS
+Conductor has no auth at all (that's why the whole authorization surface
+404s), so anyone who can already reach the REST API can do far more than read
+a dummy seeded string — seeding a non-sensitive test value doesn't change
+that threat model.
+
+Whatever you gate this way, do it explicitly with a comment citing how you
+confirmed it (e.g. "confirmed empirically: 404 ...") — don't reintroduce a
+blanket try/`eprintln!`-and-continue pattern, since that silently swallows
+real regressions against Enterprise too, not just OSS.
 
 ## Prerequisites
 
 ### For OSS Conductor Tests
 
-1. **Start Conductor Server**:
-   ```bash
-   docker run --init -p 8080:8080 -p 5000:5000 \
-     conductoross/conductor:latest
-   ```
+The easiest way to get a local OSS Conductor + Postgres stack running is:
 
-2. **Set Environment Variables**:
-   ```bash
-   export CONDUCTOR_SERVER_URL=http://localhost:8080/api
-   ```
+```bash
+scripts/run-integration-oss.sh
+```
+
+This starts `scripts/docker-compose-oss.yaml`, waits for health, exports
+`CONDUCTOR_SERVER_URL`, runs `cargo test --tests --all-features -- --test-threads=1`,
+and tears the stack down on exit (`--keep-up` to leave it running).
+
+To do it manually instead:
+
+```bash
+docker compose -f scripts/docker-compose-oss.yaml up -d
+export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+```
 
 ### For Orkes Conductor Tests
 
@@ -59,11 +118,11 @@ tests/
 ### Run All Tests
 
 ```bash
-# Run all non-ignored tests
-cargo test --tests
+# Run all tests
+cargo test --tests --all-features
 
 # Run with serial execution (recommended for integration tests)
-cargo test --tests -- --test-threads=1
+cargo test --tests --all-features -- --test-threads=1
 ```
 
 ### Run Specific Test File
@@ -80,6 +139,10 @@ cargo test --test worker_tests
 
 # Integration tests
 cargo test --test integration_tests
+
+# Orkes-only clients (self-skip against OSS via is_oss())
+cargo test --test orkes_client_tests
+cargo test --test authorization_client_tests
 ```
 
 ### Run Specific Test
@@ -88,21 +151,8 @@ cargo test --test integration_tests
 # Run a single test
 cargo test --test workflow_client_tests test_pause_workflow
 
-#Run tests matching a pattern
+# Run tests matching a pattern
 cargo test --test workflow_client_tests pause
-```
-
-### Run Ignored Tests (Orkes-specific)
-
-```bash
-# Run all ignored tests
-cargo test --tests -- --ignored
-
-# Run specific ignored test file
-cargo test --test orkes_client_tests -- --ignored
-
-# Run both normal and ignored tests
-cargo test --tests -- --include-ignored
 ```
 
 ### Verbose Output
@@ -115,25 +165,6 @@ cargo test --tests -- --nocapture
 cargo test --test workflow_client_tests test_pause_workflow -- --nocapture
 ```
 
-## Test Categories
-
-### ✅ Always Run (OSS Conductor)
-
-These tests work with the open-source Conductor server:
-
-- `workflow_client_tests.rs` - All workflow operations
-- `task_client_tests.rs` - All task operations
-- `integration_tests.rs` - Core integration tests
-- `worker_tests.rs` - Worker framework tests
-
-### ⚠️ Requires Orkes (Marked `#[ignore]`)
-
-These tests require Orkes Conductor features:
-
-- `orkes_client_tests.rs` - Scheduler, Secret, Prompt, Event clients
-- `authorization_client_tests.rs` - RBAC features
-- Tagged operations in `integration_tests.rs`
-
 ## Test Utilities
 
 The `common` module provides shared utilities:
@@ -144,27 +175,14 @@ use common::*;
 // Configuration
 let config = test_config();
 
-// Check if Conductor is available
-if !conductor_available().await {
-    return; // Skip test
-}
-
 // Generate unique names
 let task_name = generate_unique_task_name("prefix");
 let workflow_name = generate_unique_workflow_name("prefix");
-
-// Cleanup helpers
-cleanup_workflow(&client, &workflow_id).await;
-cleanup_task_def(&client, &task_name).await;
-cleanup_workflow_def(&client, &workflow_name, 1).await;
 
 // Retry with backoff (for eventual consistency)
 retry_with_backoff(|| async {
     metadata.get_workflow_def(&name, Some(1)).await
 }, 5).await?;
-
-// Wait for workflow status
-wait_for_workflow_status(&client, &workflow_id, WorkflowStatus::Completed, Duration::from_secs(30)).await?;
 ```
 
 ## Writing New Tests
@@ -174,147 +192,62 @@ wait_for_workflow_status(&client, &workflow_id, WorkflowStatus::Completed, Durat
 ```rust
 #[tokio::test]
 async fn test_my_feature() {
-    // 1. Check availability
-    if !conductor_available().await {
-        eprintln!("Skipping test: Conductor server not available");
-        return;
-    }
-
-    // 2. Setup
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
     let workflow_name = generate_unique_workflow_name("test_my_feature");
 
-    // 3. Test logic
-    // ... your test code ...
-
-    // 4. Cleanup
-    cleanup_workflow_def(&client, &workflow_name, 1).await;
+    // ... real assertions; let failures fail the test ...
 }
 ```
 
-### Orkes-Specific Test Template
+### Orkes-Enterprise-only Test Template
 
 ```rust
 #[tokio::test]
-#[ignore] // Requires Orkes Conductor
-async fn test_orkes_feature() {
-    if !conductor_available().await {
+async fn test_orkes_only_feature() {
+    let config = test_config();
+    let client = ConductorClient::new(config).unwrap();
+    if client.is_oss().await {
+        println!("Skipping: <feature> requires Orkes Enterprise Conductor");
         return;
     }
 
-    // ... test logic ...
+    // ... real assertions ...
 }
-```
-
-## Expected Test Results
-
-### Passing Tests (OSS Conductor)
-
-With a running OSS Conductor server, you should see:
-
-```
-running 80 tests
-test test_task_def_crud ... ok
-test test_workflow_def_crud ... ok
-test test_pause_workflow ... ok
-test test_worker_poll_and_execute ... ok
-...
-
-test result: ok. 80 passed; 0 failed; 30 ignored; 0 measured
-```
-
-### Ignored Tests
-
-Tests marked `#[ignore]` will show:
-
-```
-test test_scheduler_save_and_get ... ignored
-test test_secret_put_and_get ... ignored
-...
-```
-
-To run them:
-```bash
-cargo test --tests -- --ignored
 ```
 
 ## Continuous Integration
 
-### GitHub Actions Example
-
-```yaml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    
-    services:
-      conductor:
-        image: conductoross/conductor:latest
-        ports:
-          - 8080:8080
-          - 5000:5000
-    
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      
-      - name: Wait for Conductor
-        run: |
-          timeout 60 bash -c 'until curl -f http://localhost:8080/health; do sleep 2; done'
-      
-      - name: Run tests
-        run: cargo test --tests -- --test-threads=1
-        env:
-          CONDUCTOR_SERVER_URL: http://localhost:8080/api
-```
+See the `test-integration` job in `.github/workflows/ci.yml`, which uses the
+same `scripts/docker-compose-oss.yaml` stack as `scripts/run-integration-oss.sh`
+(the OSS image tag is pinned via the `E2E_TEST_OSS_CONDUCTOR_VERSION`
+organization variable, overridable via a `workflow_dispatch` input).
 
 ## Troubleshooting
 
-### Tests are skipped
+### Connection refused
 
-**Cause**: Conductor server not available
+**Cause**: Wrong server URL, or the stack isn't up yet.
 
-**Solution**:
+**Solution**: Check environment variable and health endpoint:
 ```bash
-# Check if Conductor is running
+echo $CONDUCTOR_SERVER_URL
 curl http://localhost:8080/health
-
-# Start Conductor if not running
-docker run --init -p 8080:8080 -p 5000:5000 \
-  conductoross/conductor:latest
 ```
 
 ### Tests timeout
 
-**Cause**: Workflows taking longer than expected
+**Cause**: Workflows taking longer than expected, or tests running concurrently
+against shared server state.
 
-**Solution**: Increase timeout or use `--test-threads=1`:
+**Solution**: Use `--test-threads=1`:
 ```bash
 cargo test --tests -- --test-threads=1
 ```
 
-### Connection refused
-
-**Cause**: Wrong server URL
-
-**Solution**: Check environment variable:
-```bash
-echo $CONDUCTOR_SERVER_URL
-# Should be: http://localhost:8080/api
-```
-
 ### Authentication errors (Orkes tests)
 
-**Cause**: Missing or invalid credentials
+**Cause**: Missing or invalid credentials.
 
 **Solution**: Set auth credentials:
 ```bash
@@ -324,7 +257,7 @@ export CONDUCTOR_AUTH_SECRET=your_secret
 
 ## Test Coverage
 
-To generate test coverage report:
+To generate a test coverage report:
 
 ```bash
 # Install tarpaulin
@@ -356,15 +289,8 @@ These tests measure:
 When adding new tests:
 
 1. Use unique names with `generate_unique_name()` to avoid conflicts
-2. Always cleanup resources in tests
-3. Mark Orkes-specific tests with `#[ignore]`
+2. Always clean up resources in tests
+3. Gate Orkes-Enterprise-only tests with an explicit `is_oss()` check and a
+   comment explaining why (not a blanket try/`eprintln!`)
 4. Add descriptive test names and comments
 5. Follow the existing test patterns
-
-## Summary
-
-- **OSS Tests**: ~80 tests for core functionality
-- **Orkes Tests**: ~30 test stubs (require Orkes Conductor)  
-- **Total Coverage**: ~110 tests across all clients and features
-- **Easy to Run**: `cargo test --tests`
-- **CI-Ready**: Works in GitHub Actions and other CI systems
