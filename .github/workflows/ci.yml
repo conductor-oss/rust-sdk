@@ -3,9 +3,12 @@ name: CI
 on:
   push:
     branches:
-      - main
-      - master
+      # TEMPORARY: exercise CI on this working branch directly. Remove this
+      # branch entry before merging to main.
+      - e2e-against-conductor-with-local-script
   pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       oss_conductor_version:
