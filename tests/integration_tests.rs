@@ -5,13 +5,16 @@ use conductor::{
     client::ConductorClient,
     configuration::Configuration,
     models::{
-        RetryLogic, StartWorkflowRequest, Task, TaskDef, TimeoutPolicy, WorkflowDef, WorkflowTask,
+        RetryLogic, StartWorkflowRequest, Task, TaskDef, TimeoutPolicy, WorkflowDef,
+        WorkflowStatus, WorkflowTask,
     },
     worker::{FnWorker, TaskHandler, WorkerOutput},
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+mod common;
 
 /// Test configuration from environment
 fn test_config() -> Configuration {
@@ -555,14 +558,26 @@ async fn test_do_while_workflow() {
 
     metadata.register_workflow_def(&workflow_def).await.unwrap();
 
-    // Execute workflow
+    // Start the workflow and poll for completion rather than using
+    // `execute_workflow`'s single synchronous call: that call only waits up
+    // to its own deadline before returning whatever state the workflow
+    // happens to be in at that instant (not an error), so a few slow sweep
+    // cycles on a busy shared server can make it return early with a
+    // still-RUNNING workflow even though the workflow itself is correct and
+    // would complete shortly after. Polling gives it a generous, real
+    // completion budget instead.
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
-    let result = workflow_client
-        .execute_workflow(&request, Duration::from_secs(25))
-        .await
-        .unwrap();
+    let workflow_id = workflow_client.start_workflow(&request).await.unwrap();
+    let final_status =
+        common::wait_for_workflow_completion(&client, &workflow_id, Duration::from_secs(60))
+            .await
+            .unwrap_or_else(|e| panic!("workflow_id={workflow_id}: {e}"));
 
-    assert!(result.is_successful(), "Do-while workflow should complete");
+    assert_eq!(
+        final_status,
+        WorkflowStatus::Completed,
+        "Do-while workflow should complete successfully (workflow_id={workflow_id})"
+    );
 
     // Cleanup
     metadata.delete_workflow_def(&workflow_name, 1).await.ok();
