@@ -255,7 +255,9 @@ async fn test_check_permissions() {
     // A real (freshly created) group id is required here: Enterprise 400s on
     // the empty path segment this used to send (GET /groups//permissions).
     let group_id = generate_unique_name("test_perm_group");
-    auth.upsert_group(&UpsertGroupRequest::new(&group_id), &group_id)
+    let request = UpsertGroupRequest::new(&group_id)
+        .with_description(format!("Test group {}", &group_id[..8]));
+    auth.upsert_group(&request, &group_id)
         .await
         .expect("upsert_group should succeed");
 
