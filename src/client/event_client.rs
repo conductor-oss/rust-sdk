@@ -4,6 +4,7 @@
 use crate::error::Result;
 use crate::http::{ApiClient, ApiPath};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Client for event operations (queue configurations)
 #[derive(Clone)]
@@ -119,7 +120,16 @@ impl EventClient {
     }
 
     /// Get all queue configurations
-    pub async fn get_all_queue_configurations(&self) -> Result<Vec<QueueConfiguration>> {
+    ///
+    /// Unlike `get_queue_configuration`, the server's "get all" endpoint
+    /// (`GET /event/queue/config`) returns a raw `{queueIdentifier: value}`
+    /// object rather than a list of `QueueConfiguration`, so the response is
+    /// deserialized (and passed through) as-is rather than forced into
+    /// `Vec<QueueConfiguration>`. Note this is a legacy endpoint on Orkes
+    /// Enterprise -- queue/broker integrations are now managed via the
+    /// Integrations API -- so it currently always returns an empty map
+    /// there, but any real data it does send is returned unmodified.
+    pub async fn get_all_queue_configurations(&self) -> Result<HashMap<String, String>> {
         self.api.get("/event/queue/config").await
     }
 

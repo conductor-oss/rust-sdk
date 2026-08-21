@@ -27,10 +27,14 @@ impl SecretClient {
     }
 
     /// Get a secret value
+    ///
+    /// The server returns this as `text/plain` (the raw secret value, not a
+    /// JSON string), so this uses `get_text` rather than the generic JSON
+    /// `get` -- see `ApiClient::get_text`.
     pub async fn get_secret(&self, key: &str) -> Result<String> {
         let path = format!("/secrets/{}", key);
         self.api
-            .get(ApiPath::templated(&path, "/secrets/{key}"))
+            .get_text(ApiPath::templated(&path, "/secrets/{key}"))
             .await
     }
 
