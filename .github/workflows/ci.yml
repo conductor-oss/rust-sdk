@@ -152,8 +152,8 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --all-features
 
-  test-integration:
-    name: Integration Tests
+  integration-tests-oss:
+    name: Integration Tests (OSS)
     runs-on: ubuntu-latest
     env:
       OSS_CONDUCTOR_VERSION: ${{ inputs.oss_conductor_version || vars.E2E_TEST_OSS_CONDUCTOR_VERSION }}
@@ -215,8 +215,8 @@ jobs:
         if: failure()
         run: docker compose -f scripts/docker-compose-oss.yaml logs conductor-server
 
-  test-integration-enterprise:
-    name: Integration Tests (Enterprise)
+  integration-test:
+    name: Integration Tests
     runs-on: ubuntu-latest
     
     steps:
