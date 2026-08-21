@@ -534,7 +534,10 @@ async fn test_do_while_workflow() {
 
     let workflow_name = format!("test_dowhile_wf_{}", &uuid::Uuid::new_v4().to_string()[..8]);
 
-    // Create workflow with do-while loop (3 iterations)
+    // Create workflow with do-while loop (3 iterations). Conductor tracks the
+    // iteration count as an output field on the DO_WHILE task itself (here,
+    // `loop_ref`), not on the loop body task, so the condition must reference
+    // `loop_ref`, not `loop_body_ref`.
     let loop_task = WorkflowTask::inline(
         "loop_body_ref",
         "(function() { return { iteration: $.iteration || 0 }; })();",
@@ -542,7 +545,7 @@ async fn test_do_while_workflow() {
 
     let do_while = WorkflowTask::do_while(
         "loop_ref",
-        "if ($.loop_body_ref['iteration'] < 3) { true; } else { false; }",
+        "if ($.loop_ref['iteration'] < 3) { true; } else { false; }",
         vec![loop_task],
     );
 
