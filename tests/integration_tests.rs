@@ -5,16 +5,13 @@ use conductor::{
     client::ConductorClient,
     configuration::Configuration,
     models::{
-        RetryLogic, StartWorkflowRequest, Task, TaskDef, TimeoutPolicy, WorkflowDef,
-        WorkflowStatus, WorkflowTask,
+        RetryLogic, StartWorkflowRequest, Task, TaskDef, TimeoutPolicy, WorkflowDef, WorkflowTask,
     },
     worker::{FnWorker, TaskHandler, WorkerOutput},
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-
-mod common;
 
 /// Test configuration from environment
 fn test_config() -> Configuration {
@@ -531,6 +528,12 @@ async fn test_switch_task_workflow() {
 #[tokio::test]
 async fn test_do_while_workflow() {
     let config = test_config();
+    // Stay safely under the HTTP client's own request timeout: a
+    // synchronous execute_workflow wait longer than that would just get cut
+    // off by a client-side timeout error before the server-side deadline is
+    // ever reached (see `ApiClient::new`, which builds the reqwest client
+    // with `config.timeout`).
+    let sync_wait = config.timeout.saturating_sub(Duration::from_secs(5));
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
     let workflow_client = client.workflow_client();
@@ -558,25 +561,17 @@ async fn test_do_while_workflow() {
 
     metadata.register_workflow_def(&workflow_def).await.unwrap();
 
-    // Start the workflow and poll for completion rather than using
-    // `execute_workflow`'s single synchronous call: that call only waits up
-    // to its own deadline before returning whatever state the workflow
-    // happens to be in at that instant (not an error), so a few slow sweep
-    // cycles on a busy shared server can make it return early with a
-    // still-RUNNING workflow even though the workflow itself is correct and
-    // would complete shortly after. Polling gives it a generous, real
-    // completion budget instead.
+    // Execute workflow
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
-    let workflow_id = workflow_client.start_workflow(&request).await.unwrap();
-    let final_status =
-        common::wait_for_workflow_completion(&client, &workflow_id, Duration::from_secs(60))
-            .await
-            .unwrap_or_else(|e| panic!("workflow_id={workflow_id}: {e}"));
+    let result = workflow_client
+        .execute_workflow(&request, sync_wait)
+        .await
+        .unwrap();
 
-    assert_eq!(
-        final_status,
-        WorkflowStatus::Completed,
-        "Do-while workflow should complete successfully (workflow_id={workflow_id})"
+    assert!(
+        result.is_successful(),
+        "Do-while workflow should complete (workflow_id={})",
+        result.workflow_id
     );
 
     // Cleanup

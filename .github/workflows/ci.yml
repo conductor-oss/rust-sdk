@@ -248,6 +248,10 @@ jobs:
           CONDUCTOR_SERVER_URL: ${{ vars.SDKDEV_SERVER_URL }}
           CONDUCTOR_AUTH_KEY: ${{ vars.SDKDEV_AUTH_KEY }}
           CONDUCTOR_AUTH_SECRET: ${{ secrets.SDKDEV_AUTH_SECRET }}
+          # The shared dev instance is occasionally busy enough (concurrent
+          # CI runs across SDKs, etc.) that the default 30s client timeout
+          # has been observed to trip on plain requests (e.g. start_workflow).
+          CONDUCTOR_TIMEOUT_SECS: "60"
         run: cargo test --tests --all-features -- --test-threads=1
 
   docs:
