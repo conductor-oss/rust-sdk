@@ -207,6 +207,9 @@ async fn test_list_groups() {
 // Permission Tests
 // =============================================================================
 
+// NOTE: despite the name, this doesn't actually call grant_permissions /
+// remove_permissions -- it only smoke-tests get_granted_permissions_for_user.
+// TODO: exercise the full grant -> get -> remove flow with a real TargetRef.
 #[tokio::test]
 async fn test_grant_and_remove_permissions() {
     let config = test_config();
@@ -217,13 +220,28 @@ async fn test_grant_and_remove_permissions() {
     }
     let auth = client.authorization_client();
 
+    // A real (freshly created) user id is required here: Enterprise 400s on
+    // the empty path segment this used to send (GET /users//permissions).
+    let user_id = generate_unique_name("test_perm_user");
+    auth.upsert_user(
+        &UpsertUserRequest::new(format!("Test User {}", &user_id[..8])),
+        &user_id,
+    )
+    .await
+    .expect("upsert_user should succeed");
+
     let perms = auth
-        .get_granted_permissions_for_user("")
+        .get_granted_permissions_for_user(&user_id)
         .await
         .expect("get_granted_permissions_for_user should succeed");
     println!("Found {} permissions", perms.len());
+
+    auth.delete_user(&user_id).await.ok();
 }
 
+// NOTE: despite the name, this doesn't actually call check_permissions -- it
+// only smoke-tests get_granted_permissions_for_group.
+// TODO: exercise the full grant -> get -> remove flow with a real TargetRef.
 #[tokio::test]
 async fn test_check_permissions() {
     let config = test_config();
@@ -234,11 +252,20 @@ async fn test_check_permissions() {
     }
     let auth = client.authorization_client();
 
+    // A real (freshly created) group id is required here: Enterprise 400s on
+    // the empty path segment this used to send (GET /groups//permissions).
+    let group_id = generate_unique_name("test_perm_group");
+    auth.upsert_group(&UpsertGroupRequest::new(&group_id), &group_id)
+        .await
+        .expect("upsert_group should succeed");
+
     let perms = auth
-        .get_granted_permissions_for_group("")
+        .get_granted_permissions_for_group(&group_id)
         .await
         .expect("get_granted_permissions_for_group should succeed");
     println!("Found {} group permissions", perms.len());
+
+    auth.delete_group(&group_id).await.ok();
 }
 
 // =============================================================================
