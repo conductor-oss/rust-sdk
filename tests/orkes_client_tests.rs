@@ -113,12 +113,25 @@ async fn test_scheduler_search_executions() {
     let client = ConductorClient::new(config).unwrap();
     let scheduler = client.scheduler_client();
 
-    // Search schedule executions
+    // Search schedule executions. `total_hits >= 0` is vacuous for an i64, so
+    // assert the pagination contract instead: at most `size` rows come back, and
+    // the page can't claim more rows than the server says exist in total.
+    let size = 10;
     let results = scheduler
-        .search_schedule_executions(Some(0), Some(10), None, None, None)
+        .search_schedule_executions(Some(0), Some(size), None, None, None)
         .await
         .expect("search_schedule_executions should succeed");
-    assert!(results.total_hits >= 0);
+    assert!(
+        results.results.len() <= size as usize,
+        "page returned {} rows for size={size}",
+        results.results.len()
+    );
+    assert!(
+        results.total_hits >= results.results.len() as i64,
+        "total_hits {} < the {} rows on this page",
+        results.total_hits,
+        results.results.len()
+    );
 }
 
 #[tokio::test]
@@ -127,9 +140,11 @@ async fn test_scheduler_get_next_execution_times() {
     let client = ConductorClient::new(config).unwrap();
     let scheduler = client.scheduler_client();
 
-    // Conductor's scheduler parses cron via Quartz, which requires a seconds
-    // field (6-7 parts); a plain 5-field Unix cron is rejected with "Invalid
-    // cron expression" (confirmed empirically), regardless of server type.
+    // Conductor's scheduler parses cron with Spring's
+    // org.springframework.scheduling.support.CronExpression (see
+    // SchedulerService.parseCron), which requires a seconds field (6 parts); a
+    // plain 5-field Unix cron is rejected with "Invalid cron expression",
+    // regardless of server type.
     let times = scheduler
         .get_next_few_schedule_execution_times("0 0 0 * * ?", None, None, Some(5))
         .await
@@ -411,15 +426,31 @@ async fn test_event_handlers() {
 async fn test_event_queue_configuration() {
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
-    if client.is_oss().await {
-        println!("Skipping: Event queue configuration API requires Orkes Enterprise Conductor");
-        return;
-    }
     let event = client.event_client();
 
+    if client.is_oss().await {
+        // Plain OSS Conductor maps no queue-config routes at all
+        // (rest/.../EventResource.java), so this must fail rather than quietly
+        // return an empty map -- which is also what proves the gate is real and
+        // not just a skip that would pass against any server.
+        let err = event
+            .get_all_queue_configurations()
+            .await
+            .expect_err("OSS Conductor has no /event/queue/config route");
+        println!("Skipping rest: queue configuration API requires Orkes Enterprise ({err:?})");
+        return;
+    }
+
+    // Orkes maps this as `Map<String, String> getQueueNames()` returning a
+    // hardcoded `Map.of()` -- broker integrations moved to the Integrations API
+    // -- so an empty map is the correct, and only, answer here. The assertion
+    // that matters is that the response deserializes into the map shape at all.
     let configs = event
         .get_all_queue_configurations()
         .await
         .expect("get_all_queue_configurations should succeed");
-    println!("Found {} queue configurations", configs.len());
+    assert!(
+        configs.is_empty(),
+        "EventResource.getQueueNames() returns Map.of(); got {configs:?}"
+    );
 }

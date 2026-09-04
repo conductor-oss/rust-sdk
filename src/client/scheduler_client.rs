@@ -84,15 +84,18 @@ impl SchedulerClient {
 
     /// Pause a schedule
     ///
-    /// Per-schedule pause/resume is `PUT`-mapped on OSS Conductor but `GET`-only
-    /// on some Orkes Conductor deployments. PUT is tried first and a `405`
-    /// response falls back to GET, mirroring the python-sdk/csharp-sdk clients.
+    /// Per-schedule pause/resume is `PUT`-mapped on OSS Conductor
+    /// (`scheduler/core/.../rest/SchedulerResource.java` maps only `@PutMapping`).
+    /// Orkes Conductor accepts both `GET` and `PUT` as of the dual
+    /// `@RequestMapping(method = {GET, PUT})` added in 2026-07; deployments older
+    /// than that are `GET`-only. So PUT is tried first and a `405` falls back to
+    /// GET, which covers every server family without an extra probe.
     pub async fn pause_schedule(&self, name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{}/pause", name);
         let template = "/scheduler/schedules/{name}/pause";
         match self
             .api
-            .put_no_response(ApiPath::templated(&path, template), &())
+            .put_no_body(ApiPath::templated(&path, template))
             .await
         {
             Err(ConductorError::Server { status: 405, .. }) => {
@@ -106,8 +109,8 @@ impl SchedulerClient {
 
     /// Pause all schedules
     ///
-    /// Always `GET`-mapped (admin/debug endpoint), unlike the per-schedule
-    /// pause/resume calls above.
+    /// `GET`-mapped on both server families (admin/debug endpoint), unlike the
+    /// per-schedule pause/resume calls above -- no PUT is ever sent here.
     pub async fn pause_all_schedules(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/pause").await
     }
@@ -120,7 +123,7 @@ impl SchedulerClient {
         let template = "/scheduler/schedules/{name}/resume";
         match self
             .api
-            .put_no_response(ApiPath::templated(&path, template), &())
+            .put_no_body(ApiPath::templated(&path, template))
             .await
         {
             Err(ConductorError::Server { status: 405, .. }) => {
@@ -134,8 +137,8 @@ impl SchedulerClient {
 
     /// Resume all schedules
     ///
-    /// Always `GET`-mapped (admin/debug endpoint), unlike the per-schedule
-    /// pause/resume calls above.
+    /// `GET`-mapped on both server families (admin/debug endpoint), unlike the
+    /// per-schedule pause/resume calls above -- no PUT is ever sent here.
     pub async fn resume_all_schedules(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/resume").await
     }
@@ -175,8 +178,8 @@ impl SchedulerClient {
 
     /// Requeue all execution records
     ///
-    /// Always `GET`-mapped (admin/debug endpoint), unlike the per-schedule
-    /// pause/resume calls above.
+    /// `GET`-mapped on both server families (admin/debug endpoint), unlike the
+    /// per-schedule pause/resume calls above -- no PUT is ever sent here.
     pub async fn requeue_all_execution_records(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/requeue").await
     }

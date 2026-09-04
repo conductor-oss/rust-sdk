@@ -122,13 +122,17 @@ impl EventClient {
     /// Get all queue configurations
     ///
     /// Unlike `get_queue_configuration`, the server's "get all" endpoint
-    /// (`GET /event/queue/config`) returns a raw `{queueIdentifier: value}`
-    /// object rather than a list of `QueueConfiguration`, so the response is
-    /// deserialized (and passed through) as-is rather than forced into
-    /// `Vec<QueueConfiguration>`. Note this is a legacy endpoint on Orkes
-    /// Enterprise -- queue/broker integrations are now managed via the
-    /// Integrations API -- so it currently always returns an empty map
-    /// there, but any real data it does send is returned unmodified.
+    /// (`GET /event/queue/config`) returns a `{queueIdentifier: value}` object
+    /// rather than a list of `QueueConfiguration`. The `HashMap<String, String>`
+    /// here matches the server signature exactly: Orkes declares
+    /// `Map<String, String> getQueueNames()` in `EventResource`.
+    ///
+    /// That method returns a hardcoded `Map.of()` -- queue/broker integrations
+    /// moved to the Integrations API and the sibling `putQueueConfig` is
+    /// `@Deprecated(forRemoval = true)` -- so in practice this is always empty on
+    /// Orkes. Plain OSS Conductor has no queue-config routes at all
+    /// (`rest/.../EventResource.java` maps only the event-handler endpoints), so
+    /// it answers 404.
     pub async fn get_all_queue_configurations(&self) -> Result<HashMap<String, String>> {
         self.api.get("/event/queue/config").await
     }

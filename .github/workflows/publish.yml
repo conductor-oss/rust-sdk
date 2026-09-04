@@ -53,6 +53,7 @@ jobs:
     name: Run Full Test Suite
     runs-on: ubuntu-latest
     needs: validate
+    timeout-minutes: 45
     env:
       OSS_CONDUCTOR_VERSION: ${{ vars.E2E_TEST_OSS_CONDUCTOR_VERSION }}
 
@@ -91,20 +92,16 @@ jobs:
       - name: Start Conductor OSS stack
         run: docker compose -f scripts/docker-compose-oss.yaml up -d
       
-      - name: Wait for Conductor
-        run: |
-          timeout 120 bash -c 'until curl -f -s http://localhost:8080/health | grep -q "healthy"; do 
-            echo "Waiting for Conductor..."
-            sleep 3
-          done'
-          echo "Conductor is ready!"
+      - name: Wait for Conductor to be healthy
+        # Matches HEALTH_TIMEOUT in scripts/run-integration-oss.sh and the same step in ci.yml.
+        run: timeout 180 bash -c 'until curl -sf http://localhost:8080/health; do sleep 5; done'
       
       - name: Run all tests
         env:
           CONDUCTOR_SERVER_URL: http://localhost:8080/api
         run: |
           cargo test --lib --all-features
-          cargo test --tests --all-features -- --test-threads=1
+          cargo test --tests --all-features -- --test-threads=1 --nocapture
 
       - name: Dump Conductor logs
         if: failure()

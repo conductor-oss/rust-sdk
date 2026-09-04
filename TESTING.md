@@ -112,7 +112,7 @@ Error: Unauthorized: Invalid token
 
 ### 1. Start server
 ```bash
-docker run -d -p 8080:8080 conductoross/conductor:latest
+docker compose -f scripts/docker-compose-oss.yaml up -d
 ```
 
 ### 2. Wait for server to be ready (~30 seconds)
@@ -142,9 +142,8 @@ Open http://localhost:8080 in your browser to see:
 
 ### 5. Cleanup
 ```bash
-# Stop and remove container
-docker stop conductor
-docker rm conductor
+# Stop and remove the stack (including the Postgres volume)
+docker compose -f scripts/docker-compose-oss.yaml down -v
 ```
 
 ---
@@ -198,7 +197,7 @@ cargo test --test workflow_client_tests -- --nocapture
 
 ### Check server logs
 ```bash
-docker logs conductor
+docker compose -f scripts/docker-compose-oss.yaml logs -f conductor-server
 ```
 
 ### Test individual operations
@@ -231,7 +230,7 @@ cargo test --test performance_test -- --nocapture
 
 ## CI/CD Integration
 
-See the `test-integration` job in [.github/workflows/ci.yml](.github/workflows/ci.yml)
+See the `integration-tests-oss` job in [.github/workflows/ci.yml](.github/workflows/ci.yml)
 and the `test` job in [.github/workflows/publish.yml](.github/workflows/publish.yml),
 both of which start the same `scripts/docker-compose-oss.yaml` stack used by
 `scripts/run-integration-oss.sh` locally. The OSS image tag is pinned via the
@@ -248,7 +247,7 @@ both of which start the same `scripts/docker-compose-oss.yaml` stack used by
 | `cargo test --test workflow_client_tests` | Run workflow tests |
 | `cargo test test_start_workflow -- --exact` | Run single test |
 | `cargo test -- --nocapture` | Show print statements |
-| `cargo test -- --ignored` | Run Orkes-only tests |
+| `cargo test --tests --all-features -- --nocapture` | Show `Skipping: ...` gate messages |
 | `RUST_LOG=debug cargo test` | Enable debug logs |
 
 ---

@@ -14,19 +14,11 @@ pub struct WorkflowSchedule {
     /// Cron expression for the schedule
     pub cron_expression: String,
 
-    /// Workflow name to execute
-    ///
-    /// The server response nests this inside `start_workflow_request.name`
-    /// rather than as a top-level field, so this always deserializes to the
-    /// default empty string -- kept for API compatibility, prefer
-    /// `start_workflow_request` for the actual value.
-    #[serde(default)]
-    pub workflow_name: String,
-
-    /// Workflow version to execute
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub workflow_version: Option<i32>,
-
+    // NOTE: there is deliberately no top-level `workflow_name` / `workflow_version`
+    // here. Neither server family has such a field -- both OSS Conductor
+    // (scheduler/core/.../model/WorkflowSchedule.java) and Orkes Conductor
+    // (scheduler-oss/.../model/WorkflowSchedule.java) carry the workflow name and
+    // version only inside `startWorkflowRequest`. Use `start_workflow_request`.
     /// Start workflow request parameters
     #[serde(default)]
     pub start_workflow_request: Option<StartWorkflowScheduleRequest>,
@@ -60,12 +52,22 @@ pub struct WorkflowSchedule {
     pub created_by: Option<String>,
 
     /// Update time (epoch ms)
+    ///
+    /// The server field is `updatedTime`, not `updateTime`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub update_time: Option<i64>,
+    pub updated_time: Option<i64>,
 
     /// Updated by user
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
+
+    /// Reason the schedule was paused, when the server supplies one
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused_reason: Option<String>,
+
+    /// Free-form description
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Start workflow request for schedules

@@ -4,14 +4,22 @@ Comprehensive test suite for the Conductor Rust SDK, ported from the Java SDK te
 
 ## Overview
 
-This test suite includes 100+ tests covering:
+This test suite covers:
 
-- **Workflow Client** (15 tests) - Start, pause, resume, terminate, search, retry, bulk operations
-- **Task Client** (15 tests) - Task updates, logging, queue operations, search, polling
+- **Workflow Client** - Start, pause, resume, terminate, search, retry, bulk operations
+- **Task Client** - Task updates, logging, queue operations, search, polling
 - **Metadata / Integration Tests** - Task/workflow definitions, tagging, end-to-end workflow execution, system tasks
-- **Worker Framework** (10 tests) - Polling, concurrency, error handling, configuration
-- **Orkes Clients** (16 tests) - Scheduler, Secret, Prompt, Event clients
-- **Authorization Client** (11 tests) - RBAC (applications, users, groups, permissions, roles)
+- **Worker Framework** - Polling, concurrency, error handling, configuration
+- **Orkes Clients** - Scheduler, Secret, Prompt, Event clients
+- **Authorization Client** - RBAC (applications, users, groups, permissions, roles)
+- **Contract tests** - Verb, content-type and response-shape contracts pinned against a local
+  mock server, so they need no Conductor instance at all
+
+Per-file counts are deliberately not listed here. They go stale on every added test, and there
+is no single right number: `tests/common/mod.rs` carries 3 unit tests of its own, and Rust
+compiles that module into every integration binary that declares `mod common;`, so `cargo test`
+reports them once per binary. A file's own test count and the count cargo prints for it differ by
+exactly those 3. For the current list, run `cargo test --tests -- --list`.
 
 ## Test Organization
 
@@ -25,15 +33,18 @@ tests/
 ├── worker_tests.rs                 # Worker framework tests
 ├── orkes_client_tests.rs           # Scheduler/Secret/Prompt/Event client tests
 ├── authorization_client_tests.rs   # Authorization/RBAC tests
+├── scheduler_verb_fallback_tests.rs # HTTP verb contract (mock server, no Conductor needed)
+├── secret_client_verb_tests.rs     # Secret verb + text/plain contract (mock server)
+├── response_shape_tests.rs         # Response-shape contracts (mock server)
 └── performance_test.rs             # Performance/load tests
 ```
 
 ## Gating Orkes-Enterprise-only tests: `ApiClient::is_oss()`
 
-Rather than `#[ignore]` or a `conductor_available()` helper (neither exists in
-this codebase), tests that only work against Orkes Enterprise Conductor call
+Tests that only work against Orkes Enterprise Conductor call
 `client.is_oss().await` at the top of the test body and return early if it's
-`true`:
+`true`, rather than being marked `#[ignore]` or gated on a `conductor_available()`
+helper (that helper does not exist in this codebase):
 
 ```rust
 #[tokio::test]
@@ -80,6 +91,10 @@ Whatever you gate this way, do it explicitly with a comment citing how you
 confirmed it (e.g. "confirmed empirically: 404 ...") — don't reintroduce a
 blanket try/`eprintln!`-and-continue pattern, since that silently swallows
 real regressions against Enterprise too, not just OSS.
+
+`#[ignore]` is still the right tool for a different problem: a test that needs a
+fixture or an environment this suite doesn't set up, regardless of server type
+(see the two in `task_client_tests.rs`). Just don't use it for server-type gating.
 
 ## Prerequisites
 
@@ -178,6 +193,16 @@ let config = test_config();
 // Generate unique names
 let task_name = generate_unique_task_name("prefix");
 let workflow_name = generate_unique_workflow_name("prefix");
+let name = generate_unique_name("prefix");
+
+// Cleanup helpers (best-effort; they swallow errors)
+cleanup_workflow(&client, &workflow_id).await;
+cleanup_task_def(&client, &task_name).await;
+cleanup_workflow_def(&client, &workflow_name, 1).await;
+
+// Wait for a workflow to reach a status / to finish
+wait_for_workflow_status(&client, &workflow_id, WorkflowStatus::Completed, Duration::from_secs(30)).await?;
+wait_for_workflow_completion(&client, &workflow_id, Duration::from_secs(30)).await?;
 
 // Retry with backoff (for eventual consistency)
 retry_with_backoff(|| async {
@@ -197,6 +222,10 @@ async fn test_my_feature() {
     let workflow_name = generate_unique_workflow_name("test_my_feature");
 
     // ... real assertions; let failures fail the test ...
+
+    // Anything created on a shared server must be cleaned up on the failure path
+    // too: collect the result first, clean up, then assert. A panic between
+    // create and delete orphans the resource for every later run.
 }
 ```
 
@@ -218,7 +247,7 @@ async fn test_orkes_only_feature() {
 
 ## Continuous Integration
 
-See the `test-integration` job in `.github/workflows/ci.yml`, which uses the
+See the `integration-tests-oss` job in `.github/workflows/ci.yml`, which uses the
 same `scripts/docker-compose-oss.yaml` stack as `scripts/run-integration-oss.sh`
 (the OSS image tag is pinned via the `E2E_TEST_OSS_CONDUCTOR_VERSION`
 organization variable, overridable via a `workflow_dispatch` input).

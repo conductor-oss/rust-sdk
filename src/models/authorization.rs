@@ -361,4 +361,9 @@ pub struct GrantedPermission {
     /// Access types granted
     #[serde(default)]
     pub access: Vec<AccessType>,
+
+    /// Tag the grant was made through, when the grant came from a tag rather
+    /// than a direct target (server-side `GrantedAccess.tag`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
 }
