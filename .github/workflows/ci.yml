@@ -4,8 +4,15 @@ on:
   push:
     branches:
       - main
-      - master
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      oss_conductor_version:
+        description: 'OSS Conductor image tag (falls back to E2E_TEST_OSS_CONDUCTOR_VERSION org var)'
+        required: false
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -143,23 +150,22 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --all-features
 
-  test-integration:
-    name: Integration Tests
+  integration-tests-oss:
+    name: Integration Tests (OSS)
     runs-on: ubuntu-latest
-    
-    services:
-      conductor:
-        image: conductoross/conductor:latest
-        ports:
-          - 8080:8080
-          - 5000:5000
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    
+    timeout-minutes: 30
+    env:
+      OSS_CONDUCTOR_VERSION: ${{ inputs.oss_conductor_version || vars.E2E_TEST_OSS_CONDUCTOR_VERSION }}
+
     steps:
+      - name: Verify OSS Conductor version is set
+        run: |
+          if [ -z "$OSS_CONDUCTOR_VERSION" ]; then
+            echo "::error::No Conductor OSS image tag resolved. Set the E2E_TEST_OSS_CONDUCTOR_VERSION organization variable (and ensure its repository access policy includes this repo), or pass the oss_conductor_version input via workflow_dispatch."
+            exit 1
+          fi
+          echo "Using conductoross/conductor:$OSS_CONDUCTOR_VERSION"
+
       - uses: actions/checkout@v4
       
       - name: Install Rust
@@ -182,28 +188,33 @@ jobs:
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Wait for Conductor to be ready
-        run: |
-          timeout 120 bash -c 'until curl -f -s http://localhost:8080/health | grep -q "healthy"; do 
-            echo "Waiting for Conductor..."
-            sleep 3
-          done'
-          echo "Conductor is ready!"
-      
-      - name: Verify Conductor is accessible
-        run: |
-          curl -v http://localhost:8080/health
-          curl -v http://localhost:8080/api/metadata/workflow
-      
+
+      - name: Start Conductor OSS stack
+        run: docker compose -f scripts/docker-compose-oss.yaml up -d
+
+      - name: Wait for Conductor to be healthy
+        # Matches HEALTH_TIMEOUT in scripts/run-integration-oss.sh, and stays under the compose
+        # healthcheck's own ~200s budget. `curl -sf` alone is the check: /health answers non-2xx
+        # while the server is still coming up, and grepping for the string "healthy" also matches
+        # a `"healthy":false` body.
+        run: timeout 180 bash -c 'until curl -sf http://localhost:8080/health; do sleep 5; done'
+
       - name: Run integration tests
         env:
           CONDUCTOR_SERVER_URL: http://localhost:8080/api
-        run: cargo test --tests --all-features -- --test-threads=1
+        # --nocapture so the `println!("Skipping: ...")` lines from the is_oss() gates land in the
+        # job log. Without it cargo swallows stdout for passing tests, and "16 passed" is
+        # indistinguishable from "16 skipped".
+        run: cargo test --tests --all-features -- --test-threads=1 --nocapture
 
-  test-integration-enterprise:
-    name: Integration Tests (Enterprise)
+      - name: Dump Conductor logs
+        if: failure()
+        run: docker compose -f scripts/docker-compose-oss.yaml logs conductor-server
+
+  integration-test:
+    name: Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     
     steps:
       - uses: actions/checkout@v4
@@ -234,6 +245,10 @@ jobs:
           CONDUCTOR_SERVER_URL: ${{ vars.SDKDEV_SERVER_URL }}
           CONDUCTOR_AUTH_KEY: ${{ vars.SDKDEV_AUTH_KEY }}
           CONDUCTOR_AUTH_SECRET: ${{ secrets.SDKDEV_AUTH_SECRET }}
+          # The shared dev instance is occasionally busy enough (concurrent
+          # CI runs across SDKs, etc.) that the default 30s client timeout
+          # has been observed to trip on plain requests (e.g. start_workflow).
+          CONDUCTOR_TIMEOUT_SECS: "60"
         run: cargo test --tests --all-features -- --test-threads=1
 
   docs:

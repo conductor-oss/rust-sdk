@@ -1,0 +1,45 @@
+# Conductor OSS stack used to run the SDK integration tests against open-source
+# Conductor. Shared by scripts/run-integration-oss.sh and the
+# integration-tests-oss job in .github/workflows/ci.yml.
+#
+# OSS_CONDUCTOR_VERSION defaults to `latest` for local runs; CI pins it via the
+# E2E_TEST_OSS_CONDUCTOR_VERSION org variable (or a workflow_dispatch input).
+#
+# Per-repo project name; unnamed, the project defaults to this file's directory
+# (`scripts`) in every SDK repo and the stacks collide on a dev machine that has
+# more than one of them checked out.
+name: rust-sdk-oss-e2e
+services:
+  conductor-server:
+    image: conductoross/conductor:${OSS_CONDUCTOR_VERSION:-latest}
+    environment:
+      - CONFIG_PROP=config-postgres.properties
+      # Dummy, non-sensitive value so OSS's bundled env-backed SecretsDAO has
+      # something real to read back in tests/orkes_client_tests.rs (get/list/
+      # exists). OSS Conductor has no authentication at all, so an
+      # unauthenticated /api/secrets/{key} read doesn't change the threat
+      # model versus any other unauthenticated OSS endpoint -- don't put a
+      # real credential here.
+      - CONDUCTOR_SECRET_RUST_SDK_INTEGRATION_TEST=rust-sdk-oss-secret-value
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-I", "-XGET", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    links:
+      - conductor-postgres:postgresdb
+    depends_on:
+      conductor-postgres:
+        condition: service_healthy
+  conductor-postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=conductor
+      - POSTGRES_PASSWORD=conductor
+    healthcheck:
+      test: timeout 5 bash -c 'cat < /dev/null > /dev/tcp/localhost/5432'
+      interval: 5s
+      timeout: 5s
+      retries: 12

@@ -2,19 +2,27 @@
 
 ## Quick Start
 
-### 1. Start Conductor Server
+### Option A: One-shot local OSS run (recommended)
 
-**Option A: Docker (Recommended for testing)**
 ```bash
-docker run -d \
-  --name conductor \
-  -p 8080:8080 \
-  -p 5000:5000 \
-  conductoross/conductor:latest
+scripts/run-integration-oss.sh
 ```
 
-**Option B: Use existing server**
-If you already have a Conductor instance running, skip to step 2.
+This starts a Postgres-backed Conductor OSS stack (`scripts/docker-compose-oss.yaml`),
+waits for it to be healthy, exports `CONDUCTOR_SERVER_URL`, runs the full test
+suite, and tears the stack down on exit. Pass `--version <tag>` to pin a
+specific `conductoross/conductor` image, or `--keep-up` to leave the stack
+running afterwards for manual poking.
+
+### Option B: Manual setup
+
+#### 1. Start Conductor Server
+
+```bash
+docker compose -f scripts/docker-compose-oss.yaml up -d
+```
+
+(Or, for Orkes Conductor, skip straight to step 2 with your existing instance.)
 
 ### 2. Configure Environment
 
@@ -104,7 +112,7 @@ Error: Unauthorized: Invalid token
 
 ### 1. Start server
 ```bash
-docker run -d -p 8080:8080 conductoross/conductor:latest
+docker compose -f scripts/docker-compose-oss.yaml up -d
 ```
 
 ### 2. Wait for server to be ready (~30 seconds)
@@ -134,43 +142,47 @@ Open http://localhost:8080 in your browser to see:
 
 ### 5. Cleanup
 ```bash
-# Stop and remove container
-docker stop conductor
-docker rm conductor
+# Stop and remove the stack (including the Postgres volume)
+docker compose -f scripts/docker-compose-oss.yaml down -v
 ```
 
 ---
 
 ## Test Categories
 
-### ✅ Always Work (OSS Conductor)
-- `integration_tests.rs` - 17 tests (15 active, 2 ignored)
-- `workflow_client_tests.rs` - 15 tests
-- `task_client_tests.rs` - 15 tests (14 active, 1 ignored)
-- `worker_tests.rs` - 10 tests
-- `performance_test.rs` - 3 tests
+### ✅ Always Run (OSS-compatible)
+- `integration_tests.rs`, `workflow_client_tests.rs`, `task_client_tests.rs`, `worker_tests.rs`, `performance_test.rs`
+- `orkes_client_tests.rs`'s Scheduler and Event-handler tests (confirmed empirically to work against plain OSS Conductor)
+- `orkes_client_tests.rs`'s Secret *read* tests (`get`/`list`/`exists`) -- asserted against an
+  env-backed secret seeded via `CONDUCTOR_SECRET_RUST_SDK_INTEGRATION_TEST` in
+  `scripts/docker-compose-oss.yaml`. Secret *writes* (`put`/`delete`) still can't succeed against
+  OSS's bundled read-only backends, but are asserted to fail with a real `501` rather than skipped.
 
-**Total: ~60 tests** work with OSS Conductor
+### 🔸 Require Orkes Enterprise Conductor (self-skip via `ApiClient::is_oss()`)
+- `authorization_client_tests.rs` - the whole file (applications, users, groups, permissions, roles)
+- `orkes_client_tests.rs` - Prompt client tests, plus `test_event_queue_configuration`
 
-### 🔸 Require Orkes Conductor
-- `orkes_client_tests.rs` - 16 tests (13 `#[ignore]`)
-- `authorization_client_tests.rs` - 14 tests (11 `#[ignore]`)
+These are gated with an explicit `if client.is_oss().await { println!("Skipping: ..."); return; }`
+check rather than `#[ignore]` — see `tests/README.md` for the full explanation
+and rationale. When run against real Orkes Enterprise Conductor
+(`is_oss() == false`), these tests execute and assert for real.
+
+**Why seeding a secret into an unauthenticated OSS server is fine:** OSS Conductor has no
+authentication/authorization at all (that's exactly why the authorization tests above 404 on it),
+so an unauthenticated read of a dummy, non-sensitive seeded value doesn't introduce any new
+exposure -- anyone who can already reach the REST API has far more access than that.
 
 ### 📦 Library Unit Tests
-- `src/` - 63 unit tests (always pass, no server required)
+- `src/` unit tests (always pass, no server required)
 
-### 📖 Doc Tests  
-- 10 doc tests (7 active, 3 ignored)
-
-**To run Orkes tests:**
+**To run against Orkes Enterprise:**
 ```bash
 # Configure Orkes credentials first
 export CONDUCTOR_SERVER_URL=https://your-instance.orkes.io/api
 export CONDUCTOR_AUTH_KEY=your_key
 export CONDUCTOR_AUTH_SECRET=your_secret
 
-# Run ignored tests
-cargo test --tests -- --ignored
+cargo test --tests --all-features -- --test-threads=1
 ```
 
 ---
@@ -185,7 +197,7 @@ cargo test --test workflow_client_tests -- --nocapture
 
 ### Check server logs
 ```bash
-docker logs conductor
+docker compose -f scripts/docker-compose-oss.yaml logs -f conductor-server
 ```
 
 ### Test individual operations
@@ -218,36 +230,12 @@ cargo test --test performance_test -- --nocapture
 
 ## CI/CD Integration
 
-For automated testing in CI:
-
-```yaml
-# .github/workflows/test.yml
-name: Test
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    
-    services:
-      conductor:
-        image: conductoross/conductor:latest
-        ports:
-          - 8080:8080
-          
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Wait for Conductor
-        run: |
-          timeout 60 bash -c 'until curl -s http://localhost:8080/health | grep -q healthy; do sleep 2; done'
-      
-      - name: Run tests
-        env:
-          CONDUCTOR_SERVER_URL: http://localhost:8080/api
-        run: cargo test --tests
-```
+See the `integration-tests-oss` job in [.github/workflows/ci.yml](.github/workflows/ci.yml)
+and the `test` job in [.github/workflows/publish.yml](.github/workflows/publish.yml),
+both of which start the same `scripts/docker-compose-oss.yaml` stack used by
+`scripts/run-integration-oss.sh` locally. The OSS image tag is pinned via the
+`E2E_TEST_OSS_CONDUCTOR_VERSION` organization variable (overridable in
+`ci.yml` via a `workflow_dispatch` input).
 
 ---
 
@@ -259,7 +247,7 @@ jobs:
 | `cargo test --test workflow_client_tests` | Run workflow tests |
 | `cargo test test_start_workflow -- --exact` | Run single test |
 | `cargo test -- --nocapture` | Show print statements |
-| `cargo test -- --ignored` | Run Orkes-only tests |
+| `cargo test --tests --all-features -- --nocapture` | Show `Skipping: ...` gate messages |
 | `RUST_LOG=debug cargo test` | Enable debug logs |
 
 ---

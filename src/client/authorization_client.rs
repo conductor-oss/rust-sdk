@@ -8,12 +8,24 @@ use crate::models::{
     CreatedAccessKey, GrantedPermission, Group, MetadataTag, SubjectRef, TargetRef,
     UpsertGroupRequest, UpsertUserRequest,
 };
+use serde::Deserialize;
 use std::collections::HashMap;
 
 /// Client for authorization operations
 #[derive(Clone)]
 pub struct AuthorizationClient {
     api: ApiClient,
+}
+
+/// The server wraps granted-permissions lists in an envelope object rather
+/// than returning a bare JSON array; this mirrors that shape purely for
+/// deserialization so the public methods below can keep returning
+/// `Vec<GrantedPermission>` directly.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GrantedAccessResponse {
+    #[serde(default)]
+    granted_access: Vec<GrantedPermission>,
 }
 
 impl AuthorizationClient {
@@ -249,9 +261,11 @@ impl AuthorizationClient {
         user_id: &str,
     ) -> Result<Vec<GrantedPermission>> {
         let path = format!("/users/{}/permissions", user_id);
-        self.api
+        let response: GrantedAccessResponse = self
+            .api
             .get(ApiPath::templated(&path, "/users/{userId}/permissions"))
-            .await
+            .await?;
+        Ok(response.granted_access)
     }
 
     /// Check if user has permissions over a target
@@ -316,9 +330,11 @@ impl AuthorizationClient {
         group_id: &str,
     ) -> Result<Vec<GrantedPermission>> {
         let path = format!("/groups/{}/permissions", group_id);
-        self.api
+        let response: GrantedAccessResponse = self
+            .api
             .get(ApiPath::templated(&path, "/groups/{groupId}/permissions"))
-            .await
+            .await?;
+        Ok(response.granted_access)
     }
 
     /// Add a user to a group

@@ -528,13 +528,22 @@ async fn test_switch_task_workflow() {
 #[tokio::test]
 async fn test_do_while_workflow() {
     let config = test_config();
+    // Stay safely under the HTTP client's own request timeout: a
+    // synchronous execute_workflow wait longer than that would just get cut
+    // off by a client-side timeout error before the server-side deadline is
+    // ever reached (see `ApiClient::new`, which builds the reqwest client
+    // with `config.timeout`).
+    let sync_wait = config.timeout.saturating_sub(Duration::from_secs(5));
     let client = ConductorClient::new(config).unwrap();
     let metadata = client.metadata_client();
     let workflow_client = client.workflow_client();
 
     let workflow_name = format!("test_dowhile_wf_{}", &uuid::Uuid::new_v4().to_string()[..8]);
 
-    // Create workflow with do-while loop (3 iterations)
+    // Create workflow with do-while loop (3 iterations). Conductor tracks the
+    // iteration count as an output field on the DO_WHILE task itself (here,
+    // `loop_ref`), not on the loop body task, so the condition must reference
+    // `loop_ref`, not `loop_body_ref`.
     let loop_task = WorkflowTask::inline(
         "loop_body_ref",
         "(function() { return { iteration: $.iteration || 0 }; })();",
@@ -542,7 +551,7 @@ async fn test_do_while_workflow() {
 
     let do_while = WorkflowTask::do_while(
         "loop_ref",
-        "if ($.loop_body_ref['iteration'] < 3) { true; } else { false; }",
+        "if ($.loop_ref['iteration'] < 3) { true; } else { false; }",
         vec![loop_task],
     );
 
@@ -555,11 +564,15 @@ async fn test_do_while_workflow() {
     // Execute workflow
     let request = StartWorkflowRequest::new(&workflow_name).with_version(1);
     let result = workflow_client
-        .execute_workflow(&request, Duration::from_secs(25))
+        .execute_workflow(&request, sync_wait)
         .await
         .unwrap();
 
-    assert!(result.is_successful(), "Do-while workflow should complete");
+    assert!(
+        result.is_successful(),
+        "Do-while workflow should complete (workflow_id={})",
+        result.workflow_id
+    );
 
     // Cleanup
     metadata.delete_workflow_def(&workflow_name, 1).await.ok();
