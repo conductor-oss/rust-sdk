@@ -31,6 +31,8 @@ pub fn exception_label(err: &ConductorError) -> &'static str {
         ConductorError::Internal(_) => "Internal",
         ConductorError::Io(_) => "Io",
         ConductorError::Channel(_) => "Channel",
+        #[cfg(feature = "agents")]
+        ConductorError::Agent(_) => "Agent",
     }
 }
 

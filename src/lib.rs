@@ -11,7 +11,16 @@ pub mod models;
 pub mod schema;
 pub mod worker;
 
+#[cfg(feature = "agents")]
+pub mod agents;
+
 // Re-exports for convenience
+#[cfg(feature = "agents")]
+pub use agents::{
+    AgentConfigSerializer, AgentDef, RunSettings, Strategy, ToolDef, ToolHandler, ToolType,
+};
+#[cfg(feature = "agents")]
+pub use client::AgentClient;
 pub use client::{
     AuthorizationClient, ConductorClient, EventClient, IntegrationClient, MetadataClient,
     OrkesClients, PromptClient, QueueConfiguration, SchedulerClient, SchemaClient, SecretClient,
@@ -37,5 +46,7 @@ pub use worker::{
 };
 
 // Re-export the procedural macros when the feature is enabled
+#[cfg(feature = "agents")]
+pub use conductor_macros::tool;
 #[cfg(feature = "macros")]
 pub use conductor_macros::{worker, worker_task};

@@ -71,6 +71,11 @@ pub enum ConductorError {
     /// Channel error (for async communication)
     #[error("Channel error: {0}")]
     Channel(String),
+
+    /// Agent definition, tool-definition, or agent-config-serialization error.
+    #[cfg(feature = "agents")]
+    #[error("Agent error: {0}")]
+    Agent(String),
 }
 
 impl ConductorError {
@@ -113,6 +118,12 @@ impl ConductorError {
             message: message.into(),
             code,
         }
+    }
+
+    /// Create an agent error
+    #[cfg(feature = "agents")]
+    pub fn agent(msg: impl Into<String>) -> Self {
+        ConductorError::Agent(msg.into())
     }
 
     /// Check if this error is retryable

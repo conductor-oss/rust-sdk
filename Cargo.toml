@@ -96,6 +96,7 @@ criterion = "0.5"
 [features]
 default = []
 macros = ["conductor-macros"]
+agents = ["macros"]
 
 [[example]]
 name = "hello_world"
@@ -165,6 +166,11 @@ path = "examples/metrics_example.rs"
 name = "worker_macro_example"
 path = "examples/worker_macro_example.rs"
 required-features = ["macros"]
+
+[[example]]
+name = "agent_config_example"
+path = "examples/agent_config_example.rs"
+required-features = ["agents"]
 
 # Orkes AI/LLM examples
 [[example]]
@@ -245,6 +251,11 @@ path = "examples/connection_config_example.rs"
 [[example]]
 name = "kitchensink_workers"
 path = "examples/kitchensink_workers.rs"
+
+[[test]]
+name = "agent_client_tests"
+path = "tests/agent_client_tests.rs"
+required-features = ["agents"]
 
 [lib]
 name = "conductor"
