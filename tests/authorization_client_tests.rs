@@ -38,12 +38,12 @@ async fn test_create_and_get_application() {
         .create_application(&request)
         .await
         .expect("create_application should succeed");
-    assert_eq!(app.name, app_name);
 
     let retrieved = auth.get_application(&app.id).await;
 
     auth.delete_application(&app.id).await.ok();
 
+    assert_eq!(app.name, app_name);
     let retrieved = retrieved.expect("get_application should succeed");
     assert_eq!(retrieved.name, app_name);
 }

@@ -233,9 +233,12 @@ cargo test --test performance_test -- --nocapture
 See the `integration-tests-oss` job in [.github/workflows/ci.yml](.github/workflows/ci.yml)
 and the `test` job in [.github/workflows/publish.yml](.github/workflows/publish.yml),
 both of which start the same `scripts/docker-compose-oss.yaml` stack used by
-`scripts/run-integration-oss.sh` locally. The OSS image tag is pinned via the
+`scripts/run-integration-oss.sh` locally. The OSS image tag comes from the
 `E2E_TEST_OSS_CONDUCTOR_VERSION` organization variable (overridable in
-`ci.yml` via a `workflow_dispatch` input).
+`ci.yml` via a `workflow_dispatch` input). That variable is currently set to
+`latest`, so CI is not pinned today — it tracks whatever `latest` resolves to
+at run time. Setting the variable to a fixed tag pins every OSS SDK repo to
+that version from one place.
 
 ---
 

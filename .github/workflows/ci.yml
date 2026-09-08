@@ -249,7 +249,10 @@ jobs:
           # CI runs across SDKs, etc.) that the default 30s client timeout
           # has been observed to trip on plain requests (e.g. start_workflow).
           CONDUCTOR_TIMEOUT_SECS: "60"
-        run: cargo test --tests --all-features -- --test-threads=1
+        # --nocapture for the same reason as the OSS job: the is_oss() gates
+        # print why they skipped, and against Enterprise a test that skips when
+        # it should have asserted is the failure mode that matters most.
+        run: cargo test --tests --all-features -- --test-threads=1 --nocapture
 
   docs:
     name: Documentation Check

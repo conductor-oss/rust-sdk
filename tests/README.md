@@ -33,6 +33,7 @@ tests/
 ├── worker_tests.rs                 # Worker framework tests
 ├── orkes_client_tests.rs           # Scheduler/Secret/Prompt/Event client tests
 ├── authorization_client_tests.rs   # Authorization/RBAC tests
+├── auth_fallback_tests.rs          # Auth/token fallback behaviour (mock server)
 ├── scheduler_verb_fallback_tests.rs # HTTP verb contract (mock server, no Conductor needed)
 ├── secret_client_verb_tests.rs     # Secret verb + text/plain contract (mock server)
 ├── response_shape_tests.rs         # Response-shape contracts (mock server)
@@ -94,7 +95,7 @@ real regressions against Enterprise too, not just OSS.
 
 `#[ignore]` is still the right tool for a different problem: a test that needs a
 fixture or an environment this suite doesn't set up, regardless of server type
-(see the two in `task_client_tests.rs`). Just don't use it for server-type gating.
+(see the one in `task_client_tests.rs`). Just don't use it for server-type gating.
 
 ## Prerequisites
 
@@ -249,8 +250,10 @@ async fn test_orkes_only_feature() {
 
 See the `integration-tests-oss` job in `.github/workflows/ci.yml`, which uses the
 same `scripts/docker-compose-oss.yaml` stack as `scripts/run-integration-oss.sh`
-(the OSS image tag is pinned via the `E2E_TEST_OSS_CONDUCTOR_VERSION`
-organization variable, overridable via a `workflow_dispatch` input).
+(the OSS image tag comes from the `E2E_TEST_OSS_CONDUCTOR_VERSION` organization
+variable, overridable via a `workflow_dispatch` input). That variable is
+currently `latest`, so CI is not pinned today; setting it to a fixed tag pins
+every OSS SDK repo at once, from one place.
 
 ## Troubleshooting
 

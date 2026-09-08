@@ -45,24 +45,46 @@ async fn test_scheduler_save_and_get() {
         .await
         .expect("register_workflow_def should succeed");
 
-    // Save Schedule using the builder methods
-    let schedule_request = SaveScheduleRequest::new(&schedule_name, "0 0 0 * * ?", &workflow_name)
+    // Deferred so a panic in the assertions still tears down the schedule and
+    // the workflow def -- this suite also runs against the shared Enterprise
+    // instance, where a failure between create and delete orphans both.
+    let outcome = save_and_get_flow(&scheduler, &schedule_name, &workflow_name).await;
+
+    scheduler.delete_schedule(&schedule_name).await.ok();
+    metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+
+    outcome.expect("save -> get flow should succeed");
+}
+
+/// The save -> get assertions, factored out so the caller can clean up
+/// unconditionally before surfacing a failure.
+async fn save_and_get_flow(
+    scheduler: &conductor::client::SchedulerClient,
+    schedule_name: &str,
+    workflow_name: &str,
+) -> Result<(), String> {
+    let schedule_request = SaveScheduleRequest::new(schedule_name, "0 0 0 * * ?", workflow_name)
         .with_version(1)
         .paused(true); // Create paused so it doesn't run
 
     scheduler
         .save_schedule(&schedule_request)
         .await
-        .expect("save_schedule should succeed");
+        .map_err(|e| format!("save_schedule failed: {e:?}"))?;
 
     let schedule = scheduler
-        .get_schedule(&schedule_name)
+        .get_schedule(schedule_name)
         .await
-        .expect("get_schedule should succeed");
-    assert_eq!(schedule.name, schedule_name);
+        .map_err(|e| format!("get_schedule failed: {e:?}"))?;
 
-    scheduler.delete_schedule(&schedule_name).await.ok();
-    metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+    if schedule.name != schedule_name {
+        return Err(format!(
+            "expected schedule name {schedule_name:?}, got {:?}",
+            schedule.name
+        ));
+    }
+
+    Ok(())
 }
 
 #[tokio::test]
@@ -84,27 +106,41 @@ async fn test_scheduler_pause_resume() {
         .await
         .expect("register_workflow_def should succeed");
 
-    // Save schedule
-    let schedule_request = SaveScheduleRequest::new(&schedule_name, "0 0 0 * * ?", &workflow_name)
+    // Deferred for the same reason as test_scheduler_save_and_get above.
+    let outcome = pause_resume_flow(&scheduler, &schedule_name, &workflow_name).await;
+
+    scheduler.delete_schedule(&schedule_name).await.ok();
+    metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+
+    outcome.expect("save -> pause -> resume flow should succeed");
+}
+
+/// The save -> pause -> resume steps, factored out so the caller can clean up
+/// unconditionally before surfacing a failure.
+async fn pause_resume_flow(
+    scheduler: &conductor::client::SchedulerClient,
+    schedule_name: &str,
+    workflow_name: &str,
+) -> Result<(), String> {
+    let schedule_request = SaveScheduleRequest::new(schedule_name, "0 0 0 * * ?", workflow_name)
         .with_version(1)
         .paused(false);
 
     scheduler
         .save_schedule(&schedule_request)
         .await
-        .expect("save_schedule should succeed");
+        .map_err(|e| format!("save_schedule failed: {e:?}"))?;
 
     scheduler
-        .pause_schedule(&schedule_name)
+        .pause_schedule(schedule_name)
         .await
-        .expect("pause_schedule should succeed");
+        .map_err(|e| format!("pause_schedule failed: {e:?}"))?;
     scheduler
-        .resume_schedule(&schedule_name)
+        .resume_schedule(schedule_name)
         .await
-        .expect("resume_schedule should succeed");
+        .map_err(|e| format!("resume_schedule failed: {e:?}"))?;
 
-    scheduler.delete_schedule(&schedule_name).await.ok();
-    metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+    Ok(())
 }
 
 #[tokio::test]

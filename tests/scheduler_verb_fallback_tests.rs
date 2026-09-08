@@ -45,6 +45,36 @@ async fn test_pause_schedule_tries_put_first() {
         "expected PUT to succeed: {:?}",
         result.err()
     );
+
+    // `put_no_body` exists precisely so these endpoints -- mapped as a bare
+    // @PutMapping with no @RequestBody -- get no payload and no Content-Type.
+    // The generic `put` helper would send a JSON body instead, so pin it here;
+    // nothing else in the suite would notice the difference.
+    let requests = mock_server
+        .received_requests()
+        .await
+        .expect("request recording is on by default");
+    assert_eq!(
+        requests.len(),
+        1,
+        "expected exactly one request, got {requests:?}"
+    );
+    let put = &requests[0];
+    assert!(
+        put.body.is_empty(),
+        "expected an empty PUT body, got {:?}",
+        String::from_utf8_lossy(&put.body)
+    );
+    assert!(
+        !put.headers
+            .keys()
+            .any(|k| k.to_string().eq_ignore_ascii_case("content-type")),
+        "expected no Content-Type on a bodyless PUT, got {:?}",
+        put.headers
+            .keys()
+            .map(|k| k.to_string())
+            .collect::<Vec<_>>()
+    );
 }
 
 #[tokio::test]
@@ -138,8 +168,10 @@ async fn test_resume_schedule_falls_back_to_get_on_405() {
 async fn test_pause_all_schedules_only_sends_get() {
     let mock_server = MockServer::start().await;
 
-    // No PUT mock registered at all: if the client sent PUT instead of GET,
-    // the request would go unmatched and this assertion would fail.
+    // No PUT mock registered at all. A PUT would go unmatched -- which on its
+    // own proves nothing, since wiremock ignores unmatched requests -- but it
+    // would also leave this GET mock's `expect(1)` unmet, and that does fail
+    // verification when the server is dropped.
     Mock::given(method("GET"))
         .and(path("/api/scheduler/admin/pause"))
         .respond_with(ResponseTemplate::new(200))

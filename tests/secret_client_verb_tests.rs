@@ -16,7 +16,7 @@
 
 use conductor::http::ApiClient;
 use conductor::{ConductorClient, Configuration};
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param_is_missing};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn client_for(mock_server: &MockServer) -> ConductorClient {
@@ -54,8 +54,12 @@ async fn test_list_all_secret_names_uses_post() {
 async fn test_list_grantable_secrets_uses_get() {
     let mock_server = MockServer::start().await;
 
+    // `grantable=true` used to be sent here. No server reads it -- Orkes filters
+    // on `access`, OSS takes no parameter at all -- so it was inert rather than
+    // harmful, but the matcher keeps it from drifting back in.
     Mock::given(method("GET"))
         .and(path("/api/secrets"))
+        .and(query_param_is_missing("grantable"))
         .respond_with(ResponseTemplate::new(200).set_body_json(vec!["ALPHA"]))
         .expect(1)
         .mount(&mock_server)
