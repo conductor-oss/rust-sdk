@@ -161,10 +161,16 @@ async fn test_scheduler_get_next_execution_times() {
 // only ships read-only `SecretsDAO` backends: writes (put/delete) return a
 // real 501 "read-only backend" rather than a 404. Reads work against an
 // env-backed secret seeded via `CONDUCTOR_SECRET_RUST_SDK_INTEGRATION_TEST`
-// in scripts/docker-compose-oss.yaml. OSS images old enough to predate this
-// feature entirely still 404 on every call; the OSS branches below treat any
-// error on the first read as "secrets API unavailable on this server" and
-// skip with a clear message rather than assuming Enterprise-only.
+// in scripts/docker-compose-oss.yaml.
+//
+// The OSS branches below assert outright rather than treating an error as
+// "secrets API unavailable here" and skipping: an error is not distinguishable
+// from the regression this is meant to catch. `GET /secrets/{key}` answers 404
+// both when the route is absent (an image predating the controller) and when
+// the route works but the secret is missing -- i.e. when the seeding in
+// docker-compose-oss.yaml has drifted out of sync with the constants below.
+// Any OSS version this suite runs against is expected to serve the secrets
+// API; if one deliberately doesn't, a red test saying so is the right signal.
 //
 // This is safe to test against with an unauthenticated OSS server: OSS
 // Conductor has no authentication/authorization at all (see
@@ -185,13 +191,10 @@ async fn test_secret_put_and_get() {
     let secret = client.secret_client();
 
     if client.is_oss().await {
-        let value = match secret.get_secret(OSS_SEEDED_SECRET_NAME).await {
-            Ok(value) => value,
-            Err(e) => {
-                println!("Skipping: OSS secrets API unavailable on this server ({e:?})");
-                return;
-            }
-        };
+        let value = secret
+            .get_secret(OSS_SEEDED_SECRET_NAME)
+            .await
+            .expect("seeded OSS secret should be readable");
         assert_eq!(value, OSS_SEEDED_SECRET_VALUE);
 
         // The only bundled SecretsDAO backends (env-var, noop) are
@@ -233,13 +236,10 @@ async fn test_secret_list_all() {
     let secret = client.secret_client();
 
     if client.is_oss().await {
-        let secrets = match secret.list_all_secret_names().await {
-            Ok(secrets) => secrets,
-            Err(e) => {
-                println!("Skipping: OSS secrets API unavailable on this server ({e:?})");
-                return;
-            }
-        };
+        let secrets = secret
+            .list_all_secret_names()
+            .await
+            .expect("list_all_secret_names should succeed against OSS");
         assert!(
             secrets.contains(OSS_SEEDED_SECRET_NAME),
             "expected seeded secret {:?} in {:?}",
@@ -263,13 +263,10 @@ async fn test_secret_exists() {
     let secret = client.secret_client();
 
     if client.is_oss().await {
-        let exists = match secret.secret_exists(OSS_SEEDED_SECRET_NAME).await {
-            Ok(exists) => exists,
-            Err(e) => {
-                println!("Skipping: OSS secrets API unavailable on this server ({e:?})");
-                return;
-            }
-        };
+        let exists = secret
+            .secret_exists(OSS_SEEDED_SECRET_NAME)
+            .await
+            .expect("secret_exists should succeed against OSS");
         assert!(exists, "seeded secret should exist");
 
         let missing_name = generate_unique_name("nonexistent_secret");

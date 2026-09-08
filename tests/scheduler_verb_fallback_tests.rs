@@ -79,13 +79,24 @@ async fn test_pause_schedule_falls_back_to_get_on_405() {
 async fn test_pause_schedule_does_not_fall_back_on_non_405_error() {
     let mock_server = MockServer::start().await;
 
-    // Only a PUT mock is registered; if the client incorrectly fell back to
-    // GET here, the unmatched request would cause wiremock to panic on drop,
-    // failing the test.
     Mock::given(method("PUT"))
         .and(path("/api/scheduler/schedules/missing/pause"))
         .respond_with(ResponseTemplate::new(404))
         .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    // The GET mock exists only to catch a fallback that shouldn't happen.
+    // Leaving it unmounted would not work: wiremock answers an unmatched
+    // request with a 404 and verifies only the expectations of the mocks that
+    // *are* mounted, so a stray GET would be invisible here and the call would
+    // still end in an `Err` -- the test would pass either way. Mounted with
+    // `expect(0)`, the stray request lands on a mock whose hit count is
+    // checked, and verification fails when `MockServer` is dropped.
+    Mock::given(method("GET"))
+        .and(path("/api/scheduler/schedules/missing/pause"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
         .mount(&mock_server)
         .await;
 
