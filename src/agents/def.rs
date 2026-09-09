@@ -5,6 +5,8 @@ use crate::error::{ConductorError, Result};
 use serde_json::Value;
 use std::collections::HashMap;
 
+use super::guardrail::Guardrail;
+use super::termination::TerminationCondition;
 use super::tool::ToolDef;
 
 /// Multi-agent orchestration strategy.
@@ -130,6 +132,7 @@ pub struct AgentDef {
     pub base_url: Option<String>,
     pub instructions: Option<String>,
     pub tools: Vec<ToolDef>,
+    pub guardrails: Vec<Guardrail>,
     pub agents: Vec<AgentDef>,
     pub strategy: Strategy,
     pub max_turns: u32,
@@ -140,6 +143,7 @@ pub struct AgentDef {
     pub credentials: Vec<String>,
     pub required_tools: Vec<String>,
     pub context_window_budget: Option<u32>,
+    pub termination: Option<TerminationCondition>,
     pub metadata: HashMap<String, Value>,
 }
 
@@ -160,6 +164,7 @@ impl AgentDef {
             base_url: None,
             instructions: None,
             tools: Vec::new(),
+            guardrails: Vec::new(),
             agents: Vec::new(),
             strategy: Strategy::default(),
             max_turns: 25,
@@ -170,6 +175,7 @@ impl AgentDef {
             credentials: Vec::new(),
             required_tools: Vec::new(),
             context_window_budget: None,
+            termination: None,
             metadata: HashMap::new(),
         })
     }
@@ -196,6 +202,16 @@ impl AgentDef {
 
     pub fn with_tools(mut self, tools: impl IntoIterator<Item = ToolDef>) -> Self {
         self.tools.extend(tools);
+        self
+    }
+
+    pub fn with_guardrail(mut self, guardrail: Guardrail) -> Self {
+        self.guardrails.push(guardrail);
+        self
+    }
+
+    pub fn with_guardrails(mut self, guardrails: impl IntoIterator<Item = Guardrail>) -> Self {
+        self.guardrails.extend(guardrails);
         self
     }
 
@@ -277,6 +293,11 @@ impl AgentDef {
         self
     }
 
+    pub fn with_termination(mut self, termination: TerminationCondition) -> Self {
+        self.termination = Some(termination);
+        self
+    }
+
     pub fn with_metadata_entry(mut self, key: impl Into<String>, value: Value) -> Self {
         self.metadata.insert(key.into(), value);
         self
@@ -294,6 +315,7 @@ fn is_valid_agent_name(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::guardrail::RegexGuardrail;
     use super::*;
 
     #[test]
@@ -338,5 +360,28 @@ mod tests {
         let agent = AgentDef::new("a").unwrap();
         assert!(agent.clone().with_max_turns(0).is_err());
         assert!(agent.with_max_turns(1).is_ok());
+    }
+
+    #[test]
+    fn test_with_guardrail_accumulates() {
+        let checker_a = RegexGuardrail::new(["a"]).unwrap();
+        let checker_b = RegexGuardrail::new(["b"]).unwrap();
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_guardrail(Guardrail::new("no_a", checker_a))
+            .with_guardrail(Guardrail::new("no_b", checker_b));
+        assert_eq!(agent.guardrails.len(), 2);
+        assert_eq!(agent.guardrails[0].name, "no_a");
+        assert_eq!(agent.guardrails[1].name, "no_b");
+    }
+
+    #[test]
+    fn test_with_termination_sets_field() {
+        let agent = AgentDef::new("a").unwrap();
+        assert!(agent.termination.is_none());
+
+        let termination = TerminationCondition::max_message(10).unwrap();
+        let agent = agent.with_termination(termination.clone());
+        assert_eq!(agent.termination, Some(termination));
     }
 }

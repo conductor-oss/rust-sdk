@@ -101,7 +101,11 @@ impl std::fmt::Debug for Credentials {
 
 impl std::fmt::Display for Credentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Credentials(names=[{}])", self.names().collect::<Vec<_>>().join(", "))
+        write!(
+            f,
+            "Credentials(names=[{}])",
+            self.names().collect::<Vec<_>>().join(", ")
+        )
     }
 }
 

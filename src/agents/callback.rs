@@ -249,8 +249,8 @@ mod tests {
     async fn test_all_six_hooks_invoked_and_recorded() {
         let handler = RecordingHandler::new();
         let start_ctx = CallbackContext::new().with_field("input", Value::String("hi".into()));
-        let model_start_ctx = CallbackContext::new()
-            .with_field("messages", serde_json::json!(["hello"]));
+        let model_start_ctx =
+            CallbackContext::new().with_field("messages", serde_json::json!(["hello"]));
         let model_end_ctx =
             CallbackContext::new().with_field("llm_result", Value::String("hi back".into()));
         let empty_ctx = CallbackContext::new();

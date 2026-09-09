@@ -66,11 +66,15 @@ pub enum TerminationCondition {
 
     /// AND combinator — terminates only once every child condition triggers. Built by
     /// [`TerminationCondition::and`] or the `&` operator; matches python's `_AndTermination`.
-    And { conditions: Vec<TerminationCondition> },
+    And {
+        conditions: Vec<TerminationCondition>,
+    },
 
     /// OR combinator — terminates as soon as any child condition triggers. Built by
     /// [`TerminationCondition::or`] or the `|` operator; matches python's `_OrTermination`.
-    Or { conditions: Vec<TerminationCondition> },
+    Or {
+        conditions: Vec<TerminationCondition>,
+    },
 }
 
 impl TerminationCondition {
@@ -133,7 +137,9 @@ impl TerminationCondition {
         max_prompt_tokens: Option<u32>,
         max_completion_tokens: Option<u32>,
     ) -> Result<Self> {
-        if max_total_tokens.is_none() && max_prompt_tokens.is_none() && max_completion_tokens.is_none()
+        if max_total_tokens.is_none()
+            && max_prompt_tokens.is_none()
+            && max_completion_tokens.is_none()
         {
             return Err(ConductorError::agent(
                 "at least one token limit must be specified",
@@ -186,9 +192,9 @@ impl std::ops::BitAnd for TerminationCondition {
             other => vec![other],
         };
         match rhs {
-            TerminationCondition::And { conditions: rhs_conditions } => {
-                conditions.extend(rhs_conditions)
-            }
+            TerminationCondition::And {
+                conditions: rhs_conditions,
+            } => conditions.extend(rhs_conditions),
             other => conditions.push(other),
         }
         TerminationCondition::And { conditions }
@@ -206,9 +212,9 @@ impl std::ops::BitOr for TerminationCondition {
             other => vec![other],
         };
         match rhs {
-            TerminationCondition::Or { conditions: rhs_conditions } => {
-                conditions.extend(rhs_conditions)
-            }
+            TerminationCondition::Or {
+                conditions: rhs_conditions,
+            } => conditions.extend(rhs_conditions),
             other => conditions.push(other),
         }
         TerminationCondition::Or { conditions }
@@ -276,7 +282,10 @@ mod tests {
 
     #[test]
     fn test_type_str_matches_python_wire_discriminants() {
-        assert_eq!(TerminationCondition::text_mention("x").type_str(), "text_mention");
+        assert_eq!(
+            TerminationCondition::text_mention("x").type_str(),
+            "text_mention"
+        );
         assert_eq!(
             TerminationCondition::stop_message_default().type_str(),
             "stop_message"
@@ -289,10 +298,7 @@ mod tests {
             TerminationCondition::max_total_tokens(1).type_str(),
             "token_usage"
         );
-        assert_eq!(
-            TerminationCondition::and(vec![]).type_str(),
-            "and"
-        );
+        assert_eq!(TerminationCondition::and(vec![]).type_str(), "and");
         assert_eq!(TerminationCondition::or(vec![]).type_str(), "or");
     }
 
@@ -346,10 +352,7 @@ mod tests {
             TerminationCondition::And { conditions } => {
                 assert_eq!(conditions.len(), 2);
                 assert_eq!(conditions[0], inner_or);
-                assert!(matches!(
-                    conditions[0],
-                    TerminationCondition::Or { .. }
-                ));
+                assert!(matches!(conditions[0], TerminationCondition::Or { .. }));
                 assert_eq!(
                     conditions[1],
                     TerminationCondition::MaxMessage { max_messages: 50 }
@@ -361,8 +364,8 @@ mod tests {
 
     #[test]
     fn test_token_usage_all_three_limits() {
-        let cond = TerminationCondition::token_usage(Some(10_000), Some(6_000), Some(4_000))
-            .unwrap();
+        let cond =
+            TerminationCondition::token_usage(Some(10_000), Some(6_000), Some(4_000)).unwrap();
         assert_eq!(
             cond,
             TerminationCondition::TokenUsage {

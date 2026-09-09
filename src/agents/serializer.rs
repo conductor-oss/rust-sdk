@@ -4,6 +4,7 @@
 use serde_json::{Map, Value};
 
 use super::def::AgentDef;
+use super::guardrail::Guardrail;
 use super::tool::{ToolDef, ToolType};
 
 /// Serializes [`AgentDef`]/[`ToolDef`] trees into the `agentConfig` JSON wire format shared
@@ -72,6 +73,13 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
+    if !agent.guardrails.is_empty() {
+        map.insert(
+            "guardrails".to_string(),
+            Value::Array(agent.guardrails.iter().map(serialize_guardrail).collect()),
+        );
+    }
+
     if let Some(max_tokens) = agent.max_tokens {
         map.insert("maxTokens".to_string(), Value::from(max_tokens));
     }
@@ -121,6 +129,30 @@ fn serialize_agent(agent: &AgentDef) -> Value {
             ),
         );
     }
+
+    Value::Object(map)
+}
+
+/// Serializes a [`Guardrail`] to the `GuardrailConfig` wire shape, matching python-sdk's
+/// `AgentConfigSerializer._serialize_guardrail`: common fields (`name`/`position`/`onFail`/
+/// `maxRetries`) plus the `guardrailType` discriminant and that type's own fields, contributed by
+/// [`Guardrail::guardrail_type_fields`] (which delegates to the wrapped [`GuardrailCheck`](super::guardrail::GuardrailCheck)
+/// — this crate always wraps a concrete checker, so the `"external"`/`"custom"` branches python's
+/// version has for a `func`-less `Guardrail` don't apply here).
+fn serialize_guardrail(guardrail: &Guardrail) -> Value {
+    let mut map = Map::new();
+
+    map.insert("name".to_string(), Value::String(guardrail.name.clone()));
+    map.insert(
+        "position".to_string(),
+        Value::String(guardrail.position.as_str().to_string()),
+    );
+    map.insert(
+        "onFail".to_string(),
+        Value::String(guardrail.on_fail.as_str().to_string()),
+    );
+    map.insert("maxRetries".to_string(), Value::from(guardrail.max_retries));
+    map.extend(guardrail.guardrail_type_fields());
 
     Value::Object(map)
 }
@@ -186,6 +218,7 @@ fn serialize_tool(tool: &ToolDef) -> Value {
 #[cfg(test)]
 mod tests {
     use super::super::def::Strategy;
+    use super::super::guardrail::{LlmGuardrail, OnFail, Position, RegexGuardrail, RegexMode};
     use super::*;
 
     #[test]
@@ -201,6 +234,7 @@ mod tests {
             "instructions",
             "tools",
             "agents",
+            "guardrails",
             "maxTokens",
             "contextWindowBudget",
             "temperature",
@@ -322,5 +356,129 @@ mod tests {
             nested_agent_config.get("external"),
             Some(&Value::Bool(false))
         );
+    }
+
+    #[test]
+    fn test_serialize_regex_guardrail() {
+        let checker = RegexGuardrail::new(["[\\w.+-]+@[\\w-]+\\.[\\w.-]+"])
+            .unwrap()
+            .with_mode(RegexMode::Allow)
+            .with_message("must look like an email");
+        let guardrail = Guardrail::new("no_pii", checker)
+            .with_position(Position::Input)
+            .unwrap()
+            .with_on_fail(OnFail::Retry)
+            .unwrap()
+            .with_max_retries(5)
+            .unwrap();
+        let agent = AgentDef::new("a").unwrap().with_guardrail(guardrail);
+
+        let json = AgentConfigSerializer::serialize(&agent);
+        let guardrails = json
+            .as_object()
+            .unwrap()
+            .get("guardrails")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(guardrails.len(), 1);
+        let g = guardrails[0].as_object().unwrap();
+
+        assert_eq!(g.get("name"), Some(&Value::String("no_pii".to_string())));
+        assert_eq!(g.get("position"), Some(&Value::String("input".to_string())));
+        assert_eq!(g.get("onFail"), Some(&Value::String("retry".to_string())));
+        assert_eq!(g.get("maxRetries"), Some(&Value::from(5u32)));
+        assert_eq!(
+            g.get("guardrailType"),
+            Some(&Value::String("regex".to_string()))
+        );
+        assert_eq!(
+            g.get("patterns"),
+            Some(&Value::Array(vec![Value::String(
+                "[\\w.+-]+@[\\w-]+\\.[\\w.-]+".to_string()
+            )]))
+        );
+        assert_eq!(g.get("mode"), Some(&Value::String("allow".to_string())));
+        assert_eq!(
+            g.get("message"),
+            Some(&Value::String("must look like an email".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_serialize_regex_guardrail_omits_message_when_unset() {
+        let checker = RegexGuardrail::new(["x"]).unwrap();
+        let guardrail = Guardrail::new("g", checker);
+        let agent = AgentDef::new("a").unwrap().with_guardrail(guardrail);
+
+        let json = AgentConfigSerializer::serialize(&agent);
+        let guardrails = json
+            .as_object()
+            .unwrap()
+            .get("guardrails")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        let g = guardrails[0].as_object().unwrap();
+        assert!(!g.contains_key("message"));
+        assert_eq!(g.get("mode"), Some(&Value::String("block".to_string())));
+    }
+
+    #[test]
+    fn test_serialize_llm_guardrail() {
+        let checker = LlmGuardrail::new("anthropic/claude-sonnet-4-6", "no harmful content")
+            .with_max_tokens(64);
+        let guardrail = Guardrail::new("safety", checker);
+        let agent = AgentDef::new("a").unwrap().with_guardrail(guardrail);
+
+        let json = AgentConfigSerializer::serialize(&agent);
+        let guardrails = json
+            .as_object()
+            .unwrap()
+            .get("guardrails")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(guardrails.len(), 1);
+        let g = guardrails[0].as_object().unwrap();
+
+        assert_eq!(g.get("name"), Some(&Value::String("safety".to_string())));
+        assert_eq!(
+            g.get("position"),
+            Some(&Value::String("output".to_string()))
+        );
+        assert_eq!(g.get("onFail"), Some(&Value::String("raise".to_string())));
+        assert_eq!(g.get("maxRetries"), Some(&Value::from(3u32)));
+        assert_eq!(
+            g.get("guardrailType"),
+            Some(&Value::String("llm".to_string()))
+        );
+        assert_eq!(
+            g.get("model"),
+            Some(&Value::String("anthropic/claude-sonnet-4-6".to_string()))
+        );
+        assert_eq!(
+            g.get("policy"),
+            Some(&Value::String("no harmful content".to_string()))
+        );
+        assert_eq!(g.get("maxTokens"), Some(&Value::from(64u32)));
+    }
+
+    #[test]
+    fn test_serialize_llm_guardrail_omits_max_tokens_when_unset() {
+        let checker = LlmGuardrail::new("openai/gpt-4o-mini", "policy text");
+        let guardrail = Guardrail::new("g", checker);
+        let agent = AgentDef::new("a").unwrap().with_guardrail(guardrail);
+
+        let json = AgentConfigSerializer::serialize(&agent);
+        let guardrails = json
+            .as_object()
+            .unwrap()
+            .get("guardrails")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        let g = guardrails[0].as_object().unwrap();
+        assert!(!g.contains_key("maxTokens"));
     }
 }

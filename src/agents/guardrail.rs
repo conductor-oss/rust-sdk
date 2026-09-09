@@ -48,6 +48,8 @@
 
 use crate::error::{ConductorError, Result};
 use regex::Regex;
+use serde_json::{Map, Value};
+use std::sync::Arc;
 
 // ── Enums ────────────────────────────────────────────────────────────────
 
@@ -167,6 +169,16 @@ impl GuardrailResult {
 pub trait GuardrailCheck: Send + Sync {
     /// Run the check against `content`.
     fn check(&self, content: &str) -> GuardrailResult;
+
+    /// Type-specific wire fields for [`AgentConfigSerializer`](super::AgentConfigSerializer) —
+    /// the `guardrailType` discriminant (`"regex"`, `"llm"`, ...) plus whatever fields that
+    /// concrete guardrail type contributes, matching python-sdk's
+    /// `AgentConfigSerializer._serialize_guardrail`'s `isinstance` branches. Each
+    /// [`GuardrailCheck`] impl owns its own wire shape here rather than the serializer
+    /// downcasting a `dyn GuardrailCheck` (matching how [`ToolType::as_str`](super::tool::ToolType::as_str)
+    /// gives each tool-type variant its own wire representation) — see
+    /// [`Guardrail::guardrail_type_fields`], the method `AgentConfigSerializer` actually calls.
+    fn guardrail_type_fields(&self) -> Map<String, Value>;
 }
 
 // ── Guardrail ────────────────────────────────────────────────────────────
@@ -182,12 +194,13 @@ pub trait GuardrailCheck: Send + Sync {
 /// [`AgentDef`](super::def::AgentDef)'s pattern (`fn with_x(mut self, ...) -> Self`/`Result<Self>`,
 /// no `&mut self` builders). Defaults match python's `Guardrail.__init__`: `position = Output`,
 /// `on_fail = Raise`, `max_retries = 3`.
+#[derive(Clone)]
 pub struct Guardrail {
     pub name: String,
     pub position: Position,
     pub on_fail: OnFail,
     pub max_retries: u32,
-    checker: Box<dyn GuardrailCheck>,
+    checker: Arc<dyn GuardrailCheck>,
 }
 
 impl std::fmt::Debug for Guardrail {
@@ -210,7 +223,7 @@ impl Guardrail {
             position: Position::Output,
             on_fail: OnFail::Raise,
             max_retries: 3,
-            checker: Box::new(checker),
+            checker: Arc::new(checker),
         }
     }
 
@@ -248,6 +261,14 @@ impl Guardrail {
     /// Run the wrapped [`GuardrailCheck`] against `content`.
     pub fn check(&self, content: &str) -> GuardrailResult {
         self.checker.check(content)
+    }
+
+    /// Type-specific wire fields (`guardrailType` plus that type's own fields) for
+    /// [`AgentConfigSerializer`](super::AgentConfigSerializer) — delegates to the wrapped
+    /// [`GuardrailCheck`] so the serializer never needs to downcast `checker`. See
+    /// [`GuardrailCheck::guardrail_type_fields`].
+    pub fn guardrail_type_fields(&self) -> Map<String, Value> {
+        self.checker.guardrail_type_fields()
     }
 }
 
@@ -306,9 +327,8 @@ impl RegexGuardrail {
         let patterns = pattern_strings
             .iter()
             .map(|p| {
-                Regex::new(p).map_err(|e| {
-                    ConductorError::agent(format!("invalid regex pattern '{p}': {e}"))
-                })
+                Regex::new(p)
+                    .map_err(|e| ConductorError::agent(format!("invalid regex pattern '{p}': {e}")))
             })
             .collect::<Result<Vec<Regex>>>()?;
         Ok(Self {
@@ -355,13 +375,46 @@ impl GuardrailCheck for RegexGuardrail {
                 GuardrailResult::fail(msg)
             }
             (RegexMode::Allow, false) => {
-                let msg = self.message.clone().unwrap_or_else(|| {
-                    "Content did not match any allowed pattern.".to_string()
-                });
+                let msg = self
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| "Content did not match any allowed pattern.".to_string());
                 GuardrailResult::fail(msg)
             }
             _ => GuardrailResult::pass(),
         }
+    }
+
+    fn guardrail_type_fields(&self) -> Map<String, Value> {
+        let mut fields = Map::new();
+        fields.insert(
+            "guardrailType".to_string(),
+            Value::String("regex".to_string()),
+        );
+        fields.insert(
+            "patterns".to_string(),
+            Value::Array(
+                self.pattern_strings
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
+            ),
+        );
+        fields.insert(
+            "mode".to_string(),
+            Value::String(
+                match self.mode {
+                    RegexMode::Block => "block",
+                    RegexMode::Allow => "allow",
+                }
+                .to_string(),
+            ),
+        );
+        if let Some(message) = &self.message {
+            fields.insert("message".to_string(), Value::String(message.clone()));
+        }
+        fields
     }
 }
 
@@ -424,6 +477,20 @@ impl GuardrailCheck for LlmGuardrail {
              Configured policy: {}",
             self.model, self.policy
         ))
+    }
+
+    fn guardrail_type_fields(&self) -> Map<String, Value> {
+        let mut fields = Map::new();
+        fields.insert(
+            "guardrailType".to_string(),
+            Value::String("llm".to_string()),
+        );
+        fields.insert("model".to_string(), Value::String(self.model.clone()));
+        fields.insert("policy".to_string(), Value::String(self.policy.clone()));
+        if let Some(max_tokens) = self.max_tokens {
+            fields.insert("maxTokens".to_string(), Value::from(max_tokens));
+        }
+        fields
     }
 }
 
@@ -517,8 +584,7 @@ mod tests {
 
     #[test]
     fn test_regex_guardrail_block_mode_fails_on_match() {
-        let guardrail =
-            RegexGuardrail::new([r"[\w.+-]+@[\w-]+\.[\w.-]+"]).unwrap();
+        let guardrail = RegexGuardrail::new([r"[\w.+-]+@[\w-]+\.[\w.-]+"]).unwrap();
         let result = guardrail.check("contact me at a@b.com please");
         assert!(!result.passed);
         assert!(!result.message.is_empty());

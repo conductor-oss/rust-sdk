@@ -315,7 +315,10 @@ mod tests {
         memory.add_system_message("sys3");
 
         assert_eq!(memory.messages.len(), 2);
-        assert!(memory.messages.iter().all(|m| m.role == MessageRole::System));
+        assert!(memory
+            .messages
+            .iter()
+            .all(|m| m.role == MessageRole::System));
         assert_eq!(memory.messages[0].message, "sys2");
         assert_eq!(memory.messages[1].message, "sys3");
     }
