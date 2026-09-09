@@ -87,6 +87,9 @@ schemars = "0.8"
 # Procedural macros (optional feature)
 conductor-macros = { version = "0.1.0", path = "conductor-macros", optional = true }
 
+# Guardrail pattern matching (agents feature)
+regex = { version = "1", optional = true }
+
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.5"
@@ -96,7 +99,7 @@ criterion = "0.5"
 [features]
 default = []
 macros = ["conductor-macros"]
-agents = ["macros"]
+agents = ["macros", "regex"]
 
 [[example]]
 name = "hello_world"

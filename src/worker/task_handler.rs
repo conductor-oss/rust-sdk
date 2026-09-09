@@ -205,7 +205,7 @@ impl TaskHandler {
         let start = std::time::Instant::now();
 
         // Drain handles using futures::future::join_all for cleaner handling
-        let handles: Vec<_> = self.handles.drain(..).collect();
+        let handles = std::mem::take(&mut self.handles);
 
         if !handles.is_empty() {
             let wait_result =

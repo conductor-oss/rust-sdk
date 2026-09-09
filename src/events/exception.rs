@@ -33,6 +33,8 @@ pub fn exception_label(err: &ConductorError) -> &'static str {
         ConductorError::Channel(_) => "Channel",
         #[cfg(feature = "agents")]
         ConductorError::Agent(_) => "Agent",
+        #[cfg(feature = "agents")]
+        ConductorError::CredentialNotFound(_) => "CredentialNotFound",
     }
 }
 

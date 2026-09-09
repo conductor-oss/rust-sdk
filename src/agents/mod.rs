@@ -10,10 +10,25 @@
 //! this crate) — everything here is pure data + serialization, usable standalone to build and
 //! inspect `agentConfig` JSON.
 
+mod callback;
+mod credentials;
 mod def;
+mod guardrail;
+mod memory;
 mod serializer;
+mod swarm;
+mod termination;
 mod tool;
 
+pub use callback::{CallbackContext, CallbackHandler};
+pub use credentials::Credentials;
 pub use def::{AgentDef, RunSettings, Strategy};
+pub use guardrail::{
+    Guardrail, GuardrailCheck, GuardrailResult, LlmGuardrail, OnFail, Position, RegexGuardrail,
+    RegexMode,
+};
+pub use memory::{ConversationMemory, Message, MessageRole, ToolCall};
 pub use serializer::AgentConfigSerializer;
+pub use swarm::{SwarmConditionFn, SwarmContext, SwarmTransition};
+pub use termination::TerminationCondition;
 pub use tool::{ToolDef, ToolHandler, ToolType};

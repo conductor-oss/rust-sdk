@@ -17,7 +17,10 @@ pub mod agents;
 // Re-exports for convenience
 #[cfg(feature = "agents")]
 pub use agents::{
-    AgentConfigSerializer, AgentDef, RunSettings, Strategy, ToolDef, ToolHandler, ToolType,
+    AgentConfigSerializer, AgentDef, CallbackContext, CallbackHandler, ConversationMemory,
+    Credentials, Guardrail, GuardrailCheck, GuardrailResult, LlmGuardrail, Message, MessageRole,
+    OnFail, Position, RegexGuardrail, RegexMode, RunSettings, Strategy, SwarmConditionFn,
+    SwarmContext, SwarmTransition, TerminationCondition, ToolCall, ToolDef, ToolHandler, ToolType,
 };
 #[cfg(feature = "agents")]
 pub use client::AgentClient;

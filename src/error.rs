@@ -76,6 +76,16 @@ pub enum ConductorError {
     #[cfg(feature = "agents")]
     #[error("Agent error: {0}")]
     Agent(String),
+
+    /// One or more declared credentials were not present in `Task.runtime_metadata`.
+    ///
+    /// Per `docs/agents/secrets-and-credentials.md`, credential resolution fails closed: a
+    /// name a tool/agent declared but that the server didn't attach to the polled `Task` is
+    /// always an error, never a silent fallback to the process environment. Carries only the
+    /// missing *names* — never a value — matching python-sdk's `CredentialNotFoundError`.
+    #[cfg(feature = "agents")]
+    #[error("Required credentials not found: {}", .0.join(", "))]
+    CredentialNotFound(Vec<String>),
 }
 
 impl ConductorError {
@@ -124,6 +134,12 @@ impl ConductorError {
     #[cfg(feature = "agents")]
     pub fn agent(msg: impl Into<String>) -> Self {
         ConductorError::Agent(msg.into())
+    }
+
+    /// Create a "credential not found" error for one or more missing declared credential names.
+    #[cfg(feature = "agents")]
+    pub fn credential_not_found(names: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        ConductorError::CredentialNotFound(names.into_iter().map(Into::into).collect())
     }
 
     /// Check if this error is retryable
