@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::error::{ConductorError, Result};
 
+use super::credentials::Credentials;
 use super::def::AgentDef;
 
 /// Tool invocation mechanism.
@@ -35,13 +36,18 @@ impl ToolType {
     }
 }
 
-/// Boxed async tool handler: takes the raw JSON arguments, returns raw JSON output.
+/// Boxed async tool handler: takes the raw JSON arguments plus the resolved [`Credentials`] for
+/// this call, returns raw JSON output.
 ///
 /// Kept as raw `Value -> Value` (rather than generic over `T`) so `ToolDef` itself can stay
-/// non-generic and be stored in a plain `Vec<ToolDef>` on [`AgentDef`]. [`ToolDef::function`]
-/// is the generic entry point that wraps a strongly-typed `Fn(T) -> Fut` into this shape.
-pub type ToolHandler =
-    Arc<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value>> + Send>> + Send + Sync>;
+/// non-generic and be stored in a plain `Vec<ToolDef>` on [`AgentDef`]. [`ToolDef::function`] and
+/// [`ToolDef::function_with_credentials`] are the generic entry points that wrap a strongly-typed
+/// `Fn(T) -> Fut` / `Fn(T, &Credentials) -> Fut` into this shape — `function`'s wrapper simply
+/// ignores the `Credentials` argument, so both constructors produce the same `ToolHandler` shape
+/// and a caller invoking a tool never needs to know which constructor built it.
+pub type ToolHandler = Arc<
+    dyn Fn(Value, Credentials) -> Pin<Box<dyn Future<Output = Result<Value>> + Send>> + Send + Sync,
+>;
 
 /// Declarative tool definition attachable to an [`AgentDef`].
 ///
@@ -121,11 +127,40 @@ impl ToolDef {
         let mut tool = Self::base(name, description, ToolType::Worker);
         tool.input_schema = input_schema;
         let handler = Arc::new(handler);
-        tool.handler = Some(Arc::new(move |raw: Value| {
+        tool.handler = Some(Arc::new(move |raw: Value, _credentials: Credentials| {
             let handler = handler.clone();
             Box::pin(async move {
                 let args: T = serde_json::from_value(raw)?;
                 handler(args).await
+            })
+        }));
+        tool
+    }
+
+    /// A locally-invoked function tool whose handler also receives the resolved [`Credentials`]
+    /// for this call — the entry point the `#[tool(credentials = [...])]` macro targets when a
+    /// second `&Credentials` parameter is present (see `docs/agents/secrets-and-credentials.md`).
+    /// `input_schema` still only describes `T`'s shape; `Credentials` is threaded in separately
+    /// at call time, not part of the JSON arguments.
+    pub fn function_with_credentials<T, F, Fut>(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        input_schema: Value,
+        handler: F,
+    ) -> Self
+    where
+        T: DeserializeOwned,
+        F: Fn(T, &Credentials) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value>> + Send + 'static,
+    {
+        let mut tool = Self::base(name, description, ToolType::Worker);
+        tool.input_schema = input_schema;
+        let handler = Arc::new(handler);
+        tool.handler = Some(Arc::new(move |raw: Value, credentials: Credentials| {
+            let handler = handler.clone();
+            Box::pin(async move {
+                let args: T = serde_json::from_value(raw)?;
+                handler(args, &credentials).await
             })
         }));
         tool
@@ -243,6 +278,12 @@ impl ToolDef {
         self
     }
 
+    /// Declare the credential names this tool needs. These names flow end-to-end: registration
+    /// stamps them onto `TaskDef.runtime_metadata`, the server resolves and delivers values back
+    /// on the polled `Task`, and a handler built via [`ToolDef::function_with_credentials`] reads
+    /// them out of the `&Credentials` it's called with (see
+    /// `docs/agents/secrets-and-credentials.md`). Also required (not merely declared) by
+    /// [`ToolDef::http`] / [`ToolDef::mcp`]'s `${NAME}` placeholder validation.
     pub fn with_credentials(mut self, credentials: Vec<String>) -> Self {
         self.credentials = credentials;
         self
@@ -300,8 +341,33 @@ mod tests {
             |args: Args| async move { Ok(Value::from(args.n * 2)) },
         );
         let handler = tool.handler.clone().unwrap();
-        let result = handler(serde_json::json!({"n": 21})).await.unwrap();
+        let result = handler(serde_json::json!({"n": 21}), Credentials::default())
+            .await
+            .unwrap();
         assert_eq!(result, Value::from(42));
+    }
+
+    #[tokio::test]
+    async fn test_function_with_credentials_tool_reads_credential() {
+        let tool = ToolDef::function_with_credentials::<Args, _, _>(
+            "double_with_token",
+            "doubles a number, using a token",
+            serde_json::json!({"type": "object"}),
+            |args: Args, creds: &Credentials| {
+                let token = creds.get("API_KEY").unwrap().to_string();
+                async move { Ok(Value::from(format!("{token}:{}", args.n * 2))) }
+            },
+        )
+        .with_credentials(vec!["API_KEY".to_string()]);
+        assert_eq!(tool.credentials, vec!["API_KEY".to_string()]);
+
+        let mut values = HashMap::new();
+        values.insert("API_KEY".to_string(), "secret".to_string());
+        let creds = Credentials::new(values);
+
+        let handler = tool.handler.clone().unwrap();
+        let result = handler(serde_json::json!({"n": 21}), creds).await.unwrap();
+        assert_eq!(result, Value::from("secret:42"));
     }
 
     #[test]

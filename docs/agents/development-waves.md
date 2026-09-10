@@ -23,9 +23,9 @@ Wave 2 — Agents: wire up Wave-1 types into AgentDef (touches shared files def.
 
 Wave 3 — Agents: credentials delivery (each independent; depends only on Wave 1's Credentials type)
 
-- [ ] Stamp declared credentials names onto TaskDef.runtime_metadata at registration time (in the existing metadata-registration path task_handler.rs:339).
-- [ ] #[tool] macro (conductor-macros/src/lib.rs:412): allow a second parameter typed &Credentials, generating the pass-through instead of erroring on fn_inputs.len() != 1.
-- [ ] with_tool_credentials(tool_name, names) / per-agent with_credentials — verify existing inert field wiring extends cleanly to the new resolution path (currently a no-op per def.rs:262-268).
+- [x] Stamp declared credentials names onto TaskDef.runtime_metadata at registration time (in the existing metadata-registration path task_handler.rs:339).
+- [x] #[tool] macro (conductor-macros/src/lib.rs:412): allow a second parameter typed &Credentials, generating the pass-through instead of erroring on fn_inputs.len() != 1.
+- [x] with_tool_credentials(tool_name, names) / per-agent with_credentials — verify existing inert field wiring extends cleanly to the new resolution path (currently a no-op per def.rs:262-268).
 
 Wave 4 — Agents: runtime (sequenced after Wave 2/3 land; independent from each other once AgentDef is stable)
 

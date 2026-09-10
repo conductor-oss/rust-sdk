@@ -391,12 +391,43 @@ impl AgentDef {
         self
     }
 
-    /// Declared credential names — **inert in this SDK version**. Populates the field that will
-    /// eventually flow into `TaskDef.runtime_metadata` at registration time; nothing resolves
-    /// or delivers values yet. See `docs/agents/secrets-and-credentials.md`.
+    /// Declared credential names, applying to every tool under this agent. These names flow
+    /// end-to-end: declare here (or per-tool via [`ToolDef::with_credentials`] /
+    /// [`AgentDef::with_tool_credentials`]) -> register (stamped onto `TaskDef.runtime_metadata`
+    /// at registration time) -> the server resolves and delivers values back on the polled `Task`
+    /// -> consume via [`Credentials::from_task`](super::Credentials::from_task) inside a tool
+    /// body. See `docs/agents/secrets-and-credentials.md` for the full contract.
     pub fn with_credentials(mut self, credentials: Vec<String>) -> Self {
         self.credentials = credentials;
         self
+    }
+
+    /// Set the declared credential names on a single already-added tool by name — the
+    /// non-literal-name convenience described in `docs/agents/parity-plan.md`'s tool-credential
+    /// flow, equivalent to having built that tool with its own `.with_credentials(...)` up front.
+    ///
+    /// Errors if no tool named `tool_name` has been added yet (via [`AgentDef::with_tool`] /
+    /// [`AgentDef::with_tools`]) — matching this crate's fail-fast builder convention (e.g.
+    /// [`AgentDef::with_sub_agent`]'s duplicate-name check) rather than silently no-op-ing on a
+    /// typo'd tool name.
+    pub fn with_tool_credentials(
+        mut self,
+        tool_name: impl AsRef<str>,
+        credentials: Vec<String>,
+    ) -> Result<Self> {
+        let tool_name = tool_name.as_ref();
+        let tool = self
+            .tools
+            .iter_mut()
+            .find(|t| t.name == tool_name)
+            .ok_or_else(|| {
+                ConductorError::agent(format!(
+                    "no tool named '{tool_name}': call with_tool(...) before \
+                     with_tool_credentials(\"{tool_name}\", ...)"
+                ))
+            })?;
+        tool.credentials = credentials;
+        Ok(self)
     }
 
     pub fn with_required_tools(mut self, tools: Vec<String>) -> Self {
@@ -689,6 +720,40 @@ mod tests {
         let debug_str = format!("{:?}", agent);
         assert!(debug_str.contains("AgentDef"));
         assert!(debug_str.contains("1 handlers"));
+    }
+
+    #[test]
+    fn test_with_credentials_sets_field() {
+        let agent = AgentDef::new("a").unwrap();
+        assert!(agent.credentials.is_empty());
+
+        let agent = agent.with_credentials(vec!["GH_TOKEN".to_string()]);
+        assert_eq!(agent.credentials, vec!["GH_TOKEN".to_string()]);
+    }
+
+    #[test]
+    fn test_with_tool_credentials_sets_named_tool() {
+        let tool = ToolDef::function::<Value, _, _>(
+            "create_issue",
+            "files an issue",
+            serde_json::json!({"type": "object"}),
+            |_args: Value| async move { Ok(Value::Null) },
+        );
+        let agent = AgentDef::new("filer")
+            .unwrap()
+            .with_tool(tool)
+            .with_tool_credentials("create_issue", vec!["GH_TOKEN".to_string()])
+            .unwrap();
+
+        assert_eq!(agent.tools[0].credentials, vec!["GH_TOKEN".to_string()]);
+    }
+
+    #[test]
+    fn test_with_tool_credentials_errors_on_unknown_tool_name() {
+        let agent = AgentDef::new("a").unwrap();
+        assert!(agent
+            .with_tool_credentials("does_not_exist", vec!["GH_TOKEN".to_string()])
+            .is_err());
     }
 
     #[test]
