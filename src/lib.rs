@@ -17,7 +17,8 @@ pub mod agents;
 // Re-exports for convenience
 #[cfg(feature = "agents")]
 pub use agents::{
-    AgentConfigSerializer, AgentDef, CallbackContext, CallbackHandler, ConversationMemory,
+    AgentConfigSerializer, AgentDef, AgentEvent, AgentExecutionState, AgentHandle, AgentResult,
+    AgentRuntime, AgentStatus, AgentStream, CallbackContext, CallbackHandler, ConversationMemory,
     Credentials, Guardrail, GuardrailCheck, GuardrailResult, LlmGuardrail, Message, MessageRole,
     OnFail, Position, RegexGuardrail, RegexMode, RunSettings, Strategy, SwarmConditionFn,
     SwarmContext, SwarmTransition, TerminationCondition, ToolCall, ToolDef, ToolHandler, ToolType,
