@@ -9,10 +9,10 @@ use crate::http::{ApiClient, ApiPath};
 /// Client for the Agent Runtime control-plane API (`/agent/*`).
 ///
 /// Mirrors python-sdk's `conductor.client.agent_client.AgentClient` /
-/// `conductor.client.orkes.orkes_agent_client.OrkesAgentClient`, minus `stream_sse`: that
-/// method streams Server-Sent Events, and this crate has no SSE/streaming transport yet (the
-/// `reqwest` dependency is built without the `"stream"` feature). Add it in a follow-up PR once
-/// streaming support lands in [`ApiClient`].
+/// `conductor.client.orkes.orkes_agent_client.OrkesAgentClient`, including `stream_sse`
+/// (here: [`stream`](Self::stream)) — the response body is handed back as a raw byte stream
+/// via [`ApiClient::get_stream`], with SSE framing/decoding into `crate::agents::AgentEvent`
+/// left to `crate::agents::AgentStream`.
 ///
 /// Request/response bodies are passed through as raw [`Value`] rather than typed models —
 /// there is no typed `AgentExecution`/`AgentStatus`/etc. in this crate yet (those belong to the
@@ -104,10 +104,17 @@ impl AgentClient {
             .await
     }
 
-    // Not implemented: SSE streaming (`stream_sse` in python-sdk, `GET /agent/stream/{execution_id}`).
-    // This crate's `reqwest` dependency has no `"stream"` feature enabled and `ApiClient` has no
-    // SSE parsing anywhere — adding one method here without the other would be a half-finished
-    // streaming stack. Deferred to the same follow-up PR that adds `AgentRuntime`/`AgentStream`.
+    /// Open the Server-Sent Events stream for a running agent execution.
+    /// `GET /agent/stream/{execution_id}` (python-sdk: `stream_sse`).
+    ///
+    /// Returns the raw [`reqwest::Response`]; wrap it in `crate::agents::AgentStream` to decode
+    /// SSE frames into `crate::agents::AgentEvent`s.
+    pub async fn stream(&self, execution_id: &str) -> Result<reqwest::Response> {
+        let path = format!("/agent/stream/{execution_id}");
+        self.api
+            .get_stream(ApiPath::templated(&path, "/agent/stream/{executionId}"))
+            .await
+    }
 }
 
 #[cfg(test)]

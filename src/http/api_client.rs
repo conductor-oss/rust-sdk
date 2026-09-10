@@ -228,6 +228,32 @@ impl ApiClient {
         self.handle_response(response).await
     }
 
+    /// GET request that returns the raw, unbuffered [`Response`] instead of deserializing it.
+    ///
+    /// For endpoints whose body is consumed incrementally (e.g. Server-Sent Events) rather than
+    /// parsed as a single JSON document. Applies the same auth-header/refresh handling as
+    /// [`get`](Self::get), but does not retry on 401 — a streaming caller has already begun
+    /// reading the body by the time a status past the headers would be observed, so there is no
+    /// safe point to re-issue the request transparently.
+    pub async fn get_stream(&self, path: impl Into<ApiPath<'_>>) -> Result<Response> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
+
+        let mut request = self.client.get(&url);
+        request = self.add_auth_header(request).await?;
+
+        let response = self
+            .send_observed("GET", p.path, p.metric_uri, request)
+            .await?;
+        let status = response.status();
+
+        if status.is_success() {
+            Ok(response)
+        } else {
+            Err(self.handle_error_response(response).await)
+        }
+    }
+
     /// POST request
     pub async fn post<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
