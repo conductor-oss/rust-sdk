@@ -4,18 +4,22 @@
 use crate::error::{ConductorError, Result};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use super::callback::CallbackHandler;
 use super::guardrail::Guardrail;
+use super::memory::ConversationMemory;
+use super::swarm::SwarmTransition;
 use super::termination::TerminationCondition;
 use super::tool::ToolDef;
 
 /// Multi-agent orchestration strategy.
 ///
-/// Kept as the complete 9-variant python-sdk enum for wire compatibility, even though this SDK
-/// version only supports *constructing* agents with `Handoff`, `Sequential`, `Parallel`,
-/// `RoundRobin`, `Random`, and `Manual` — see [`AgentDef::with_strategy`]. `Router`, `Swarm`,
-/// and `PlanExecute` each require a composition field (`router` / `swarm_transitions` /
-/// `planner`+`fallback`) that is deferred to a follow-up PR.
+/// Kept as the complete 9-variant python-sdk enum for wire compatibility. This SDK version
+/// supports *constructing* agents with `Handoff`, `Sequential`, `Parallel`, `Router` (requires
+/// a router sub-agent, see [`AgentDef::with_router`]), `RoundRobin`, `Random`, `Swarm` (requires
+/// `swarm_transitions`, see [`AgentDef::with_swarm_transition`]), `PlanExecute` (requires a
+/// planner, see [`AgentDef::with_planner`]), and `Manual`.
 ///
 /// `Handoff` (LLM freely picks the next agent) and the swarm-only rule-based transition type
 /// (python calls it `HandoffCondition`; the deferred Rust equivalent is named `SwarmTransition`,
@@ -28,14 +32,17 @@ pub enum Strategy {
     Handoff,
     Sequential,
     Parallel,
-    /// Requires a `router` composition field — not yet supported by this SDK version.
+    /// Requires a router sub-agent set via [`AgentDef::with_router`].
     Router,
     RoundRobin,
     Random,
-    /// Requires `swarm_transitions` — not yet supported by this SDK version.
+    /// Rule-based agent-to-agent transitions; see `AgentDef::swarm_transitions` /
+    /// [`AgentDef::with_swarm_transition`]. Matching python-sdk's `Agent.__init__` (which has
+    /// no analogous check for `strategy="swarm"`), zero transitions is accepted too.
     Swarm,
     Manual,
-    /// Requires `planner`/`fallback` — not yet supported by this SDK version.
+    /// Requires a `planner` composition field, set via [`AgentDef::with_planner`]; `fallback`
+    /// is optional.
     PlanExecute,
 }
 
@@ -53,13 +60,6 @@ impl Strategy {
             Strategy::Manual => "manual",
             Strategy::PlanExecute => "plan_execute",
         }
-    }
-
-    fn requires_deferred_composition(&self) -> bool {
-        matches!(
-            self,
-            Strategy::Router | Strategy::Swarm | Strategy::PlanExecute
-        )
     }
 }
 
@@ -117,15 +117,23 @@ impl RunSettings {
 /// structurally a definition (it *is* what serializes to `agentConfig`), so `AgentDef` is the
 /// name this crate's own convention implies — not an arbitrary rename.
 ///
-/// Narrowed to the fields that are structurally meaningful without the deferred composition
-/// types (`Guardrail`, `TerminationCondition`, `SwarmTransition`, `CallbackHandler`,
-/// `ConversationMemory`, `Router`, `planner`/`fallback`). See `docs/agents/` for the full
-/// exclusion set and rationale.
+/// `Guardrail`, `TerminationCondition`, `SwarmTransition`, `ConversationMemory`, `Router`
+/// (agent-based only — see [`AgentDef::router`]), and `PlanExecute`'s composition fields are
+/// all fully wired. `CallbackHandler` is registered (`callbacks`) but deliberately not
+/// serialized — see `serializer.rs`. See `docs/agents/` for the full exclusion set and
+/// rationale on anything still deferred.
 ///
 /// Construct via [`AgentDef::new`], compose with consuming `with_*` builders — matching
 /// [`TaskDef`](crate::models::TaskDef)'s pattern exactly (100% `fn with_x(mut self, ...) -> Self`,
 /// no `&mut self` builders) — and serialize with [`AgentConfigSerializer`](super::AgentConfigSerializer).
-#[derive(Debug, Clone)]
+///
+/// `Debug` is implemented by hand rather than derived: `callbacks` holds `Arc<dyn
+/// CallbackHandler>` trait objects, and `CallbackHandler` doesn't require `Debug` on its
+/// implementors (adding that bound would force every caller-provided handler — including
+/// closures-in-disguise and simple test mocks — to also implement `Debug` just to be
+/// registered, which is a bigger ask than this field's debug-printability is worth). See the
+/// manual `impl Debug for AgentDef` below.
+#[derive(Clone)]
 pub struct AgentDef {
     pub name: String,
     pub model: Option<String>,
@@ -134,6 +142,18 @@ pub struct AgentDef {
     pub tools: Vec<ToolDef>,
     pub guardrails: Vec<Guardrail>,
     pub agents: Vec<AgentDef>,
+    /// Sub-agent that picks which agent runs each turn, used when `strategy =
+    /// Strategy::Router`.
+    ///
+    /// Narrowed from python-sdk's `router: Optional[Union[Agent, Callable[..., Any]]]`: Rust
+    /// has no clean equivalent of an arbitrary callable that also serializes to JSON as part
+    /// of an `AgentDef` tree, so this field only models the agent-based form — a full
+    /// sub-agent whose job is to select the next agent. A callable-based router is out of
+    /// scope for this SDK version.
+    pub router: Option<Box<AgentDef>>,
+    /// Rule-based agent-to-agent transitions, used when `strategy = Strategy::Swarm` (python's
+    /// `Agent(handoffs=[...])`).
+    pub swarm_transitions: Vec<SwarmTransition>,
     pub strategy: Strategy,
     pub max_turns: u32,
     pub max_tokens: Option<u32>,
@@ -144,7 +164,66 @@ pub struct AgentDef {
     pub required_tools: Vec<String>,
     pub context_window_budget: Option<u32>,
     pub termination: Option<TerminationCondition>,
+    pub memory: Option<ConversationMemory>,
+    /// PLAN_EXECUTE planner sub-agent — produces the JSON plan the parent executes. Required
+    /// when `strategy` is [`Strategy::PlanExecute`]; see [`AgentDef::with_strategy`].
+    pub planner: Option<Box<AgentDef>>,
+    /// PLAN_EXECUTE fallback sub-agent, invoked when the planner's plan fails mid-execution.
+    /// Optional — PLAN_EXECUTE works without one.
+    pub fallback: Option<Box<AgentDef>>,
+    /// Turn cap applied to `fallback` once it's invoked.
+    pub fallback_max_turns: Option<u32>,
+    /// Reference text appended to the PLAN_EXECUTE planner's prompt as a
+    /// `## Reference Context` block on every planner invocation.
+    ///
+    /// python-sdk's `planner_context` accepts a richer `Context` dataclass — exactly one of
+    /// `text` or `url` (the latter HTTP-fetched at every planner run, with optional
+    /// `headers`/`required`/`max_bytes`) — see
+    /// `python-sdk/src/conductor/ai/agents/plans.py::Context`. It also accepts bare `str`,
+    /// which it normalises to `Context(text=...)`.
+    ///
+    /// This crate models only that bare-string shape for now: a `PlannerContextEntry` type
+    /// rich enough to cover the URL case would need to be a new public type re-exported from
+    /// `agents::mod`, which is out of scope here. `Vec<String>` covers the common "inline
+    /// reference text" case exactly like python's `str` shorthand; URL-backed entries are a
+    /// follow-up once a richer type can be exported.
+    pub planner_context: Vec<String>,
+    /// Whether to run a final LLM synthesis step after execution completes. Defaults to
+    /// `true` (matches python-sdk); only serialized on the wire when explicitly `false`.
+    pub synthesize: bool,
     pub metadata: HashMap<String, Value>,
+    /// Lifecycle hooks registered by the caller (see [`CallbackHandler`]). `Arc`, not `Box`,
+    /// because a single handler instance (e.g. one metrics sink) may reasonably be shared across
+    /// multiple agents or multiple hook positions rather than constructed fresh each time —
+    /// matching how [`ToolHandler`](super::tool::ToolHandler) is held for the same reason.
+    /// Deliberately **not** serialized — see `serializer.rs`'s `serialize_agent` for why.
+    pub callbacks: Vec<Arc<dyn CallbackHandler>>,
+}
+
+impl std::fmt::Debug for AgentDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AgentDef")
+            .field("name", &self.name)
+            .field("model", &self.model)
+            .field("base_url", &self.base_url)
+            .field("instructions", &self.instructions)
+            .field("tools", &self.tools)
+            .field("guardrails", &self.guardrails)
+            .field("agents", &self.agents)
+            .field("strategy", &self.strategy)
+            .field("max_turns", &self.max_turns)
+            .field("max_tokens", &self.max_tokens)
+            .field("timeout_seconds", &self.timeout_seconds)
+            .field("temperature", &self.temperature)
+            .field("reasoning_effort", &self.reasoning_effort)
+            .field("credentials", &self.credentials)
+            .field("required_tools", &self.required_tools)
+            .field("context_window_budget", &self.context_window_budget)
+            .field("termination", &self.termination)
+            .field("metadata", &self.metadata)
+            .field("callbacks", &format!("<{} handlers>", self.callbacks.len()))
+            .finish()
+    }
 }
 
 impl AgentDef {
@@ -166,6 +245,8 @@ impl AgentDef {
             tools: Vec::new(),
             guardrails: Vec::new(),
             agents: Vec::new(),
+            router: None,
+            swarm_transitions: Vec::new(),
             strategy: Strategy::default(),
             max_turns: 25,
             max_tokens: None,
@@ -176,7 +257,14 @@ impl AgentDef {
             required_tools: Vec::new(),
             context_window_budget: None,
             termination: None,
+            memory: None,
+            planner: None,
+            fallback: None,
+            fallback_max_turns: None,
+            planner_context: Vec::new(),
+            synthesize: true,
             metadata: HashMap::new(),
+            callbacks: Vec::new(),
         })
     }
 
@@ -228,18 +316,46 @@ impl AgentDef {
         Ok(self)
     }
 
-    /// Set the orchestration strategy. Rejects `Router`, `Swarm`, and `PlanExecute` — each
-    /// requires a composition field this SDK version doesn't support yet; constructing one of
-    /// them without its composition field would silently produce an incomplete `agentConfig`
-    /// on the wire, so this fails closed at construction time instead.
+    /// Set the router sub-agent used when `strategy = Strategy::Router`.
+    ///
+    /// Call this *before* [`AgentDef::with_strategy`]`(Strategy::Router)`: that call validates
+    /// the router requirement against this field's current state at the time it's called, so
+    /// setting the router afterwards does not retroactively satisfy an already-failed
+    /// `with_strategy` call.
+    pub fn with_router(mut self, router: AgentDef) -> Self {
+        self.router = Some(Box::new(router));
+        self
+    }
+
+    /// Add a rule-based agent-to-agent transition, used under `Strategy::Swarm` (python's
+    /// `Agent(handoffs=[...])`). Accumulates like [`AgentDef::with_guardrail`] — call once per
+    /// transition.
+    pub fn with_swarm_transition(mut self, transition: SwarmTransition) -> Self {
+        self.swarm_transitions.push(transition);
+        self
+    }
+
+    /// Set the orchestration strategy.
+    ///
+    /// `Router` and `PlanExecute` each validate a required composition field against its
+    /// *current* state at the moment this method runs: [`AgentDef::with_router`] /
+    /// [`AgentDef::with_planner`] must be called first in the builder chain, since an `Err`
+    /// here consumes `self` and there's no way to retroactively satisfy the check afterwards.
+    /// `Swarm` has no such requirement — matching python-sdk's `Agent.__init__` (which has no
+    /// analogous check for `strategy="swarm"`), zero `swarm_transitions` is accepted too.
     pub fn with_strategy(mut self, strategy: Strategy) -> Result<Self> {
-        if strategy.requires_deferred_composition() {
-            return Err(ConductorError::agent(format!(
-                "strategy '{}' requires a composition field (router / swarm_transitions / \
-                 planner+fallback) not yet supported by this SDK version; use Handoff, \
-                 Sequential, Parallel, RoundRobin, Random, or Manual instead",
-                strategy.as_str()
-            )));
+        if strategy == Strategy::Router && self.router.is_none() {
+            return Err(ConductorError::agent(
+                "strategy='router' requires a router argument: call with_router(...) before \
+                 with_strategy(Strategy::Router)",
+            ));
+        }
+        if strategy == Strategy::PlanExecute && self.planner.is_none() {
+            return Err(ConductorError::agent(
+                "strategy 'plan_execute' requires a planner: call `.with_planner(...)` before \
+                 `.with_strategy(Strategy::PlanExecute)` (the planner agent produces the JSON \
+                 plan the parent executes)",
+            ));
         }
         self.strategy = strategy;
         Ok(self)
@@ -298,8 +414,67 @@ impl AgentDef {
         self
     }
 
+    pub fn with_memory(mut self, memory: ConversationMemory) -> Self {
+        self.memory = Some(memory);
+        self
+    }
+
+    /// Set the PLAN_EXECUTE planner sub-agent — the agent that produces the JSON plan the
+    /// parent executes. Call this *before* `.with_strategy(Strategy::PlanExecute)`; see that
+    /// method's validation.
+    pub fn with_planner(mut self, planner: AgentDef) -> Self {
+        self.planner = Some(Box::new(planner));
+        self
+    }
+
+    /// Set the PLAN_EXECUTE fallback sub-agent, invoked when the planner's plan fails
+    /// mid-execution. Optional — PLAN_EXECUTE works without one.
+    pub fn with_fallback(mut self, fallback: AgentDef) -> Self {
+        self.fallback = Some(Box::new(fallback));
+        self
+    }
+
+    /// Cap the number of turns the `fallback` agent gets once invoked.
+    pub fn with_fallback_max_turns(mut self, turns: u32) -> Self {
+        self.fallback_max_turns = Some(turns);
+        self
+    }
+
+    /// Append one reference-text entry to the PLAN_EXECUTE planner's context. Matches
+    /// python-sdk's bare-`str` shorthand for `Context(text=...)` — see the `planner_context`
+    /// field's doc comment on [`AgentDef`] for why URL-backed entries aren't modeled here yet.
+    pub fn with_planner_context(mut self, entry: impl Into<String>) -> Self {
+        self.planner_context.push(entry.into());
+        self
+    }
+
+    /// Bulk variant of [`with_planner_context`](Self::with_planner_context).
+    pub fn with_planner_contexts(
+        mut self,
+        entries: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.planner_context
+            .extend(entries.into_iter().map(Into::into));
+        self
+    }
+
+    /// Toggle the final LLM synthesis step after execution completes. Defaults to `true`
+    /// (matches python-sdk); only emitted on the wire when explicitly disabled.
+    pub fn with_synthesize(mut self, synthesize: bool) -> Self {
+        self.synthesize = synthesize;
+        self
+    }
+
     pub fn with_metadata_entry(mut self, key: impl Into<String>, value: Value) -> Self {
         self.metadata.insert(key.into(), value);
+        self
+    }
+
+    /// Register a [`CallbackHandler`]. Multiple registrations accumulate and are expected to
+    /// chain in registration order (see `callback.rs`'s module docs) once a dispatcher exists;
+    /// this crate only stores them for now — see `serializer.rs` for why they aren't serialized.
+    pub fn with_callback(mut self, callback: impl CallbackHandler + 'static) -> Self {
+        self.callbacks.push(Arc::new(callback));
         self
     }
 }
@@ -336,12 +511,106 @@ mod tests {
     }
 
     #[test]
-    fn test_with_strategy_rejects_deferred_variants() {
+    fn test_with_strategy_accepts_simple_variants() {
         let agent = AgentDef::new("a").unwrap();
-        assert!(agent.clone().with_strategy(Strategy::Router).is_err());
-        assert!(agent.clone().with_strategy(Strategy::Swarm).is_err());
-        assert!(agent.clone().with_strategy(Strategy::PlanExecute).is_err());
         assert!(agent.with_strategy(Strategy::Sequential).is_ok());
+    }
+
+    #[test]
+    fn test_with_strategy_router_succeeds_with_router_set() {
+        let router_agent = AgentDef::new("router_agent").unwrap();
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_router(router_agent)
+            .with_strategy(Strategy::Router);
+        assert!(agent.is_ok());
+        assert_eq!(agent.unwrap().strategy, Strategy::Router);
+    }
+
+    #[test]
+    fn test_with_strategy_router_fails_without_router_set() {
+        let agent = AgentDef::new("a").unwrap();
+        assert!(agent.router.is_none());
+        assert!(agent.with_strategy(Strategy::Router).is_err());
+    }
+
+    #[test]
+    fn test_with_strategy_accepts_swarm_with_a_transition() {
+        let agent =
+            AgentDef::new("a")
+                .unwrap()
+                .with_swarm_transition(SwarmTransition::OnTextMention {
+                    target: "b".into(),
+                    text: "ACTIONABLE".into(),
+                });
+        assert!(agent.with_strategy(Strategy::Swarm).is_ok());
+    }
+
+    #[test]
+    fn test_with_strategy_accepts_swarm_with_zero_transitions() {
+        // Matches python-sdk's `Agent.__init__`, which has no check requiring
+        // `handoffs` to be non-empty when `strategy="swarm"`.
+        let agent = AgentDef::new("a").unwrap();
+        assert!(agent.with_strategy(Strategy::Swarm).is_ok());
+    }
+
+    #[test]
+    fn test_with_swarm_transition_accumulates() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_swarm_transition(SwarmTransition::OnToolResult {
+                target: "b".into(),
+                tool_name: "check_order".into(),
+                result_contains: None,
+            })
+            .with_swarm_transition(SwarmTransition::OnTextMention {
+                target: "c".into(),
+                text: "done".into(),
+            });
+        assert_eq!(agent.swarm_transitions.len(), 2);
+        assert_eq!(agent.swarm_transitions[0].target(), "b");
+        assert_eq!(agent.swarm_transitions[1].target(), "c");
+    }
+
+    #[test]
+    fn test_with_strategy_plan_execute_requires_planner() {
+        let agent = AgentDef::new("a").unwrap();
+        // No planner set yet: rejected, matching python's "PLAN_EXECUTE requires planner=".
+        assert!(agent.clone().with_strategy(Strategy::PlanExecute).is_err());
+
+        // Planner set first (required builder-chain order): accepted.
+        let planner = AgentDef::new("planner").unwrap();
+        let agent_with_planner = agent.with_planner(planner);
+        assert!(agent_with_planner
+            .with_strategy(Strategy::PlanExecute)
+            .is_ok());
+    }
+
+    #[test]
+    fn test_plan_execute_composition_builders() {
+        let default_agent = AgentDef::new("defaults").unwrap();
+        assert!(default_agent.planner.is_none());
+        assert!(default_agent.fallback.is_none());
+        assert!(default_agent.fallback_max_turns.is_none());
+        assert!(default_agent.planner_context.is_empty());
+        assert!(default_agent.synthesize);
+
+        let planner = AgentDef::new("planner").unwrap();
+        let fallback = AgentDef::new("fallback_agent").unwrap();
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_planner(planner)
+            .with_fallback(fallback)
+            .with_fallback_max_turns(7)
+            .with_planner_context("first")
+            .with_planner_contexts(vec!["second", "third"])
+            .with_synthesize(false);
+
+        assert_eq!(agent.planner.as_ref().unwrap().name, "planner");
+        assert_eq!(agent.fallback.as_ref().unwrap().name, "fallback_agent");
+        assert_eq!(agent.fallback_max_turns, Some(7));
+        assert_eq!(agent.planner_context, vec!["first", "second", "third"]);
+        assert!(!agent.synthesize);
     }
 
     #[test]
@@ -383,5 +652,53 @@ mod tests {
         let termination = TerminationCondition::max_message(10).unwrap();
         let agent = agent.with_termination(termination.clone());
         assert_eq!(agent.termination, Some(termination));
+    }
+
+    /// Minimal mock handler, adapted from `callback.rs`'s own `NoopHandler` test fixture:
+    /// overrides nothing, so it exercises only "does this type implement `CallbackHandler` and
+    /// can it be registered," not any particular hook behavior.
+    struct MockCallbackHandler;
+
+    #[async_trait::async_trait]
+    impl super::super::callback::CallbackHandler for MockCallbackHandler {}
+
+    #[test]
+    fn test_with_callback_registers_handler() {
+        let agent = AgentDef::new("a").unwrap();
+        assert!(agent.callbacks.is_empty());
+
+        let agent = agent.with_callback(MockCallbackHandler);
+        assert_eq!(agent.callbacks.len(), 1);
+    }
+
+    #[test]
+    fn test_with_callback_accumulates() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_callback(MockCallbackHandler)
+            .with_callback(MockCallbackHandler)
+            .with_callback(MockCallbackHandler);
+        assert_eq!(agent.callbacks.len(), 3);
+    }
+
+    #[test]
+    fn test_debug_format_does_not_panic_with_callbacks() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_callback(MockCallbackHandler);
+        let debug_str = format!("{:?}", agent);
+        assert!(debug_str.contains("AgentDef"));
+        assert!(debug_str.contains("1 handlers"));
+    }
+
+    #[test]
+    fn test_with_memory_sets_field() {
+        let agent = AgentDef::new("a").unwrap();
+        assert!(agent.memory.is_none());
+
+        let mut memory = ConversationMemory::new();
+        memory.add_user_message("hi");
+        let agent = agent.with_memory(memory.clone());
+        assert_eq!(agent.memory.map(|m| m.messages), Some(memory.messages));
     }
 }
