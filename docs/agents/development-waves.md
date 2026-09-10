@@ -12,13 +12,13 @@ Wave 1 — Agents: new composition types (no dependencies on each other; each is
 
 Wave 2 — Agents: wire up Wave-1 types into AgentDef (touches shared files def.rs/serializer.rs, so sequence these serially with each other, but each can be scoped as one focused PR)
 
-- [ ] Add guardrails: Vec<Guardrail> field + with_guardrail() builder to AgentDef; serialize in AgentConfigSerializer.
-- [ ] Add termination: Option<TerminationCondition> field + with_termination(); serialize.
-- [ ] Add router field + lift the with_strategy rejection for Strategy::Router in def.rs:219-230; serialize.
-- [ ] Add swarm_transitions: Vec<SwarmTransition> + with_swarm_transition(); lift the Strategy::Swarm rejection; serialize.
-- [ ] Add planner/fallback/fallback_max_turns/planner_context/synthesize fields; lift the Strategy::PlanExecute rejection; serialize.
-- [ ] Add callbacks: Vec<Box<dyn CallbackHandler>> registration (not serialized — caller-side only, per parity-plan.md's open-circle relationship).
-- [ ] Add memory: Option<ConversationMemory> field; serialize.
+- [x] Add guardrails: Vec<Guardrail> field + with_guardrail() builder to AgentDef; serialize in AgentConfigSerializer.
+- [x] Add termination: Option<TerminationCondition> field + with_termination(); serialize.
+- [x] Add router field + lift the with_strategy rejection for Strategy::Router in def.rs:219-230; serialize.
+- [x] Add swarm_transitions: Vec<SwarmTransition> + with_swarm_transition(); lift the Strategy::Swarm rejection; serialize.
+- [x] Add planner/fallback/fallback_max_turns/planner_context/synthesize fields; lift the Strategy::PlanExecute rejection; serialize.
+- [x] Add callbacks: Vec<Box<dyn CallbackHandler>> registration (not serialized — caller-side only, per parity-plan.md's open-circle relationship).
+- [x] Add memory: Option<ConversationMemory> field; serialize.
 - [ ] Add output_type structured-output field; serialize.
 
 Wave 3 — Agents: credentials delivery (each independent; depends only on Wave 1's Credentials type)
@@ -33,8 +33,8 @@ Wave 4 — Agents: runtime (sequenced after Wave 2/3 land; independent from each
 - [x] AgentRuntime::deploy() / start_agent() wiring to existing AgentClient methods (src/client/agent_client.rs — already has the transport, just needs a caller).
 - [x] AgentRuntime::run() — blocking helper: start + poll get_status/get_execution to completion, return AgentResult.
 - [x] AgentRuntime::serve() — composes the existing TaskHandler (reuse, per parity-plan.md's diagram — no new polling loop) for local tool workers.
-- [ ] AgentHandle — join(), stream(), approve()/reject()/respond() targeting execution_id. (join/approve/reject/respond delivered in src/agents/runtime.rs; stream() still deferred — needs the SSE transport AgentClient doesn't have yet.)
-- [ ] AgentEvent enum + AgentStream (SSE parsing over the existing stream endpoint on AgentClient).
+- [x] AgentHandle — join(), stream(), approve()/reject()/respond() targeting execution_id. (all delivered in src/agents/handle.rs; stream() opens the SSE response via AgentClient::stream() and wraps it in AgentStream::new.)
+- [x] AgentEvent enum + AgentStream (SSE parsing over the existing stream endpoint on AgentClient).
 - [x] AgentStatus / AgentResult types.
 
 Wave 5 — Agents: framework adapters (fully independent of each other and of Wave 4 internals, only need AgentDef stable)
