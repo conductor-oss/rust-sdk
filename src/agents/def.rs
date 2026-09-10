@@ -63,6 +63,22 @@ impl Strategy {
     }
 }
 
+/// Structured-output typing for an agent's final response.
+///
+/// Mirrors python-sdk's `Agent.output_type: Optional[type]`, serialized by
+/// `config_serializer.py::_serialize_output_type` as
+/// `{"schema": schema_from_pydantic(output_type), "className": output_type.__name__}`.
+///
+/// Narrowed for Rust: there's no runtime type to introspect the way python inspects a Pydantic
+/// class, so the caller supplies both halves directly — the schema (generate one via
+/// [`crate::schema::generate_schema::<T>(true)`](crate::schema::generate_schema) for a type `T`
+/// implementing `JsonSchema`) and `T`'s name as `class_name`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputType {
+    pub schema: Value,
+    pub class_name: String,
+}
+
 /// Per-call override struct reserved for the future `AgentRuntime::run` API.
 ///
 /// Ports python-sdk's `RunSettings` as-is (already a small, clean, validation-free override
@@ -151,6 +167,9 @@ pub struct AgentDef {
     /// sub-agent whose job is to select the next agent. A callable-based router is out of
     /// scope for this SDK version.
     pub router: Option<Box<AgentDef>>,
+    /// Structured-output typing for the agent's final response — see [`OutputType`]'s doc
+    /// comment for the python-sdk mapping and this crate's narrowing.
+    pub output_type: Option<OutputType>,
     /// Rule-based agent-to-agent transitions, used when `strategy = Strategy::Swarm` (python's
     /// `Agent(handoffs=[...])`).
     pub swarm_transitions: Vec<SwarmTransition>,
@@ -210,6 +229,7 @@ impl std::fmt::Debug for AgentDef {
             .field("tools", &self.tools)
             .field("guardrails", &self.guardrails)
             .field("agents", &self.agents)
+            .field("output_type", &self.output_type)
             .field("strategy", &self.strategy)
             .field("max_turns", &self.max_turns)
             .field("max_tokens", &self.max_tokens)
@@ -246,6 +266,7 @@ impl AgentDef {
             guardrails: Vec::new(),
             agents: Vec::new(),
             router: None,
+            output_type: None,
             swarm_transitions: Vec::new(),
             strategy: Strategy::default(),
             max_turns: 25,
@@ -324,6 +345,18 @@ impl AgentDef {
     /// `with_strategy` call.
     pub fn with_router(mut self, router: AgentDef) -> Self {
         self.router = Some(Box::new(router));
+        self
+    }
+
+    /// Set structured-output typing for the agent's final response. Follows
+    /// [`ToolDef::with_output_schema`](super::tool::ToolDef::with_output_schema)'s convention of
+    /// taking a raw [`serde_json::Value`] schema from the caller rather than a `JsonSchema`
+    /// generic bound — see [`OutputType`]'s doc comment for why.
+    pub fn with_output_type(mut self, class_name: impl Into<String>, schema: Value) -> Self {
+        self.output_type = Some(OutputType {
+            schema,
+            class_name: class_name.into(),
+        });
         self
     }
 
@@ -754,6 +787,22 @@ mod tests {
         assert!(agent
             .with_tool_credentials("does_not_exist", vec!["GH_TOKEN".to_string()])
             .is_err());
+    }
+
+    #[test]
+    fn test_with_output_type_sets_field() {
+        let agent = AgentDef::new("a").unwrap();
+        assert!(agent.output_type.is_none());
+
+        let schema = serde_json::json!({"type": "object"});
+        let agent = agent.with_output_type("MyOutput", schema.clone());
+        assert_eq!(
+            agent.output_type,
+            Some(OutputType {
+                schema,
+                class_name: "MyOutput".to_string(),
+            })
+        );
     }
 
     #[test]
