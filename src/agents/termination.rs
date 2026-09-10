@@ -29,7 +29,7 @@ use crate::error::{ConductorError, Result};
 /// nested `And(And(a, b), c)`:
 ///
 /// ```
-/// use conductor::agents::termination::TerminationCondition;
+/// use conductor::agents::TerminationCondition;
 ///
 /// // Stop when the LLM says "DONE" OR after 50 messages.
 /// let stop = TerminationCondition::text_mention("DONE")
