@@ -221,7 +221,7 @@ tokio::spawn(async move {
 
 // non-blocking, poll/stream it yourself — approval decision lives at the call site
 let handle = runtime.start(&agent, input).await?;
-let mut stream = handle.stream();
+let mut stream = handle.stream().await?;
 while let Some(event) = stream.next().await.transpose()? {
     match event {
         AgentEvent::Waiting { execution_id, tool_name, args } if tool_name == "issue_refund" => {

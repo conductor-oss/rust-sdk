@@ -29,13 +29,13 @@ Wave 3 — Agents: credentials delivery (each independent; depends only on Wave 
 
 Wave 4 — Agents: runtime (sequenced after Wave 2/3 land; independent from each other once AgentDef is stable)
 
-- [ ] AgentRuntime::new + compile() (→ AgentConfigSerializer::serialize + AgentClient::compile_agent).
-- [ ] AgentRuntime::deploy() / start_agent() wiring to existing AgentClient methods (src/client/agent_client.rs — already has the transport, just needs a caller).
-- [ ] AgentRuntime::run() — blocking helper: start + poll get_status/get_execution to completion, return AgentResult.
-- [ ] AgentRuntime::serve() — composes the existing TaskHandler (reuse, per parity-plan.md's diagram — no new polling loop) for local tool workers.
-- [ ] AgentHandle — join(), stream(), approve()/reject()/respond() targeting execution_id.
+- [x] AgentRuntime::new + compile() (→ AgentConfigSerializer::serialize + AgentClient::compile_agent).
+- [x] AgentRuntime::deploy() / start_agent() wiring to existing AgentClient methods (src/client/agent_client.rs — already has the transport, just needs a caller).
+- [x] AgentRuntime::run() — blocking helper: start + poll get_status/get_execution to completion, return AgentResult.
+- [x] AgentRuntime::serve() — composes the existing TaskHandler (reuse, per parity-plan.md's diagram — no new polling loop) for local tool workers.
+- [ ] AgentHandle — join(), stream(), approve()/reject()/respond() targeting execution_id. (join/approve/reject/respond delivered in src/agents/runtime.rs; stream() still deferred — needs the SSE transport AgentClient doesn't have yet.)
 - [ ] AgentEvent enum + AgentStream (SSE parsing over the existing stream endpoint on AgentClient).
-- [ ] AgentStatus / AgentResult types.
+- [x] AgentStatus / AgentResult types.
 
 Wave 5 — Agents: framework adapters (fully independent of each other and of Wave 4 internals, only need AgentDef stable)
 

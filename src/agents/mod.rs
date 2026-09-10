@@ -14,8 +14,12 @@ mod callback;
 mod credentials;
 mod def;
 mod guardrail;
+mod handle;
 mod memory;
+mod result;
+mod runtime;
 mod serializer;
+mod stream;
 mod swarm;
 mod termination;
 mod tool;
@@ -27,8 +31,12 @@ pub use guardrail::{
     Guardrail, GuardrailCheck, GuardrailResult, LlmGuardrail, OnFail, Position, RegexGuardrail,
     RegexMode,
 };
+pub use handle::AgentHandle;
 pub use memory::{ConversationMemory, Message, MessageRole, ToolCall};
+pub use result::{AgentExecutionState, AgentResult, AgentStatus};
+pub use runtime::AgentRuntime;
 pub use serializer::AgentConfigSerializer;
+pub use stream::{AgentEvent, AgentStream};
 pub use swarm::{SwarmConditionFn, SwarmContext, SwarmTransition};
 pub use termination::TerminationCondition;
 pub use tool::{ToolDef, ToolHandler, ToolType};
