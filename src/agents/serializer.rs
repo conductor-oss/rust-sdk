@@ -3,7 +3,7 @@
 
 use serde_json::{Map, Value};
 
-use super::def::AgentDef;
+use super::def::{AgentDef, OutputType};
 use super::guardrail::Guardrail;
 use super::memory::{ConversationMemory, Message, ToolCall};
 use super::swarm::SwarmTransition;
@@ -82,6 +82,10 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // callable-router `{"taskName": ...}` branch to reproduce here.
     if let Some(router) = &agent.router {
         map.insert("router".to_string(), serialize_agent(router));
+    }
+
+    if let Some(output_type) = &agent.output_type {
+        map.insert("outputType".to_string(), serialize_output_type(output_type));
     }
 
     if !agent.guardrails.is_empty() {
@@ -221,6 +225,19 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // `callbacks` stays a caller-side-only registration (see `AgentDef::with_callback`) until an
     // `AgentRuntime` follow-up exists to give each position a real task name to point at.
 
+    Value::Object(map)
+}
+
+/// Serializes an [`OutputType`] to the `OutputTypeConfig` wire shape, matching python-sdk's
+/// `AgentConfigSerializer._serialize_output_type`: a JSON `schema` plus the originating
+/// `className` for server-side validation.
+fn serialize_output_type(output_type: &OutputType) -> Value {
+    let mut map = Map::new();
+    map.insert("schema".to_string(), output_type.schema.clone());
+    map.insert(
+        "className".to_string(),
+        Value::String(output_type.class_name.clone()),
+    );
     Value::Object(map)
 }
 
@@ -528,6 +545,7 @@ mod tests {
             "tools",
             "agents",
             "router",
+            "outputType",
             "guardrails",
             "termination",
             "memory",
@@ -986,6 +1004,33 @@ mod tests {
             Some(&Value::String("gpt-4".to_string()))
         );
         assert_eq!(router_json.get("external"), Some(&Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_serialize_output_type() {
+        let output_type = OutputType {
+            schema: serde_json::json!({"type": "object", "properties": {"answer": {"type": "string"}}}),
+            class_name: "Answer".to_string(),
+        };
+        let agent = AgentDef::new("a").unwrap().with_output_type(output_type);
+
+        let json = AgentConfigSerializer::serialize(&agent);
+        let obj = json.as_object().unwrap();
+
+        assert_eq!(
+            obj.get("outputType"),
+            Some(&serde_json::json!({
+                "schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
+                "className": "Answer",
+            }))
+        );
+    }
+
+    #[test]
+    fn test_output_type_omitted_when_none() {
+        let agent = AgentDef::new("a").unwrap();
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert!(!json.as_object().unwrap().contains_key("outputType"));
     }
 
     #[test]
