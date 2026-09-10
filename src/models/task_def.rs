@@ -124,6 +124,10 @@ pub struct TaskDef {
     /// Output schema (JSON Schema for output validation)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<serde_json::Value>,
+
+    /// Runtime metadata (e.g. declared credential names required to dispatch this task)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runtime_metadata: Vec<String>,
 }
 
 fn default_backoff_factor() -> i32 {
@@ -168,6 +172,7 @@ impl Default for TaskDef {
             update_time: None,
             input_schema: None,
             output_schema: None,
+            runtime_metadata: Vec::new(),
         }
     }
 }
@@ -245,6 +250,12 @@ impl TaskDef {
         self.output_keys = keys;
         self
     }
+
+    /// Set runtime metadata (e.g. declared credential names required to dispatch this task)
+    pub fn with_runtime_metadata(mut self, runtime_metadata: Vec<String>) -> Self {
+        self.runtime_metadata = runtime_metadata;
+        self
+    }
 }
 
 #[cfg(test)]
@@ -275,5 +286,37 @@ mod tests {
         let task_def = TaskDef::new("test");
         let json = serde_json::to_string(&task_def).unwrap();
         assert!(json.contains("\"name\":\"test\""));
+    }
+
+    #[test]
+    fn test_task_def_runtime_metadata_default_empty() {
+        let task_def = TaskDef::new("test");
+        assert!(task_def.runtime_metadata.is_empty());
+    }
+
+    #[test]
+    fn test_task_def_with_runtime_metadata() {
+        let task_def = TaskDef::new("test").with_runtime_metadata(vec!["openai_key".to_string()]);
+        assert_eq!(task_def.runtime_metadata, vec!["openai_key".to_string()]);
+    }
+
+    #[test]
+    fn test_task_def_runtime_metadata_skipped_when_empty() {
+        let task_def = TaskDef::new("test");
+        let json = serde_json::to_string(&task_def).unwrap();
+        assert!(!json.contains("runtimeMetadata"));
+    }
+
+    #[test]
+    fn test_task_def_runtime_metadata_serialized_when_present() {
+        let task_def = TaskDef::new("test").with_runtime_metadata(vec!["openai_key".to_string()]);
+        let json = serde_json::to_string(&task_def).unwrap();
+        assert!(json.contains("\"runtimeMetadata\":[\"openai_key\"]"));
+
+        let deserialized: TaskDef = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            deserialized.runtime_metadata,
+            vec!["openai_key".to_string()]
+        );
     }
 }

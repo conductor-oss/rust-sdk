@@ -134,6 +134,14 @@ pub trait Worker: Send + Sync {
     fn output_schema(&self) -> Option<serde_json::Value> {
         None
     }
+
+    /// Get the names of credentials this worker declares as required (optional)
+    ///
+    /// Used when `register_task_def` is enabled to stamp `TaskDef::runtime_metadata`
+    /// so the server can resolve credentials before dispatching the task.
+    fn declared_credentials(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// Type alias for async worker functions

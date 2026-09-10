@@ -328,8 +328,9 @@ impl TaskHandler {
         }
 
         // Create task definition from worker
-        let task_def =
-            TaskDef::new(task_name).with_description("Task registered by Rust SDK worker");
+        let task_def = TaskDef::new(task_name)
+            .with_description("Task registered by Rust SDK worker")
+            .with_runtime_metadata(worker.declared_credentials());
 
         if exists {
             info!(
