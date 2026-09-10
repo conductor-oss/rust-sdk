@@ -101,11 +101,12 @@ impl AgentHandle {
     /// Open a live [`AgentStream`] of [`super::AgentEvent`]s for this handle's top-level
     /// execution, over the server's SSE endpoint.
     ///
-    /// Does not block and does not consume `self` — a caller can hold the handle and stream it
-    /// at the same time (e.g. to call `approve`/`reject` in response to events observed on the
-    /// stream, as in parity-plan.md example 2).
-    pub fn stream(&self) -> AgentStream {
-        AgentStream::new(self.client.clone(), self.execution_id.clone())
+    /// Does not consume `self` — a caller can hold the handle and stream it at the same time
+    /// (e.g. to call `approve`/`reject` in response to events observed on the stream, as in
+    /// parity-plan.md example 2).
+    pub async fn stream(&self) -> Result<AgentStream> {
+        let response = self.client.stream(&self.execution_id).await?;
+        Ok(AgentStream::new(response))
     }
 
     /// Approve a pending human-in-the-loop step.
