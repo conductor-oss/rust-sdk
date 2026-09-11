@@ -41,7 +41,7 @@ Wave 5 — Agents: framework adapters (fully independent of each other and of Wa
 
 - [x] FrameworkAgent trait (generic adapter interface) + fallible `TryFrom<T> for AgentDef` (since AgentDef::new returns Result).
 - [x] OpenAI Agents SDK adapter for the async-openai crate's tool shape (Phase 1).
-- [ ] Claude Agent SDK passthrough adapter — subprocess + stream-json over tokio::process (Phase 2, lowest priority per parity-plan.md).
+- [x] Claude Agent SDK passthrough adapter — subprocess + stream-json over tokio::process (Phase 2, lowest priority per parity-plan.md). (Reduced scope: delivers the bare subprocess / stream-json transport only — the tracking-workflow, server-side event-push, and hook-bridging behavior matching python-sdk's full `claude_agent_sdk.py` adapter is an explicit follow-up, not done here.)
 - [ ] LangGraph typed GraphAgentDef adapter (Phase 2).
 
 Wave 6 — Lease extension / automatic heartbeat (independent of all Agents work; touches src/worker/)
