@@ -1008,11 +1008,11 @@ mod tests {
 
     #[test]
     fn test_serialize_output_type() {
-        let output_type = OutputType {
-            schema: serde_json::json!({"type": "object", "properties": {"answer": {"type": "string"}}}),
-            class_name: "Answer".to_string(),
-        };
-        let agent = AgentDef::new("a").unwrap().with_output_type(output_type);
+        let schema =
+            serde_json::json!({"type": "object", "properties": {"answer": {"type": "string"}}});
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_output_type("Answer", schema);
 
         let json = AgentConfigSerializer::serialize(&agent);
         let obj = json.as_object().unwrap();

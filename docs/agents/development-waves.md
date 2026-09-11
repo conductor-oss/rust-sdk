@@ -19,7 +19,7 @@ Wave 2 — Agents: wire up Wave-1 types into AgentDef (touches shared files def.
 - [x] Add planner/fallback/fallback_max_turns/planner_context/synthesize fields; lift the Strategy::PlanExecute rejection; serialize.
 - [x] Add callbacks: Vec<Box<dyn CallbackHandler>> registration (not serialized — caller-side only, per parity-plan.md's open-circle relationship).
 - [x] Add memory: Option<ConversationMemory> field; serialize.
-- [ ] Add output_type structured-output field; serialize.
+- [x] Add output_type structured-output field; serialize.
 
 Wave 3 — Agents: credentials delivery (each independent; depends only on Wave 1's Credentials type)
 
