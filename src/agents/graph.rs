@@ -83,7 +83,7 @@ pub enum GraphNode {
         /// Name identifying this node within the graph (must be unique — see
         /// [`GraphAgentDef::with_node`]).
         name: String,
-        tool: ToolDef,
+        tool: Box<ToolDef>,
     },
     /// A human-in-the-loop pause node.
     Human {
@@ -404,7 +404,7 @@ mod tests {
             .unwrap()
             .with_node(GraphNode::Tool {
                 name: "file_ticket".into(),
-                tool: ToolDef::human("file_ticket", "files a ticket"),
+                tool: Box::new(ToolDef::human("file_ticket", "files a ticket")),
             })
             .unwrap()
             .with_edge("triage", "ask_human")
@@ -425,7 +425,10 @@ mod tests {
         assert_eq!(graph.nodes.len(), 3);
         assert_eq!(graph.edges.len(), 1);
         assert_eq!(graph.conditional_edges.len(), 1);
-        assert_eq!(graph.conditional_edges[0].targets, vec!["file_ticket", "triage"]);
+        assert_eq!(
+            graph.conditional_edges[0].targets,
+            vec!["file_ticket", "triage"]
+        );
     }
 
     #[test]
@@ -505,8 +508,14 @@ mod tests {
         let nodes = obj.get("nodes").unwrap().as_array().unwrap();
         assert_eq!(nodes.len(), 2);
         let llm_node = nodes[0].as_object().unwrap();
-        assert_eq!(llm_node.get("name"), Some(&Value::String("llm".to_string())));
-        assert_eq!(llm_node.get("kind"), Some(&Value::String("agent".to_string())));
+        assert_eq!(
+            llm_node.get("name"),
+            Some(&Value::String("llm".to_string()))
+        );
+        assert_eq!(
+            llm_node.get("kind"),
+            Some(&Value::String("agent".to_string()))
+        );
         assert_eq!(
             llm_node
                 .get("agent")

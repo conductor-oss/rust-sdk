@@ -16,6 +16,7 @@ mod def;
 mod framework;
 #[cfg(feature = "openai-adapter")]
 mod framework_openai;
+mod graph;
 mod guardrail;
 mod handle;
 mod memory;
@@ -33,6 +34,9 @@ pub use def::{AgentDef, RunSettings, Strategy};
 pub use framework::FrameworkAgent;
 #[cfg(feature = "openai-adapter")]
 pub use framework_openai::OpenAiAgent;
+pub use graph::{
+    ConditionalGraphEdge, GraphAgentDef, GraphConditionFn, GraphContext, GraphEdge, GraphNode,
+};
 pub use guardrail::{
     Guardrail, GuardrailCheck, GuardrailResult, LlmGuardrail, OnFail, Position, RegexGuardrail,
     RegexMode,
