@@ -11,6 +11,8 @@
 //! inspect `agentConfig` JSON.
 
 mod callback;
+#[cfg(feature = "claude-agent-sdk")]
+mod claude_agent_sdk;
 mod credentials;
 mod def;
 mod framework;
@@ -29,6 +31,8 @@ mod termination;
 mod tool;
 
 pub use callback::{CallbackContext, CallbackHandler};
+#[cfg(feature = "claude-agent-sdk")]
+pub use claude_agent_sdk::{ClaudeAgentSdkOptions, ClaudeAgentSdkQuery, ClaudeAgentSdkStream};
 pub use credentials::Credentials;
 pub use def::{AgentDef, RunSettings, Strategy};
 pub use framework::FrameworkAgent;
