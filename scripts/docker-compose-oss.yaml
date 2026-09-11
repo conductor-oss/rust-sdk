@@ -2,13 +2,21 @@
 # Conductor. Shared by scripts/run-integration-oss.sh and the
 # integration-tests-oss job in .github/workflows/ci.yml.
 #
-# OSS_CONDUCTOR_VERSION defaults to `latest` for local runs. CI resolves it from
-# the E2E_TEST_OSS_CONDUCTOR_VERSION org variable (or a workflow_dispatch input).
-# That variable is currently set to `latest` as well, so CI is not really pinned
-# today -- it tracks whatever `latest` resolves to at run time, and an upstream
-# image push can turn a green PR red on its own. The point of the variable is
-# that it's a single org-wide lever: set it to a fixed tag and every OSS SDK
-# repo moves to that version at once, from one place.
+# The `image:` default below is the SINGLE place this repo writes the Conductor
+# OSS image tag. Everything that does not override OSS_CONDUCTOR_VERSION lands
+# on it: a plain scripts/run-integration-oss.sh run, and the
+# integration-tests-oss job on a fork PR (where GitHub withholds org variables).
+# Overrides are the script's --version flag and, in CI, the
+# E2E_TEST_OSS_CONDUCTOR_VERSION org variable or a workflow_dispatch input.
+#
+# That org variable is currently set to `latest`, so a normal CI run is not
+# really pinned today -- it tracks whatever `latest` resolves to at run time,
+# and an upstream image push can turn a green PR red on its own. The point of
+# the variable is that it's a single org-wide lever: set it to a fixed tag and
+# every OSS SDK repo moves to that version at once, from one place. Until then
+# the default below is what actually pins fork PRs and local runs, and it is
+# per-repo -- bumping the floor everywhere means editing each repo's compose
+# file, or pulling the lever.
 #
 # Per-repo project name; unnamed, the project defaults to this file's directory
 # (`scripts`) in every SDK repo and the stacks collide on a dev machine that has
@@ -16,7 +24,7 @@
 name: rust-sdk-oss-e2e
 services:
   conductor-server:
-    image: conductoross/conductor:${OSS_CONDUCTOR_VERSION:-latest}
+    image: conductoross/conductor:${OSS_CONDUCTOR_VERSION:-3.32.3}
     environment:
       - CONFIG_PROP=config-postgres.properties
       # Dummy, non-sensitive value so OSS's bundled env-backed SecretsDAO has
