@@ -91,6 +91,9 @@ conductor-macros = { version = "0.1.0", path = "conductor-macros", optional = tr
 # Guardrail pattern matching (agents feature)
 regex = { version = "1", optional = true }
 
+# OpenAI FrameworkAgent adapter (openai-adapter feature)
+async-openai = { version = "0.28", optional = true }
+
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.5"
@@ -101,6 +104,7 @@ criterion = "0.5"
 default = []
 macros = ["conductor-macros"]
 agents = ["macros", "regex"]
+openai-adapter = ["async-openai", "agents"]
 
 [[example]]
 name = "hello_world"

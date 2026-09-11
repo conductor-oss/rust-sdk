@@ -13,6 +13,9 @@
 mod callback;
 mod credentials;
 mod def;
+mod framework;
+#[cfg(feature = "openai-adapter")]
+mod framework_openai;
 mod guardrail;
 mod handle;
 mod memory;
@@ -27,6 +30,9 @@ mod tool;
 pub use callback::{CallbackContext, CallbackHandler};
 pub use credentials::Credentials;
 pub use def::{AgentDef, RunSettings, Strategy};
+pub use framework::FrameworkAgent;
+#[cfg(feature = "openai-adapter")]
+pub use framework_openai::OpenAiAgent;
 pub use guardrail::{
     Guardrail, GuardrailCheck, GuardrailResult, LlmGuardrail, OnFail, Position, RegexGuardrail,
     RegexMode,
