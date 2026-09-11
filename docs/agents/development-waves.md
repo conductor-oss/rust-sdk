@@ -42,7 +42,7 @@ Wave 5 — Agents: framework adapters (fully independent of each other and of Wa
 - [x] FrameworkAgent trait (generic adapter interface) + fallible `TryFrom<T> for AgentDef` (since AgentDef::new returns Result).
 - [x] OpenAI Agents SDK adapter for the async-openai crate's tool shape (Phase 1).
 - [ ] Claude Agent SDK passthrough adapter — subprocess + stream-json over tokio::process (Phase 2, lowest priority per parity-plan.md).
-- [ ] LangGraph typed GraphAgentDef adapter (Phase 2).
+- [x] LangGraph typed GraphAgentDef adapter (Phase 2). (Rust-side authoring type + plain JSON serialization; server-side graph-execution wire compatibility not yet verified — open follow-up).
 
 Wave 6 — Lease extension / automatic heartbeat (independent of all Agents work; touches src/worker/)
 
