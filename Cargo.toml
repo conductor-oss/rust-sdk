@@ -98,7 +98,6 @@ async-openai = { version = "0.28", optional = true }
 tokio-test = "0.4"
 wiremock = "0.5"
 mockall = "0.12"
-criterion = "0.5"
 
 [features]
 default = []
