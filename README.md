@@ -37,7 +37,7 @@ If you don't already have a Conductor server running, pick one:
 **Docker Compose (recommended, includes UI):**
 
 ```shell
-docker run -p 8080:8080 conductoross/conductor:latest
+docker compose -f scripts/docker-compose-oss.yaml up -d
 ```
 The UI will be available at `http://localhost:8080` and the API at `http://localhost:8080/api`
 
