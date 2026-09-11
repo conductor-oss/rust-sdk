@@ -39,8 +39,8 @@ Wave 4 — Agents: runtime (sequenced after Wave 2/3 land; independent from each
 
 Wave 5 — Agents: framework adapters (fully independent of each other and of Wave 4 internals, only need AgentDef stable)
 
-- [ ] FrameworkAgent trait (generic adapter interface) + From<T> for AgentDef.
-- [ ] OpenAI Agents SDK adapter for the async-openai crate's tool shape (Phase 1).
+- [x] FrameworkAgent trait (generic adapter interface) + fallible `TryFrom<T> for AgentDef` (since AgentDef::new returns Result).
+- [x] OpenAI Agents SDK adapter for the async-openai crate's tool shape (Phase 1).
 - [ ] Claude Agent SDK passthrough adapter — subprocess + stream-json over tokio::process (Phase 2, lowest priority per parity-plan.md).
 - [ ] LangGraph typed GraphAgentDef adapter (Phase 2).
 
