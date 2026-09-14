@@ -3,7 +3,7 @@
 
 use serde_json::{Map, Value};
 
-use super::def::{AgentDef, OutputType};
+use super::def::{sanitize_for_task_name, AgentDef, OutputType};
 use super::guardrail::Guardrail;
 use super::memory::{ConversationMemory, Message, ToolCall};
 use super::swarm::SwarmTransition;
@@ -27,6 +27,34 @@ impl AgentConfigSerializer {
 }
 
 fn serialize_agent(agent: &AgentDef) -> Value {
+    // Matches python-sdk's `config_serializer.py::_serialize_agent`'s very first check:
+    // `if getattr(agent, "_framework", None) == "skill": return {"name":..., "model":...,
+    // "_framework": "skill", **raw_config}` — a framework-marked agent (see
+    // `AgentDef::with_framework`) always serializes as this flattened passthrough instead of
+    // the normal `AgentConfig` shape, whether it's the top-level agent being serialized or
+    // nested as a sub-agent. Unlike the normal `model` field below, python emits `model` as
+    // explicit `null` rather than omitting it when unset (`agent.model or None`) — matched here
+    // too, since this is a distinct wire contract for the target framework normalizer, not the
+    // regular `AgentConfig` shape the rest of this function builds.
+    if let Some(framework) = &agent.framework {
+        let mut map = Map::new();
+        map.insert("name".to_string(), Value::String(agent.name.clone()));
+        map.insert(
+            "model".to_string(),
+            agent
+                .model
+                .as_ref()
+                .filter(|m| !m.is_empty())
+                .map(|m| Value::String(m.clone()))
+                .unwrap_or(Value::Null),
+        );
+        map.insert("_framework".to_string(), Value::String(framework.clone()));
+        if let Some(Value::Object(raw_config)) = &agent.framework_config {
+            map.extend(raw_config.clone());
+        }
+        return Value::Object(map);
+    }
+
     let mut map = Map::new();
 
     map.insert("name".to_string(), Value::String(agent.name.clone()));
@@ -38,7 +66,11 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         map.insert("baseUrl".to_string(), Value::String(base_url.clone()));
     }
 
-    if !agent.agents.is_empty() {
+    // Mirrors python-sdk's `has_sub_agents = bool(agent.agents) or agent.planner is not None or
+    // agent.fallback is not None` (config_serializer.py) — a PLAN_EXECUTE coordinator built with
+    // `.with_planner(...)` has no entries in `agents`, only `planner`/`fallback`, so checking
+    // `agents` alone would silently omit `strategy` and the server would default to HANDOFF.
+    if !agent.agents.is_empty() || agent.planner.is_some() || agent.fallback.is_some() {
         map.insert(
             "strategy".to_string(),
             Value::String(agent.strategy.as_str().to_string()),
@@ -123,6 +155,29 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
+    // Matches python-sdk's `if agent.allowed_transitions: config["allowedTransitions"] =
+    // agent.allowed_transitions` — passed straight through as a `{name: [targets]}` map, the
+    // same shape python currently sends (see the parity audit's note on a pre-existing
+    // python/schema mismatch here — this crate follows what python actually sends on the wire
+    // today, not its own `agent-schema.json`).
+    if !agent.allowed_transitions.is_empty() {
+        map.insert(
+            "allowedTransitions".to_string(),
+            Value::Object(
+                agent
+                    .allowed_transitions
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            Value::Array(v.iter().cloned().map(Value::String).collect()),
+                        )
+                    })
+                    .collect(),
+            ),
+        );
+    }
+
     // PLAN_EXECUTE named slots: planner (required by `AgentDef::with_strategy`) + fallback
     // (optional). Both serialize as full nested `agentConfig` dicts via the same
     // `serialize_agent` used for `agent.agents`/`ToolType::AgentTool` sub-agents — matches
@@ -161,6 +216,145 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // python-sdk's `if not agent.synthesize: config["synthesize"] = False`.
     if !agent.synthesize {
         map.insert("synthesize".to_string(), Value::Bool(false));
+    }
+
+    if let Some(introduction) = &agent.introduction {
+        map.insert(
+            "introduction".to_string(),
+            Value::String(introduction.clone()),
+        );
+    }
+
+    if let Some(include_contents) = &agent.include_contents {
+        map.insert(
+            "includeContents".to_string(),
+            Value::String(include_contents.clone()),
+        );
+    }
+
+    // Matches python-sdk's `config["prefillTools"] = [{"toolName": pt.tool_name, "arguments":
+    // pt.arguments} for pt in agent.prefill_tools]`.
+    if !agent.prefill_tools.is_empty() {
+        map.insert(
+            "prefillTools".to_string(),
+            Value::Array(
+                agent
+                    .prefill_tools
+                    .iter()
+                    .map(|pt| {
+                        let mut entry = Map::new();
+                        entry.insert("toolName".to_string(), Value::String(pt.tool_name.clone()));
+                        entry.insert("arguments".to_string(), pt.arguments.clone());
+                        Value::Object(entry)
+                    })
+                    .collect(),
+            ),
+        );
+    }
+
+    // Matches python-sdk's `config_serializer.py::_serialize_gate`'s two branches: `TextGate`
+    // serializes inline (compiled server-side, no worker); a callable serializes as a
+    // worker-task reference the same way `stopWhen` does, evaluated by the `{name}_gate`
+    // worker `AgentRuntime::serve` registers.
+    if let Some(gate) = &agent.gate {
+        let gate_value = match gate {
+            super::def::GateCondition::Text(text_gate) => {
+                let mut gate_map = Map::new();
+                gate_map.insert(
+                    "type".to_string(),
+                    Value::String("text_contains".to_string()),
+                );
+                gate_map.insert("text".to_string(), Value::String(text_gate.text.clone()));
+                gate_map.insert(
+                    "caseSensitive".to_string(),
+                    Value::Bool(text_gate.case_sensitive),
+                );
+                Value::Object(gate_map)
+            }
+            super::def::GateCondition::Callable(_) => {
+                let mut gate_map = Map::new();
+                gate_map.insert(
+                    "taskName".to_string(),
+                    Value::String(format!("{}_gate", sanitize_for_task_name(&agent.name))),
+                );
+                Value::Object(gate_map)
+            }
+        };
+        map.insert("gate".to_string(), gate_value);
+    }
+
+    // Matches python-sdk's `if agent.stop_when is not None: config["stopWhen"] =
+    // {"taskName": f"{agent.name}_stop_when"}` — the predicate itself is registered as a
+    // worker by `AgentRuntime::serve`, not serialized inline.
+    if agent.stop_when.is_some() {
+        let mut stop_when_map = Map::new();
+        stop_when_map.insert(
+            "taskName".to_string(),
+            Value::String(format!("{}_stop_when", sanitize_for_task_name(&agent.name))),
+        );
+        map.insert("stopWhen".to_string(), Value::Object(stop_when_map));
+    }
+
+    // Matches python-sdk's `config_serializer.py`'s CLI-command-execution branch: `working_dir`
+    // is never sent, since it's only consulted by this crate's own local `run_command` handler.
+    if let Some(cli_config) = &agent.cli_config {
+        let mut cli_map = Map::new();
+        cli_map.insert("enabled".to_string(), Value::Bool(cli_config.enabled));
+        cli_map.insert(
+            "allowedCommands".to_string(),
+            Value::Array(
+                cli_config
+                    .allowed_commands
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
+            ),
+        );
+        cli_map.insert(
+            "timeout".to_string(),
+            Value::from(cli_config.timeout_seconds),
+        );
+        cli_map.insert(
+            "allowShell".to_string(),
+            Value::Bool(cli_config.allow_shell),
+        );
+        map.insert("cliConfig".to_string(), Value::Object(cli_map));
+    }
+
+    // Matches python-sdk's `config_serializer.py`'s code-execution branch: `executor`/
+    // `working_dir` are never sent, since they're only consulted by this crate's own local
+    // `execute_code` handler.
+    if let Some(code_execution) = &agent.code_execution {
+        let mut code_map = Map::new();
+        code_map.insert("enabled".to_string(), Value::Bool(code_execution.enabled));
+        code_map.insert(
+            "allowedLanguages".to_string(),
+            Value::Array(
+                code_execution
+                    .allowed_languages
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
+            ),
+        );
+        code_map.insert(
+            "allowedCommands".to_string(),
+            Value::Array(
+                code_execution
+                    .allowed_commands
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
+            ),
+        );
+        code_map.insert(
+            "timeout".to_string(),
+            Value::from(code_execution.timeout_seconds),
+        );
+        map.insert("codeExecution".to_string(), Value::Object(code_map));
     }
 
     if let Some(max_tokens) = agent.max_tokens {
@@ -493,6 +687,12 @@ fn serialize_tool(tool: &ToolDef) -> Value {
     if let Some(max_calls) = tool.max_calls {
         map.insert("maxCalls".to_string(), Value::from(max_calls));
     }
+    if !tool.guardrails.is_empty() {
+        map.insert(
+            "guardrails".to_string(),
+            Value::Array(tool.guardrails.iter().map(serialize_guardrail).collect()),
+        );
+    }
 
     let mut config: Map<String, Value> = tool.config.clone().into_iter().collect();
 
@@ -524,7 +724,7 @@ fn serialize_tool(tool: &ToolDef) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::super::def::Strategy;
+    use super::super::def::{PrefillToolCall, Strategy, TextGate};
     use super::super::guardrail::{LlmGuardrail, OnFail, Position, RegexGuardrail, RegexMode};
     use super::super::swarm::SwarmTransition;
     use super::super::termination::TerminationCondition;
@@ -550,6 +750,7 @@ mod tests {
             "termination",
             "memory",
             "handoffs",
+            "allowedTransitions",
             "planner",
             "fallback",
             "fallbackMaxTurns",
@@ -562,6 +763,13 @@ mod tests {
             "requiredTools",
             "metadata",
             "credentials",
+            "introduction",
+            "includeContents",
+            "prefillTools",
+            "gate",
+            "stopWhen",
+            "cliConfig",
+            "codeExecution",
         ] {
             assert!(!obj.contains_key(key), "expected '{key}' to be omitted");
         }
@@ -570,6 +778,200 @@ mod tests {
         assert_eq!(obj.get("maxTurns"), Some(&Value::from(25u32)));
         assert_eq!(obj.get("timeoutSeconds"), Some(&Value::from(0u64)));
         assert_eq!(obj.get("external"), Some(&Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_serialize_introduction() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_introduction("Hi, I'm the billing agent.");
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("introduction"),
+            Some(&Value::String("Hi, I'm the billing agent.".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_serialize_include_contents() {
+        let agent = AgentDef::new("a").unwrap().with_include_contents("none");
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("includeContents"),
+            Some(&Value::String("none".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_serialize_prefill_tools() {
+        let agent = AgentDef::new("a").unwrap().with_prefill_tools(vec![
+            PrefillToolCall::new("lookup_account", serde_json::json!({"id": "abc"})),
+            PrefillToolCall::new("lookup_plan", serde_json::json!({})),
+        ]);
+        let json = AgentConfigSerializer::serialize(&agent);
+        let prefill_tools = json.as_object().unwrap().get("prefillTools").unwrap();
+        assert_eq!(
+            prefill_tools,
+            &serde_json::json!([
+                {"toolName": "lookup_account", "arguments": {"id": "abc"}},
+                {"toolName": "lookup_plan", "arguments": {}},
+            ])
+        );
+    }
+
+    #[test]
+    fn test_serialize_gate() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_gate(TextGate::new("DONE").case_insensitive());
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("gate"),
+            Some(&serde_json::json!({
+                "type": "text_contains",
+                "text": "DONE",
+                "caseSensitive": false,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_serialize_gate_defaults_case_sensitive_true() {
+        let agent = AgentDef::new("a").unwrap().with_gate(TextGate::new("DONE"));
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object()
+                .unwrap()
+                .get("gate")
+                .unwrap()
+                .get("caseSensitive"),
+            Some(&Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn test_serialize_callable_gate_as_task_name_reference() {
+        let agent = AgentDef::new("triage_agent")
+            .unwrap()
+            .with_gate_fn(|_: Value| async move { Ok(true) });
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("gate"),
+            Some(&serde_json::json!({"taskName": "triage_agent_gate"}))
+        );
+    }
+
+    #[test]
+    fn test_serialize_callable_gate_sanitizes_hyphens_in_task_name() {
+        let agent = AgentDef::new("triage-agent")
+            .unwrap()
+            .with_gate_fn(|_: Value| async move { Ok(true) });
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("gate"),
+            Some(&serde_json::json!({"taskName": "triage_agent_gate"}))
+        );
+    }
+
+    #[test]
+    fn test_serialize_stop_when_as_task_name_reference() {
+        let agent = AgentDef::new("triage_agent")
+            .unwrap()
+            .with_stop_when(|_context: Value| async move { Ok(false) });
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("stopWhen"),
+            Some(&serde_json::json!({"taskName": "triage_agent_stop_when"}))
+        );
+    }
+
+    /// Regression test: a hyphenated agent name's `stopWhen.taskName` must match the sanitized
+    /// name the server actually expects (see `sanitize_for_task_name`'s doc comment for the
+    /// live-confirmed bug this fixes).
+    #[test]
+    fn test_serialize_stop_when_sanitizes_hyphens_in_task_name() {
+        let agent = AgentDef::new("triage-agent")
+            .unwrap()
+            .with_stop_when(|_context: Value| async move { Ok(false) });
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("stopWhen"),
+            Some(&serde_json::json!({"taskName": "triage_agent_stop_when"}))
+        );
+    }
+
+    #[test]
+    fn test_serialize_cli_config() {
+        let agent = AgentDef::new("ops").unwrap().with_cli_commands(
+            super::super::cli_config::CliConfig::new()
+                .with_allowed_commands(["git", "gh"])
+                .with_timeout_seconds(60)
+                .with_allow_shell(true),
+        );
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("cliConfig"),
+            Some(&serde_json::json!({
+                "enabled": true,
+                "allowedCommands": ["git", "gh"],
+                "timeout": 60,
+                "allowShell": true,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_serialize_cli_config_also_attaches_run_command_tool() {
+        let agent = AgentDef::new("ops-agent")
+            .unwrap()
+            .with_cli_commands(super::super::cli_config::CliConfig::new());
+        let json = AgentConfigSerializer::serialize(&agent);
+        let tools = json
+            .as_object()
+            .unwrap()
+            .get("tools")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["name"], "ops_agent_run_command");
+    }
+
+    #[test]
+    fn test_serialize_code_execution() {
+        let agent = AgentDef::new("coder").unwrap().with_code_execution(
+            super::super::code_execution_config::CodeExecutionConfig::new()
+                .with_allowed_languages(["python", "bash"])
+                .with_allowed_commands(["pip"])
+                .with_timeout_seconds(60),
+        );
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("codeExecution"),
+            Some(&serde_json::json!({
+                "enabled": true,
+                "allowedLanguages": ["python", "bash"],
+                "allowedCommands": ["pip"],
+                "timeout": 60,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_serialize_code_execution_also_attaches_execute_code_tool() {
+        let agent = AgentDef::new("coder-agent")
+            .unwrap()
+            .with_local_code_execution(vec![], vec![]);
+        let json = AgentConfigSerializer::serialize(&agent);
+        let tools = json
+            .as_object()
+            .unwrap()
+            .get("tools")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["name"], "coder_agent_execute_code");
     }
 
     #[test]
@@ -589,6 +991,37 @@ mod tests {
         assert_eq!(
             parent_json.as_object().unwrap().get("strategy"),
             Some(&Value::String("sequential".to_string()))
+        );
+    }
+
+    /// Regression test for the bug this audit found: a `PLAN_EXECUTE` coordinator has no
+    /// entries in `agents` (its sub-agents live in `planner`/`fallback` instead), so checking
+    /// `agents.is_empty()` alone omitted `strategy` from the wire payload entirely, and the
+    /// server defaulted the missing field to `Strategy.HANDOFF` — confirmed against a real
+    /// server, which then rejected the config with "Named slots `planner=` and `fallback=` are
+    /// only valid with `strategy=Strategy.PLAN_EXECUTE`".
+    #[test]
+    fn test_strategy_emitted_for_plan_execute_with_only_planner_no_sub_agents() {
+        let planner = AgentDef::new("planner").unwrap().with_model("gpt-4");
+        let coordinator = AgentDef::new("coordinator")
+            .unwrap()
+            .with_model("gpt-4")
+            .with_planner(planner)
+            .with_tool(ToolDef::function::<Value, _, _>(
+                "t",
+                "a test tool",
+                serde_json::json!({"type": "object"}),
+                |_args: Value| async move { Ok(Value::Null) },
+            ))
+            .with_strategy(Strategy::PlanExecute)
+            .unwrap();
+
+        assert!(coordinator.agents.is_empty());
+
+        let json = AgentConfigSerializer::serialize(&coordinator);
+        assert_eq!(
+            json.as_object().unwrap().get("strategy"),
+            Some(&Value::String("plan_execute".to_string()))
         );
     }
 
@@ -726,6 +1159,34 @@ mod tests {
     }
 
     #[test]
+    fn test_tool_guardrails_omitted_when_empty() {
+        let tool = ToolDef::human("ask", "ask a human");
+        let json = serialize_tool(&tool);
+        assert!(!json.as_object().unwrap().contains_key("guardrails"));
+    }
+
+    #[test]
+    fn test_serialize_tool_level_guardrail() {
+        let tool = ToolDef::human("ask", "ask a human").with_guardrail(Guardrail::new(
+            "no_pii",
+            RegexGuardrail::new(["x"]).unwrap(),
+        ));
+        let json = serialize_tool(&tool);
+        let guardrails = json
+            .as_object()
+            .unwrap()
+            .get("guardrails")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(guardrails.len(), 1);
+        assert_eq!(
+            guardrails[0].as_object().unwrap().get("name"),
+            Some(&Value::String("no_pii".to_string()))
+        );
+    }
+
+    #[test]
     fn test_serialize_regex_guardrail_omits_message_when_unset() {
         let checker = RegexGuardrail::new(["x"]).unwrap();
         let guardrail = Guardrail::new("g", checker);
@@ -782,6 +1243,36 @@ mod tests {
             Some(&Value::String("no harmful content".to_string()))
         );
         assert_eq!(g.get("maxTokens"), Some(&Value::from(64u32)));
+    }
+
+    #[test]
+    fn test_serialize_function_guardrail() {
+        let agent =
+            AgentDef::new("a")
+                .unwrap()
+                .with_guardrail(super::super::guardrail::Guardrail::new(
+                    "no_pii",
+                    super::super::guardrail::FunctionGuardrail::new(|_: &str| {
+                        super::super::guardrail::GuardrailResult::pass()
+                    }),
+                ));
+        let json = AgentConfigSerializer::serialize(&agent);
+        let guardrails = json
+            .as_object()
+            .unwrap()
+            .get("guardrails")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        let g = guardrails[0].as_object().unwrap();
+        assert_eq!(
+            g.get("guardrailType"),
+            Some(&Value::String("custom".to_string()))
+        );
+        assert_eq!(
+            g.get("taskName"),
+            Some(&Value::String("no_pii".to_string()))
+        );
     }
 
     #[test]
@@ -1208,6 +1699,83 @@ mod tests {
     }
 
     #[test]
+    fn test_serialize_framework_marked_agent_flattens_raw_config() {
+        let agent = AgentDef::new("skill_agent").unwrap().with_framework(
+            "skill",
+            serde_json::json!({"skillMd": "...", "agentFiles": {}}),
+        );
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "name": "skill_agent",
+                "model": null,
+                "_framework": "skill",
+                "skillMd": "...",
+                "agentFiles": {},
+            })
+        );
+    }
+
+    #[test]
+    fn test_serialize_framework_marked_agent_includes_model_when_set() {
+        let agent = AgentDef::new("skill_agent")
+            .unwrap()
+            .with_framework("skill", serde_json::json!({}))
+            .with_model("openai/gpt-4o");
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(json["model"], serde_json::json!("openai/gpt-4o"));
+    }
+
+    #[test]
+    fn test_serialize_framework_marked_agent_nested_as_sub_agent() {
+        let skill_agent = AgentDef::new("skill_agent")
+            .unwrap()
+            .with_framework("skill", serde_json::json!({"skillMd": "..."}));
+        let parent = AgentDef::new("parent")
+            .unwrap()
+            .with_sub_agent(skill_agent)
+            .unwrap();
+        let json = AgentConfigSerializer::serialize(&parent);
+        let agents = json
+            .as_object()
+            .unwrap()
+            .get("agents")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(
+            agents[0],
+            serde_json::json!({
+                "name": "skill_agent",
+                "model": null,
+                "_framework": "skill",
+                "skillMd": "...",
+            })
+        );
+    }
+
+    #[test]
+    fn test_allowed_transitions_omitted_when_empty() {
+        let agent = AgentDef::new("a").unwrap();
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert!(!json.as_object().unwrap().contains_key("allowedTransitions"));
+    }
+
+    #[test]
+    fn test_serialize_allowed_transitions() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_allowed_transition("a", ["b", "c"])
+            .with_allowed_transition("b", ["a"]);
+        let json = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(
+            json.as_object().unwrap().get("allowedTransitions"),
+            Some(&serde_json::json!({"a": ["b", "c"], "b": ["a"]}))
+        );
+    }
+
+    #[test]
     fn test_plan_execute_serializes_planner_fallback_and_omits_synthesize_when_true() {
         let planner = AgentDef::new("planner").unwrap().with_model("gpt-4");
         let fallback = AgentDef::new("fallback_agent").unwrap().with_model("gpt-4");
@@ -1217,6 +1785,12 @@ mod tests {
             .with_fallback(fallback)
             .with_fallback_max_turns(3)
             .with_planner_contexts(vec!["rule one", "rule two"])
+            .with_tool(ToolDef::function::<Value, _, _>(
+                "t",
+                "a test tool",
+                serde_json::json!({"type": "object"}),
+                |_args: Value| async move { Ok(Value::Null) },
+            ))
             .with_strategy(Strategy::PlanExecute)
             .unwrap();
 

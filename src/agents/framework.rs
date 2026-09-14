@@ -132,6 +132,7 @@ mod tests {
             credentials: Vec::new(),
             sub_agent: None,
             handler: None,
+            guardrails: Vec::new(),
         }
     }
 

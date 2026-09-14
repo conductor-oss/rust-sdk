@@ -115,6 +115,22 @@ impl AgentClient {
             .get_stream(ApiPath::templated(&path, "/agent/stream/{executionId}"))
             .await
     }
+
+    /// Push a raw progress/telemetry event for an agent execution.
+    /// `POST /agent/events/{execution_id}` (python-sdk's `frameworks/claude_agent_sdk.py`
+    /// `_push_event_nonblocking`'s target endpoint). Intended for frameworks that run an opaque
+    /// subprocess loop outside Conductor's normal task lifecycle — e.g. the Claude Agent SDK
+    /// passthrough transport (`crate::agents::claude_agent_sdk`, `claude-agent-sdk` feature) —
+    /// to surface what's happening inside that loop to the Conductor UI/API in near-real-time.
+    pub async fn push_event(&self, execution_id: &str, event: &Value) -> Result<()> {
+        let path = format!("/agent/events/{execution_id}");
+        self.api
+            .post_no_response(
+                ApiPath::templated(&path, "/agent/events/{executionId}"),
+                event,
+            )
+            .await
+    }
 }
 
 #[cfg(test)]

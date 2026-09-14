@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use crate::error::{ConductorError, Result};
+use serde_json::Value;
 
 /// Composable rule that decides when an agent should stop.
 ///
@@ -15,13 +16,14 @@ use crate::error::{ConductorError, Result};
 /// exactly (`TerminationCondition "1" o-- "0..*" TerminationCondition` — `And`/`Or` hold other
 /// `TerminationCondition`s, recursively) — there's no trait to implement, just data.
 ///
-/// Termination itself is evaluated server-side: each condition compiles into a Conductor worker
-/// task that participates in the agent's `DoWhile` loop (see the module docstring in
-/// `termination.py`). So unlike python's `should_terminate(context)` method on every subclass,
-/// this type has no local evaluation logic at all — it is pure wire-format data, serialized into
-/// the same `TerminationConfig` JSON shape python's
-/// `AgentConfigSerializer._serialize_termination` produces (see [`TerminationCondition::type_str`]
-/// for the exact `"type"` discriminant values).
+/// Serializes into the same `TerminationConfig` JSON shape python's
+/// `AgentConfigSerializer._serialize_termination` produces (see
+/// [`TerminationCondition::type_str`] for the exact `"type"` discriminant values) — the server
+/// compiles each condition into a Conductor worker task participating in the agent's `DoWhile`
+/// loop. [`TerminationCondition::should_terminate`] is this crate's client-side twin of python's
+/// `should_terminate(context)` method on every subclass — used by the `{agent_name}_termination`
+/// worker [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) registers to answer that
+/// compiled task locally instead of leaving the condition unevaluated.
 ///
 /// Construct via the associated functions below (mirroring python's constructors) and combine
 /// with `&` / `|`, which mirror python's `__and__` / `__or__` operator overloads exactly,
@@ -221,9 +223,250 @@ impl std::ops::BitOr for TerminationCondition {
     }
 }
 
+/// Result of evaluating a [`TerminationCondition`] against a runtime context. Mirrors python's
+/// `TerminationResult` dataclass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TerminationOutcome {
+    pub should_terminate: bool,
+    pub reason: String,
+}
+
+impl TerminationOutcome {
+    fn no() -> Self {
+        Self {
+            should_terminate: false,
+            reason: String::new(),
+        }
+    }
+
+    fn yes(reason: impl Into<String>) -> Self {
+        Self {
+            should_terminate: true,
+            reason: reason.into(),
+        }
+    }
+}
+
+impl TerminationCondition {
+    /// Evaluate this condition against a runtime context shaped `{"result": <text>, "messages":
+    /// [...], "iteration": <n>, "token_usage": {"total_tokens": ..., "prompt_tokens": ...,
+    /// "completion_tokens": ...}}` — matches python's `TerminationCondition.should_terminate`
+    /// field-for-field, including [`TerminationCondition::MaxMessage`]'s fallback to `iteration`
+    /// when `messages` is empty/absent, and [`TerminationCondition::And`]'s `" AND "`-joined
+    /// multi-reason string (python: `" AND ".join(reasons)`).
+    ///
+    /// Used by the `{agent_name}_termination` worker
+    /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) registers.
+    pub fn should_terminate(&self, context: &Value) -> TerminationOutcome {
+        match self {
+            TerminationCondition::TextMention {
+                text,
+                case_sensitive,
+            } => {
+                let result = context.get("result").and_then(Value::as_str).unwrap_or("");
+                let (haystack, needle) = if *case_sensitive {
+                    (result.to_string(), text.clone())
+                } else {
+                    (result.to_lowercase(), text.to_lowercase())
+                };
+                if haystack.contains(&needle) {
+                    TerminationOutcome::yes(format!("Text '{text}' found in output"))
+                } else {
+                    TerminationOutcome::no()
+                }
+            }
+            TerminationCondition::StopMessage { stop_message } => {
+                let result = context
+                    .get("result")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim();
+                if result == stop_message {
+                    TerminationOutcome::yes(format!("Stop message '{stop_message}' received"))
+                } else {
+                    TerminationOutcome::no()
+                }
+            }
+            TerminationCondition::MaxMessage { max_messages } => {
+                let from_messages = context
+                    .get("messages")
+                    .and_then(Value::as_array)
+                    .map(|a| a.len() as u64)
+                    .filter(|&count| count > 0);
+                let count = from_messages.unwrap_or_else(|| {
+                    context
+                        .get("iteration")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0)
+                });
+                if count >= u64::from(*max_messages) {
+                    TerminationOutcome::yes(format!(
+                        "Message count ({count}) >= limit ({max_messages})"
+                    ))
+                } else {
+                    TerminationOutcome::no()
+                }
+            }
+            TerminationCondition::TokenUsage {
+                max_total_tokens,
+                max_prompt_tokens,
+                max_completion_tokens,
+            } => {
+                let Some(usage) = context.get("token_usage").filter(|u| u.is_object()) else {
+                    return TerminationOutcome::no();
+                };
+                let field = |key: &str| usage.get(key).and_then(Value::as_u64).unwrap_or(0);
+                let total = field("total_tokens");
+                let prompt = field("prompt_tokens");
+                let completion = field("completion_tokens");
+
+                if let Some(max) = max_total_tokens {
+                    if total >= u64::from(*max) {
+                        return TerminationOutcome::yes(format!(
+                            "Total tokens ({total}) >= limit ({max})"
+                        ));
+                    }
+                }
+                if let Some(max) = max_prompt_tokens {
+                    if prompt >= u64::from(*max) {
+                        return TerminationOutcome::yes(format!(
+                            "Prompt tokens ({prompt}) >= limit ({max})"
+                        ));
+                    }
+                }
+                if let Some(max) = max_completion_tokens {
+                    if completion >= u64::from(*max) {
+                        return TerminationOutcome::yes(format!(
+                            "Completion tokens ({completion}) >= limit ({max})"
+                        ));
+                    }
+                }
+                TerminationOutcome::no()
+            }
+            TerminationCondition::And { conditions } => {
+                let mut reasons = Vec::new();
+                for cond in conditions {
+                    let outcome = cond.should_terminate(context);
+                    if !outcome.should_terminate {
+                        return TerminationOutcome::no();
+                    }
+                    if !outcome.reason.is_empty() {
+                        reasons.push(outcome.reason);
+                    }
+                }
+                TerminationOutcome::yes(reasons.join(" AND "))
+            }
+            TerminationCondition::Or { conditions } => {
+                for cond in conditions {
+                    let outcome = cond.should_terminate(context);
+                    if outcome.should_terminate {
+                        return outcome;
+                    }
+                }
+                TerminationOutcome::no()
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_should_terminate_text_mention_case_insensitive_default() {
+        let cond = TerminationCondition::text_mention("terminate");
+        let outcome = cond.should_terminate(&serde_json::json!({"result": "OK, TERMINATE now."}));
+        assert!(outcome.should_terminate);
+        assert!(outcome.reason.contains("terminate"));
+
+        let outcome = cond.should_terminate(&serde_json::json!({"result": "still working"}));
+        assert!(!outcome.should_terminate);
+    }
+
+    #[test]
+    fn test_should_terminate_text_mention_case_sensitive() {
+        let cond = TerminationCondition::text_mention_case_sensitive("TERMINATE");
+        let outcome = cond.should_terminate(&serde_json::json!({"result": "please terminate"}));
+        assert!(
+            !outcome.should_terminate,
+            "lowercase must not match case-sensitive TERMINATE"
+        );
+    }
+
+    #[test]
+    fn test_should_terminate_stop_message_exact_match_after_trim() {
+        let cond = TerminationCondition::stop_message("DONE");
+        let outcome = cond.should_terminate(&serde_json::json!({"result": "  DONE  "}));
+        assert!(outcome.should_terminate);
+
+        let outcome = cond.should_terminate(&serde_json::json!({"result": "DONE for real"}));
+        assert!(
+            !outcome.should_terminate,
+            "must be an exact match, not a substring"
+        );
+    }
+
+    #[test]
+    fn test_should_terminate_max_message_counts_messages() {
+        let cond = TerminationCondition::max_message(2).unwrap();
+        let outcome = cond.should_terminate(&serde_json::json!({"messages": ["a", "b"]}));
+        assert!(outcome.should_terminate);
+
+        let outcome = cond.should_terminate(&serde_json::json!({"messages": ["a"]}));
+        assert!(!outcome.should_terminate);
+    }
+
+    #[test]
+    fn test_should_terminate_max_message_falls_back_to_iteration_when_messages_empty() {
+        let cond = TerminationCondition::max_message(3).unwrap();
+        let outcome = cond.should_terminate(&serde_json::json!({"messages": [], "iteration": 5}));
+        assert!(outcome.should_terminate);
+    }
+
+    #[test]
+    fn test_should_terminate_token_usage_checks_total() {
+        let cond = TerminationCondition::max_total_tokens(100);
+        let outcome =
+            cond.should_terminate(&serde_json::json!({"token_usage": {"total_tokens": 150}}));
+        assert!(outcome.should_terminate);
+
+        let outcome =
+            cond.should_terminate(&serde_json::json!({"token_usage": {"total_tokens": 50}}));
+        assert!(!outcome.should_terminate);
+    }
+
+    #[test]
+    fn test_should_terminate_token_usage_missing_never_terminates() {
+        let cond = TerminationCondition::max_total_tokens(1);
+        let outcome = cond.should_terminate(&serde_json::json!({}));
+        assert!(!outcome.should_terminate);
+    }
+
+    #[test]
+    fn test_should_terminate_and_requires_all_and_joins_reasons() {
+        let cond = TerminationCondition::text_mention("done")
+            & TerminationCondition::max_message(1).unwrap();
+        let outcome =
+            cond.should_terminate(&serde_json::json!({"result": "done", "messages": ["a"]}));
+        assert!(outcome.should_terminate);
+        assert!(outcome.reason.contains(" AND "));
+
+        let outcome = cond.should_terminate(&serde_json::json!({"result": "done", "messages": []}));
+        assert!(
+            !outcome.should_terminate,
+            "only one of two AND-ed conditions triggered"
+        );
+    }
+
+    #[test]
+    fn test_should_terminate_or_short_circuits_on_first_match() {
+        let cond = TerminationCondition::text_mention("done")
+            | TerminationCondition::max_message(100).unwrap();
+        let outcome = cond.should_terminate(&serde_json::json!({"result": "done", "messages": []}));
+        assert!(outcome.should_terminate);
+        assert!(!outcome.reason.contains(" AND "));
+    }
 
     #[test]
     fn test_text_mention_case_sensitivity_default() {

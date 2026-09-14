@@ -4,6 +4,8 @@
 use crate::error::{ConductorError, Result};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use super::callback::CallbackHandler;
@@ -78,6 +80,114 @@ pub struct OutputType {
     pub schema: Value,
     pub class_name: String,
 }
+
+/// A tool call to execute before the agent's first LLM turn, with its result injected into the
+/// conversation as a tool_call + tool_response message pair.
+///
+/// Mirrors python-sdk's `agent.prefill_tools` entries, serialized by
+/// `config_serializer.py` as `{"toolName": pt.tool_name, "arguments": pt.arguments}` — matches
+/// the server's `PrefillToolCallConfig` DTO (`toolName: String`, `arguments: Map<String,
+/// Object>`) field-for-field.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrefillToolCall {
+    pub tool_name: String,
+    pub arguments: Value,
+}
+
+impl PrefillToolCall {
+    pub fn new(tool_name: impl Into<String>, arguments: Value) -> Self {
+        Self {
+            tool_name: tool_name.into(),
+            arguments,
+        }
+    }
+}
+
+/// A declarative gate condition for conditional sequential (`>>`) pipelines: stop the pipeline
+/// after this agent if its output contains `text`.
+///
+/// Mirrors python-sdk's `gate.py::TextGate` dataclass exactly (`text`, `case_sensitive` default
+/// `true`), serialized by `config_serializer.py::_serialize_gate` as `{"type": "text_contains",
+/// "text": ..., "caseSensitive": ...}`. Per that module's own docstring, this is "compiled
+/// entirely server-side (INLINE JavaScript) — no worker round-trip needed", which is why it's
+/// safe to port on its own. See [`GateCondition`] for python's other `gate` shape (an arbitrary
+/// callable), now also ported.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextGate {
+    pub text: String,
+    pub case_sensitive: bool,
+}
+
+impl TextGate {
+    /// New gate with `case_sensitive` defaulted to `true`, matching python's dataclass default.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            case_sensitive: true,
+        }
+    }
+
+    pub fn case_insensitive(mut self) -> Self {
+        self.case_sensitive = false;
+        self
+    }
+}
+
+/// A callable gate predicate: given `{"result": <agent output>}` (matching python-sdk's
+/// `GateEntry.__call__`'s context dict), decide whether a conditional sequential (`>>`)
+/// pipeline should continue past this agent.
+///
+/// `Result<bool>` rather than a bare `bool` for the same reason [`StopWhenHandler`] is —
+/// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) treats an `Err` the same way
+/// python's `GateEntry.__call__` treats an exception from the user callable: log it and fail
+/// *open* (`{"decision": "continue"}`), not stop the pipeline over a broken predicate.
+pub type GateHandler =
+    Arc<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<bool>> + Send>> + Send + Sync>;
+
+/// [`AgentDef::gate`]'s two possible shapes, matching python-sdk's `Agent.gate: Optional[Any]`
+/// slot, which is either a [`TextGate`] instance or an arbitrary callable
+/// (`config_serializer.py::_serialize_gate`'s `isinstance(gate, TextGate)` / `elif
+/// callable(gate)` branches) — modeled as an enum here instead of two separate `Option` fields
+/// on [`AgentDef`] so the two forms can't both be set at once.
+#[derive(Clone)]
+pub enum GateCondition {
+    /// Compiled entirely server-side (inline JavaScript) — no worker round-trip needed.
+    Text(TextGate),
+    /// Serialized as a worker-task reference (`{"taskName": "{name}_gate"}`); see
+    /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) for the worker that
+    /// evaluates it.
+    Callable(GateHandler),
+}
+
+impl std::fmt::Debug for GateCondition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GateCondition::Text(t) => f.debug_tuple("Text").field(t).finish(),
+            GateCondition::Callable(_) => f.write_str("Callable(<predicate>)"),
+        }
+    }
+}
+
+impl From<TextGate> for GateCondition {
+    fn from(gate: TextGate) -> Self {
+        GateCondition::Text(gate)
+    }
+}
+
+/// A `stop_when` predicate: given the loop context (`{"result": ..., "messages": ..., "iteration":
+/// ...}`, matching python-sdk's `StopWhenEntry.__call__`'s context dict), decide whether the
+/// agent loop should stop early.
+///
+/// `Result<bool>` rather than a bare `bool` so a caller can signal an evaluation error
+/// explicitly (idiomatic for Rust) instead of panicking — [`super::runtime::AgentRuntime::serve`]
+/// treats an `Err` the same way python's `StopWhenEntry.__call__` treats an exception from the
+/// user callable: log it and fail *open* (`should_continue: true`, i.e. don't stop the agent
+/// over a broken predicate).
+///
+/// `Arc`, not `Box`, for the same reason [`ToolHandler`](super::tool::ToolHandler) is: cheap to
+/// clone into a worker without re-registering.
+pub type StopWhenHandler =
+    Arc<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<bool>> + Send>> + Send + Sync>;
 
 /// Per-call override struct reserved for the future `AgentRuntime::run` API.
 ///
@@ -173,6 +283,11 @@ pub struct AgentDef {
     /// Rule-based agent-to-agent transitions, used when `strategy = Strategy::Swarm` (python's
     /// `Agent(handoffs=[...])`).
     pub swarm_transitions: Vec<SwarmTransition>,
+    /// Restricts which swarm transfer targets each agent may hand off to (map of agent name ->
+    /// allowed target names), matching python's `Agent.allowed_transitions:
+    /// Optional[Dict[str, List[str]]]`. Empty means unrestricted — matches python's `None`/falsy
+    /// case in `HandoffCheckEntry._is_allowed`/`_register_swarm_transfer_workers`.
+    pub allowed_transitions: HashMap<String, Vec<String>>,
     pub strategy: Strategy,
     pub max_turns: u32,
     pub max_tokens: Option<u32>,
@@ -217,6 +332,44 @@ pub struct AgentDef {
     /// matching how [`ToolHandler`](super::tool::ToolHandler) is held for the same reason.
     /// Deliberately **not** serialized — see `serializer.rs`'s `serialize_agent` for why.
     pub callbacks: Vec<Arc<dyn CallbackHandler>>,
+    /// Text this agent uses to introduce itself in group conversations (python's
+    /// `Agent.introduction`, wire key `introduction`).
+    pub introduction: Option<String>,
+    /// Controls whether a sub-agent inherits the parent's conversation context. `"none"` gives
+    /// it a fresh context (prompt only); omitted/anything else inherits the parent's (python's
+    /// `Agent.include_contents`, wire key `includeContents`).
+    pub include_contents: Option<String>,
+    /// Tool calls to execute before the first LLM turn, results injected into context (python's
+    /// `Agent.prefill_tools`, wire key `prefillTools`).
+    pub prefill_tools: Vec<PrefillToolCall>,
+    /// Gate condition for conditional sequential (`>>`) pipelines (python's `Agent.gate`, wire
+    /// key `gate`) — see [`GateCondition`] for the two shapes this can take.
+    pub gate: Option<GateCondition>,
+    /// Predicate to end the agent loop early (python's `Agent.stop_when`). Serialized as a
+    /// worker-task reference (wire key `stopWhen`, `{"taskName": "{name}_stop_when"}`) — see
+    /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) for the worker that
+    /// evaluates it.
+    pub stop_when: Option<StopWhenHandler>,
+    /// CLI command execution config, set via [`AgentDef::with_cli_commands`] (python's
+    /// `Agent.cli_config`, wire key `cliConfig`). Also appends a `run_command` tool to
+    /// [`AgentDef::tools`] — see [`super::cli_config`] for what is and isn't ported.
+    pub cli_config: Option<super::cli_config::CliConfig>,
+    /// Code execution config, set via [`AgentDef::with_code_execution`]/
+    /// [`AgentDef::with_local_code_execution`] (python's `Agent.code_execution_config`, wire key
+    /// `codeExecution`). Also appends an `execute_code` tool to [`AgentDef::tools`] — see
+    /// [`super::code_execution_config`] for what is and isn't ported.
+    pub code_execution: Option<super::code_execution_config::CodeExecutionConfig>,
+    /// A "framework" marker (python's `Agent._framework`), set via
+    /// [`AgentDef::with_framework`] — when `Some`, this agent serializes as a flattened
+    /// passthrough of [`AgentDef::framework_config`] instead of the normal `AgentConfig` shape,
+    /// matching `config_serializer.py::_serialize_agent`'s `_framework` special case. This is
+    /// what lets a [`super::SkillAgent`] be nested as a sub-agent of an ordinary native agent
+    /// tree (`agents=[...]`/[`ToolDef::agent`]) — see `super::skill`'s module doc for the
+    /// standalone (non-nested) case, which doesn't need this field at all.
+    pub framework: Option<String>,
+    /// The raw wire config a `framework`-marked agent serializes verbatim (spread alongside
+    /// `name`/`model`/`_framework`) — python's `Agent._framework_config`.
+    pub framework_config: Option<Value>,
 }
 
 impl std::fmt::Debug for AgentDef {
@@ -242,6 +395,15 @@ impl std::fmt::Debug for AgentDef {
             .field("termination", &self.termination)
             .field("metadata", &self.metadata)
             .field("callbacks", &format!("<{} handlers>", self.callbacks.len()))
+            .field("introduction", &self.introduction)
+            .field("include_contents", &self.include_contents)
+            .field("prefill_tools", &self.prefill_tools)
+            .field("gate", &self.gate)
+            .field("stop_when", &self.stop_when.as_ref().map(|_| "<predicate>"))
+            .field("cli_config", &self.cli_config)
+            .field("code_execution", &self.code_execution)
+            .field("framework", &self.framework)
+            .field("framework_config", &self.framework_config)
             .finish()
     }
 }
@@ -268,6 +430,7 @@ impl AgentDef {
             router: None,
             output_type: None,
             swarm_transitions: Vec::new(),
+            allowed_transitions: HashMap::new(),
             strategy: Strategy::default(),
             max_turns: 25,
             max_tokens: None,
@@ -286,6 +449,15 @@ impl AgentDef {
             synthesize: true,
             metadata: HashMap::new(),
             callbacks: Vec::new(),
+            introduction: None,
+            include_contents: None,
+            prefill_tools: Vec::new(),
+            gate: None,
+            stop_when: None,
+            cli_config: None,
+            code_execution: None,
+            framework: None,
+            framework_config: None,
         })
     }
 
@@ -306,6 +478,72 @@ impl AgentDef {
 
     pub fn with_tool(mut self, tool: ToolDef) -> Self {
         self.tools.push(tool);
+        self
+    }
+
+    /// Attach CLI command execution, matching python's `Agent(cli_config=...)` /
+    /// `Agent(cli_commands=True, cli_allowed_commands=[...])` flow: stores *config* and, when
+    /// [`super::cli_config::CliConfig::enabled`], immediately appends the auto-built
+    /// `{name}_run_command` tool to [`AgentDef::tools`] (matching python's
+    /// `_attach_cli_tool`, called eagerly from `__init__` rather than deferred to a later build
+    /// step).
+    pub fn with_cli_commands(mut self, config: super::cli_config::CliConfig) -> Self {
+        if config.enabled {
+            let tool = super::cli_config::cli_command_tool(&config, Some(&self.name));
+            self.tools.push(tool);
+        }
+        self.cli_config = Some(config);
+        self
+    }
+
+    /// Attach code execution with full control, matching python's `Agent(code_execution=...)`.
+    /// Stores *config* and, when
+    /// [`super::code_execution_config::CodeExecutionConfig::enabled`], immediately appends the
+    /// auto-built `{name}_execute_code` tool to [`AgentDef::tools`] (matching python's
+    /// `_attach_code_execution_tool`, called eagerly from `__init__`).
+    pub fn with_code_execution(
+        mut self,
+        config: super::code_execution_config::CodeExecutionConfig,
+    ) -> Self {
+        if config.enabled {
+            let tool = super::code_execution_config::code_execution_tool(&config, Some(&self.name));
+            self.tools.push(tool);
+        }
+        self.code_execution = Some(config);
+        self
+    }
+
+    /// Shorthand for [`AgentDef::with_code_execution`], matching python's
+    /// `Agent(local_code_execution=True, allowed_languages=[...], allowed_commands=[...])` flags:
+    /// builds an enabled [`super::code_execution_config::CodeExecutionConfig`] with the given
+    /// lists, defaulting `allowed_languages` to `["python"]` when empty (matching python's `or
+    /// ["python"]` fallback) and leaving `allowed_commands` unrestricted when empty.
+    pub fn with_local_code_execution(
+        self,
+        allowed_languages: Vec<String>,
+        allowed_commands: Vec<String>,
+    ) -> Self {
+        let allowed_languages = if allowed_languages.is_empty() {
+            vec!["python".to_string()]
+        } else {
+            allowed_languages
+        };
+        self.with_code_execution(
+            super::code_execution_config::CodeExecutionConfig::new()
+                .with_allowed_languages(allowed_languages)
+                .with_allowed_commands(allowed_commands),
+        )
+    }
+
+    /// Mark this agent as a "framework" passthrough (python's `agent._framework = name;
+    /// agent._framework_config = raw_config`) — see [`AgentDef::framework`]'s doc comment.
+    /// `raw_config` is spread verbatim into the wire config alongside `name`/`model`/
+    /// `_framework` when this agent is serialized (standalone or nested as a sub-agent), so it
+    /// should already be in the exact wire shape the target framework normalizer expects (e.g.
+    /// [`super::skill::SkillAgent::raw_config`]).
+    pub fn with_framework(mut self, framework: impl Into<String>, raw_config: Value) -> Self {
+        self.framework = Some(framework.into());
+        self.framework_config = Some(raw_config);
         self
     }
 
@@ -368,14 +606,29 @@ impl AgentDef {
         self
     }
 
+    /// Restrict swarm transfer targets reachable from `from_agent` to `targets`, matching
+    /// python's `Agent(allowed_transitions={...})`. Accumulates — call once per source agent.
+    pub fn with_allowed_transition(
+        mut self,
+        from_agent: impl Into<String>,
+        targets: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.allowed_transitions.insert(
+            from_agent.into(),
+            targets.into_iter().map(Into::into).collect(),
+        );
+        self
+    }
+
     /// Set the orchestration strategy.
     ///
     /// `Router` and `PlanExecute` each validate a required composition field against its
     /// *current* state at the moment this method runs: [`AgentDef::with_router`] /
-    /// [`AgentDef::with_planner`] must be called first in the builder chain, since an `Err`
-    /// here consumes `self` and there's no way to retroactively satisfy the check afterwards.
-    /// `Swarm` has no such requirement — matching python-sdk's `Agent.__init__` (which has no
-    /// analogous check for `strategy="swarm"`), zero `swarm_transitions` is accepted too.
+    /// [`AgentDef::with_planner`] / [`AgentDef::with_tool`] / [`AgentDef::with_sub_agent`] must
+    /// be called first in the builder chain, since an `Err` here consumes `self` and there's no
+    /// way to retroactively satisfy the check afterwards. `Swarm` has no such requirement —
+    /// matching python-sdk's `Agent.__init__` (which has no analogous check for
+    /// `strategy="swarm"`), zero `swarm_transitions` is accepted too.
     pub fn with_strategy(mut self, strategy: Strategy) -> Result<Self> {
         if strategy == Strategy::Router && self.router.is_none() {
             return Err(ConductorError::agent(
@@ -389,6 +642,41 @@ impl AgentDef {
                  `.with_strategy(Strategy::PlanExecute)` (the planner agent produces the JSON \
                  plan the parent executes)",
             ));
+        }
+        // Matches python-sdk's `Agent.__init__`: "Strategy.PLAN_EXECUTE requires tools=[...]
+        // on the parent agent. These are the canonical plan-executable tools -- every op.tool
+        // in the planner's JSON plan must be one of these. Listing tools here also ensures the
+        // runtime starts workers for them."
+        if strategy == Strategy::PlanExecute && self.tools.is_empty() {
+            return Err(ConductorError::agent(
+                "strategy 'plan_execute' requires tools: call `.with_tool(...)` before \
+                 `.with_strategy(Strategy::PlanExecute)` (these are the canonical \
+                 plan-executable tools -- every op.tool in the planner's JSON plan must be one \
+                 of these, and listing them here also ensures the runtime starts workers for \
+                 them)",
+            ));
+        }
+        // Matches python-sdk's `Agent.__init__`: a PARALLEL parent needs a model for the
+        // server-side aggregation step, or compilation fails with an opaque HTTP 400 ("Cannot
+        // compile external agent directly"). Auto-inherit from the first child that has a
+        // model, so the common case `.with_sub_agent(a1)?.with_sub_agent(a2)?
+        // .with_strategy(Strategy::Parallel)` works without repeating the model on the parent.
+        // Picks the *first* match by design -- children may have differing models for their own
+        // work, and the parent's model is only used for aggregation; an explicit
+        // `.with_model(...)` before this call still overrides. If no child has a model either,
+        // raise here rather than surfacing the opaque server 400 later.
+        if strategy == Strategy::Parallel && self.model.is_none() && !self.agents.is_empty() {
+            match self.agents.iter().find_map(|a| a.model.clone()) {
+                Some(inherited) => self.model = Some(inherited),
+                None => {
+                    return Err(ConductorError::agent(format!(
+                        "strategy 'parallel' agent '{}' has no model and no child agent has \
+                         one to inherit from: set a model on the parent (used for aggregation) \
+                         or on at least one child",
+                        self.name
+                    )));
+                }
+            }
         }
         self.strategy = strategy;
         Ok(self)
@@ -529,6 +817,73 @@ impl AgentDef {
         self
     }
 
+    /// Text this agent uses to introduce itself in group conversations.
+    pub fn with_introduction(mut self, introduction: impl Into<String>) -> Self {
+        self.introduction = Some(introduction.into());
+        self
+    }
+
+    /// Control whether a sub-agent inherits the parent's conversation context. Pass `"none"`
+    /// for a fresh context (prompt only); any other value (or leaving it unset) inherits the
+    /// parent's, matching python-sdk's `include_contents`.
+    pub fn with_include_contents(mut self, include_contents: impl Into<String>) -> Self {
+        self.include_contents = Some(include_contents.into());
+        self
+    }
+
+    /// Add a tool call to execute before the first LLM turn.
+    pub fn with_prefill_tool(mut self, call: PrefillToolCall) -> Self {
+        self.prefill_tools.push(call);
+        self
+    }
+
+    /// Bulk variant of [`with_prefill_tool`](Self::with_prefill_tool).
+    pub fn with_prefill_tools(mut self, calls: impl IntoIterator<Item = PrefillToolCall>) -> Self {
+        self.prefill_tools.extend(calls);
+        self
+    }
+
+    /// Set a gate condition for conditional sequential (`>>`) pipelines — either a [`TextGate`]
+    /// or, via [`AgentDef::with_gate_fn`], a callable. See [`GateCondition`].
+    pub fn with_gate(mut self, gate: impl Into<GateCondition>) -> Self {
+        self.gate = Some(gate.into());
+        self
+    }
+
+    /// Set a callable gate predicate for conditional sequential (`>>`) pipelines. `handler`
+    /// receives `{"result": <this agent's output>}` and returns `true` to continue the
+    /// pipeline, `false` to stop it after this agent. Registered as a `{name}_gate` worker by
+    /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) — see [`GateHandler`].
+    pub fn with_gate_fn<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<bool>> + Send + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.gate = Some(GateCondition::Callable(Arc::new(move |context: Value| {
+            let handler = handler.clone();
+            Box::pin(async move { handler(context).await })
+        })));
+        self
+    }
+
+    /// Set a predicate to end the agent loop early. `handler` receives the loop context
+    /// (`{"result": ..., "messages": ..., "iteration": ...}`) and returns `true` to stop.
+    /// Registered as a `{name}_stop_when` worker by
+    /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) — see [`StopWhenHandler`].
+    pub fn with_stop_when<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<bool>> + Send + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.stop_when = Some(Arc::new(move |context: Value| {
+            let handler = handler.clone();
+            Box::pin(async move { handler(context).await })
+        }));
+        self
+    }
+
     pub fn with_metadata_entry(mut self, key: impl Into<String>, value: Value) -> Self {
         self.metadata.insert(key.into(), value);
         self
@@ -552,10 +907,34 @@ fn is_valid_agent_name(name: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+/// Sanitize an agent name for use in a derived task/reference name (`{name}_stop_when`,
+/// `{name}_termination`, `{name}_{position}`, etc.).
+///
+/// `AgentDef::new`'s own name regex allows hyphens (matching python's `_VALID_NAME_RE`), but the
+/// Conductor server replaces `-` with `_` wherever it derives a task/reference name from an
+/// agent name — confirmed empirically: compiling a real agent named e.g. `"audit-hyphen-agent"`
+/// with a termination condition returns `requiredWorkers: ["audit_hyphen_agent_termination",
+/// ...]`, not the literal hyphenated name. Every worker-name and wire-reference construction
+/// site in this module/`serializer.rs` that derives a name from `agent.name` must go through
+/// this function, or its registered task name silently never matches what the compiled
+/// workflow actually polls for.
+pub(super) fn sanitize_for_task_name(name: &str) -> String {
+    name.replace('-', "_")
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::guardrail::RegexGuardrail;
     use super::*;
+
+    fn test_tool(name: &str) -> ToolDef {
+        ToolDef::function::<Value, _, _>(
+            name,
+            "a test tool",
+            serde_json::json!({"type": "object"}),
+            |_args: Value| async move { Ok(Value::Null) },
+        )
+    }
 
     #[test]
     fn test_new_validates_name() {
@@ -563,6 +942,28 @@ mod tests {
         assert!(AgentDef::new("1invalid").is_err());
         assert!(AgentDef::new("in valid").is_err());
         assert!(AgentDef::new("").is_err());
+    }
+
+    /// Regression test for a real bug found via live testing: the Conductor server replaces
+    /// `-` with `_` wherever it derives a task/reference name from an agent name (confirmed by
+    /// compiling a real `"audit-hyphen-agent"` and reading back `requiredWorkers`), but nothing
+    /// in this crate did that sanitization before this fix -- every hyphenated agent name's
+    /// stop_when/termination/callback worker would silently register under the wrong task name
+    /// and never receive a task.
+    #[test]
+    fn test_sanitize_for_task_name_replaces_hyphens() {
+        assert_eq!(
+            sanitize_for_task_name("audit-hyphen-agent"),
+            "audit_hyphen_agent"
+        );
+        assert_eq!(
+            sanitize_for_task_name("already_underscored"),
+            "already_underscored"
+        );
+        assert_eq!(
+            sanitize_for_task_name("no-hyphens_here-either"),
+            "no_hyphens_here_either"
+        );
     }
 
     #[test]
@@ -642,12 +1043,80 @@ mod tests {
         // No planner set yet: rejected, matching python's "PLAN_EXECUTE requires planner=".
         assert!(agent.clone().with_strategy(Strategy::PlanExecute).is_err());
 
-        // Planner set first (required builder-chain order): accepted.
+        // Planner and a tool set first (required builder-chain order): accepted.
         let planner = AgentDef::new("planner").unwrap();
-        let agent_with_planner = agent.with_planner(planner);
+        let agent_with_planner = agent.with_planner(planner).with_tool(test_tool("t"));
         assert!(agent_with_planner
             .with_strategy(Strategy::PlanExecute)
             .is_ok());
+    }
+
+    /// Regression test for a real python-sdk check this crate was missing entirely: python's
+    /// `Agent.__init__` requires `tools=[...]` on a PLAN_EXECUTE parent (these are the
+    /// canonical plan-executable tools every `op.tool` in the planner's JSON plan must be one
+    /// of), and raises before ever reaching the server. Without this, a Rust-built PLAN_EXECUTE
+    /// agent with no tools would silently compile and fail confusingly server-side instead.
+    #[test]
+    fn test_with_strategy_plan_execute_requires_tools() {
+        let planner = AgentDef::new("planner").unwrap();
+        let agent = AgentDef::new("a").unwrap().with_planner(planner);
+
+        // No tools yet: rejected.
+        assert!(agent.clone().with_strategy(Strategy::PlanExecute).is_err());
+
+        // A tool added first: accepted.
+        assert!(agent
+            .with_tool(test_tool("t"))
+            .with_strategy(Strategy::PlanExecute)
+            .is_ok());
+    }
+
+    /// Regression test for python-sdk's PARALLEL model auto-inheritance: a PARALLEL parent with
+    /// no model of its own inherits the first child's model, so
+    /// `.with_sub_agent(a1)?.with_sub_agent(a2)?.with_strategy(Strategy::Parallel)` works
+    /// without repeating `.with_model(...)` on the parent -- avoiding an opaque server 400
+    /// ("Cannot compile external agent directly") that would otherwise surface only at compile
+    /// time.
+    #[test]
+    fn test_with_strategy_parallel_inherits_first_child_model() {
+        let child_without_model = AgentDef::new("child_a").unwrap();
+        let child_with_model = AgentDef::new("child_b").unwrap().with_model("gpt-4o");
+        let agent = AgentDef::new("parent")
+            .unwrap()
+            .with_sub_agent(child_without_model)
+            .unwrap()
+            .with_sub_agent(child_with_model)
+            .unwrap()
+            .with_strategy(Strategy::Parallel)
+            .unwrap();
+
+        assert_eq!(agent.model, Some("gpt-4o".to_string()));
+    }
+
+    #[test]
+    fn test_with_strategy_parallel_keeps_explicit_parent_model() {
+        let child = AgentDef::new("child").unwrap().with_model("gpt-3.5");
+        let agent = AgentDef::new("parent")
+            .unwrap()
+            .with_model("gpt-4o")
+            .with_sub_agent(child)
+            .unwrap()
+            .with_strategy(Strategy::Parallel)
+            .unwrap();
+
+        // Explicit parent model always wins over inheritance.
+        assert_eq!(agent.model, Some("gpt-4o".to_string()));
+    }
+
+    #[test]
+    fn test_with_strategy_parallel_errors_when_no_model_anywhere() {
+        let child = AgentDef::new("child").unwrap();
+        let agent = AgentDef::new("parent")
+            .unwrap()
+            .with_sub_agent(child)
+            .unwrap();
+
+        assert!(agent.with_strategy(Strategy::Parallel).is_err());
     }
 
     #[test]
@@ -814,5 +1283,56 @@ mod tests {
         memory.add_user_message("hi");
         let agent = agent.with_memory(memory.clone());
         assert_eq!(agent.memory.map(|m| m.messages), Some(memory.messages));
+    }
+
+    #[test]
+    fn test_with_gate_accepts_text_gate() {
+        let agent = AgentDef::new("a").unwrap().with_gate(TextGate::new("DONE"));
+        assert!(matches!(agent.gate, Some(GateCondition::Text(_))));
+    }
+
+    #[test]
+    fn test_with_gate_fn_sets_callable_variant() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_gate_fn(|context: Value| async move { Ok(context["result"] == "DONE") });
+        assert!(matches!(agent.gate, Some(GateCondition::Callable(_))));
+    }
+
+    #[tokio::test]
+    async fn test_with_gate_fn_handler_is_callable() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_gate_fn(|context: Value| async move { Ok(context["result"] == "DONE") });
+        let Some(GateCondition::Callable(handler)) = agent.gate else {
+            panic!("expected callable gate");
+        };
+        assert!(handler(serde_json::json!({"result": "DONE"}))
+            .await
+            .unwrap());
+        assert!(!handler(serde_json::json!({"result": "other"}))
+            .await
+            .unwrap());
+    }
+
+    #[test]
+    fn test_with_gate_replaces_previous_gate() {
+        let agent = AgentDef::new("a")
+            .unwrap()
+            .with_gate(TextGate::new("A"))
+            .with_gate_fn(|_: Value| async move { Ok(true) });
+        assert!(matches!(agent.gate, Some(GateCondition::Callable(_))));
+    }
+
+    #[test]
+    fn test_with_framework_sets_marker_and_raw_config() {
+        let agent = AgentDef::new("skill_agent")
+            .unwrap()
+            .with_framework("skill", serde_json::json!({"skillMd": "..."}));
+        assert_eq!(agent.framework, Some("skill".to_string()));
+        assert_eq!(
+            agent.framework_config,
+            Some(serde_json::json!({"skillMd": "..."}))
+        );
     }
 }

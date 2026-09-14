@@ -377,8 +377,8 @@ mod tests {
     #[tokio::test]
     async fn test_agent_stream_yields_events_from_chunked_bytes() {
         let frame1 = format!("data: {}\n\n", waiting_json("exec-9"));
-        let frame2 = serde_json::json!({"type": "done", "executionId": "exec-9", "output": 1})
-            .to_string();
+        let frame2 =
+            serde_json::json!({"type": "done", "executionId": "exec-9", "output": 1}).to_string();
         let frame2 = format!("data: {frame2}\n\n");
 
         // Simulate the body arriving as several chunks, with one frame split across two chunks.

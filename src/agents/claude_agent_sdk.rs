@@ -33,12 +33,20 @@
 //!
 //! # What this module explicitly is *not*
 //!
-//! No server-side event-push (`/agent/events/{id}`), no Conductor tracking-workflow, no
-//! callback/hook-bridging — the parts of python-sdk's "passthrough" adapter that make the CLI's
-//! progress visible to a running Conductor workflow. That is documented, real follow-up work
-//! (see `docs/agents/parity-plan.md` item 4 and its "Passthrough" mode description), not
-//! something this module attempts. Today this module gives a caller a raw JSON event stream and
-//! nothing more; wiring that stream into a Conductor task is the next PR's job.
+//! [`push_event_nonblocking`]/[`update_task_progress_nonblocking`]/[`ProgressMetadata`]/
+//! [`ProgressThrottle`] give a caller who wraps a [`ClaudeAgentSdkStream`] in their own
+//! `impl Worker` composable pieces of python's instrumentation (event push to
+//! `/agent/events/{id}`, throttled `IN_PROGRESS` task updates) — but **not** the largest piece:
+//! python's `_create_tracking_workflow`/`_inject_tool_task`/`_complete_tool_task_nonblocking`
+//! dynamically register and drive a *real* Conductor workflow/task instance per tool call
+//! purely so the CLI's progress renders as a visualized DAG in the Conductor UI. That is a
+//! separate, larger follow-up (effectively its own subsystem — dynamic workflow/task
+//! definition registration, execution start, and per-tool-call task lifecycle management
+//! timed to the live event stream), not something this module attempts. There is also no
+//! callback/hook-bridging in the python `claude_code_sdk`-hooks sense — this transport parses
+//! raw `stream-json` lines rather than driving an SDK with a hook API to bridge in the first
+//! place, so [`ProgressMetadata::record_event`] derives the same counters from each event's own
+//! shape instead (see its doc comment for what's narrowed as a result).
 //!
 //! # Event shape: raw `serde_json::Value`, on purpose
 //!
@@ -304,6 +312,212 @@ impl ClaudeAgentSdkStream {
     }
 }
 
+/// Accumulated progress counters for one Claude Agent SDK passthrough run, matching the
+/// `metadata` dict python's `_build_conductor_agent_hooks` threads through its SDK hook
+/// callbacks (`tool_call_count`, `tool_error_count`, `subagent_count`, `tools_used`,
+/// `last_tool_output`).
+///
+/// Since this transport parses raw `stream-json` lines instead of receiving SDK hook callbacks
+/// (there is no SDK here to hook into a python `claude_code_sdk`-style hook API — see the
+/// module docs), [`ProgressMetadata::record_event`] derives the same counters directly from
+/// each parsed event's own shape (Anthropic Messages-API content blocks:
+/// `tool_use`/`tool_result`) instead. **Narrowed from python's version**: `tools_used` here is
+/// just tool names, not python's per-call `{tool_name, args, status, start_time, end_time,
+/// duration_ms, stdout, stderr}` entries — there is no tool-call-id-keyed before/after pairing
+/// (`PreToolUse` start vs. `PostToolUse` finish) here, only running counts.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ProgressMetadata {
+    pub tool_call_count: u32,
+    pub tool_error_count: u32,
+    pub subagent_count: u32,
+    pub tools_used: Vec<String>,
+    pub last_tool_output: String,
+}
+
+impl ProgressMetadata {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Inspect one parsed `stream-json` event and update these counters. A no-op for events
+    /// with no `message.content` array (e.g. `system`/`result` events).
+    pub fn record_event(&mut self, event: &Value) {
+        let Some(content) = event
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(Value::as_array)
+        else {
+            return;
+        };
+        for block in content {
+            match block.get("type").and_then(Value::as_str) {
+                Some("tool_use") => {
+                    self.tool_call_count += 1;
+                    if let Some(name) = block.get("name").and_then(Value::as_str) {
+                        if name == "Agent" || name == "Task" {
+                            self.subagent_count += 1;
+                        }
+                        self.tools_used.push(name.to_string());
+                    }
+                }
+                Some("tool_result") => {
+                    if block
+                        .get("is_error")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                    {
+                        self.tool_error_count += 1;
+                    }
+                    if let Some(text) = extract_tool_result_text(block) {
+                        self.last_tool_output = text;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// A `tool_result` content block's `content` field is either a plain string or an array of
+/// nested content blocks (Anthropic Messages API allows both) — this extracts text either way.
+fn extract_tool_result_text(block: &Value) -> Option<String> {
+    match block.get("content") {
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(Value::Array(items)) => {
+            let text: String = items
+                .iter()
+                .filter_map(|item| item.get("text").and_then(Value::as_str))
+                .collect();
+            (!text.is_empty()).then_some(text)
+        }
+        _ => None,
+    }
+}
+
+/// Fire-and-forget push of one raw event to `/agent/events/{execution_id}`, matching python's
+/// `_push_event_nonblocking`. Spawns a background task and only logs (at debug level) — never
+/// propagates — a failed push, so a transient event-push failure never disrupts the caller's
+/// main loop over [`ClaudeAgentSdkStream`].
+pub fn push_event_nonblocking(
+    client: crate::client::AgentClient,
+    execution_id: String,
+    event: Value,
+) {
+    tokio::spawn(async move {
+        if let Err(e) = client.push_event(&execution_id, &event).await {
+            tracing::debug!("event push failed (execution_id={execution_id}): {e}");
+        }
+    });
+}
+
+/// Minimum interval between `IN_PROGRESS` task updates, matching python's
+/// `_PROGRESS_UPDATE_INTERVAL_S`.
+pub const PROGRESS_UPDATE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Tracks whether enough time has passed to push another progress update — matching the
+/// throttling python's call sites apply before calling `_update_task_progress_nonblocking` at
+/// all, pulled into a small reusable helper here instead of being every caller's own job to
+/// remember.
+#[derive(Debug)]
+pub struct ProgressThrottle {
+    last_update: Option<tokio::time::Instant>,
+    interval: std::time::Duration,
+}
+
+impl Default for ProgressThrottle {
+    fn default() -> Self {
+        Self {
+            last_update: None,
+            interval: PROGRESS_UPDATE_INTERVAL,
+        }
+    }
+}
+
+impl ProgressThrottle {
+    pub fn new(interval: std::time::Duration) -> Self {
+        Self {
+            last_update: None,
+            interval,
+        }
+    }
+
+    /// `true` if this is the first call, or at least `interval` has elapsed since the last call
+    /// that returned `true`. Call this immediately before each candidate progress update and
+    /// only actually push when it returns `true`.
+    pub fn should_update(&mut self) -> bool {
+        let now = tokio::time::Instant::now();
+        let due = match self.last_update {
+            None => true,
+            Some(last) => now.duration_since(last) >= self.interval,
+        };
+        if due {
+            self.last_update = Some(now);
+        }
+        due
+    }
+}
+
+/// Max characters of `last_tool_output` included in a progress update, matching python's
+/// `_PROGRESS_SNIPPET_MAX_CHARS`.
+const PROGRESS_SNIPPET_MAX_CHARS: usize = 500;
+
+/// Fire-and-forget `IN_PROGRESS` task update carrying `metadata`, matching python's
+/// `_update_task_progress_nonblocking`: lets the server (and any polling clients) see
+/// real-time progress from a long-running Claude Agent SDK passthrough worker. `tools_used` is
+/// truncated to the last 5 entries and `last_tool_output` to
+/// [`PROGRESS_SNIPPET_MAX_CHARS`] characters, matching python's slice-last-5/truncate behavior.
+/// Like [`push_event_nonblocking`], a failed update is only logged, never propagated.
+pub fn update_task_progress_nonblocking(
+    task_client: crate::client::TaskClient,
+    task_id: String,
+    execution_id: String,
+    metadata: &ProgressMetadata,
+) {
+    let mut output_data = HashMap::new();
+    output_data.insert(
+        "tool_call_count".to_string(),
+        Value::from(metadata.tool_call_count),
+    );
+    output_data.insert(
+        "tool_error_count".to_string(),
+        Value::from(metadata.tool_error_count),
+    );
+    output_data.insert(
+        "subagent_count".to_string(),
+        Value::from(metadata.subagent_count),
+    );
+    let recent_tools: Vec<Value> = metadata
+        .tools_used
+        .iter()
+        .rev()
+        .take(5)
+        .rev()
+        .cloned()
+        .map(Value::String)
+        .collect();
+    output_data.insert("tools_used".to_string(), Value::Array(recent_tools));
+    let snippet: String = metadata
+        .last_tool_output
+        .chars()
+        .take(PROGRESS_SNIPPET_MAX_CHARS)
+        .collect();
+    output_data.insert("last_tool_output".to_string(), Value::String(snippet));
+
+    let result = crate::models::TaskResult {
+        task_id,
+        workflow_instance_id: execution_id.clone(),
+        status: crate::models::TaskResultStatus::InProgress,
+        output_data,
+        ..Default::default()
+    };
+
+    tokio::spawn(async move {
+        if let Err(e) = task_client.update_task(&result).await {
+            tracing::debug!("task progress update failed (execution_id={execution_id}): {e}");
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,5 +639,100 @@ mod tests {
         assert_eq!(opts.max_turns, Some(1));
         assert_eq!(opts.permission_mode.as_deref(), Some("c"));
         assert_eq!(opts.allowed_tools, vec!["d".to_string()]);
+    }
+
+    #[test]
+    fn test_record_event_counts_tool_use() {
+        let mut metadata = ProgressMetadata::new();
+        metadata.record_event(&serde_json::json!({
+            "type": "assistant",
+            "message": {"content": [{"type": "tool_use", "name": "Bash", "id": "t1", "input": {}}]},
+        }));
+        assert_eq!(metadata.tool_call_count, 1);
+        assert_eq!(metadata.tools_used, vec!["Bash".to_string()]);
+        assert_eq!(metadata.subagent_count, 0);
+    }
+
+    #[test]
+    fn test_record_event_counts_subagent_tool_use() {
+        let mut metadata = ProgressMetadata::new();
+        metadata.record_event(&serde_json::json!({
+            "message": {"content": [{"type": "tool_use", "name": "Agent", "id": "t1", "input": {}}]},
+        }));
+        assert_eq!(metadata.subagent_count, 1);
+    }
+
+    #[test]
+    fn test_record_event_counts_tool_error() {
+        let mut metadata = ProgressMetadata::new();
+        metadata.record_event(&serde_json::json!({
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "boom", "is_error": true}]},
+        }));
+        assert_eq!(metadata.tool_error_count, 1);
+        assert_eq!(metadata.last_tool_output, "boom");
+    }
+
+    #[test]
+    fn test_record_event_non_error_tool_result_does_not_increment_error_count() {
+        let mut metadata = ProgressMetadata::new();
+        metadata.record_event(&serde_json::json!({
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]},
+        }));
+        assert_eq!(metadata.tool_error_count, 0);
+        assert_eq!(metadata.last_tool_output, "ok");
+    }
+
+    #[test]
+    fn test_record_event_ignores_events_without_message_content() {
+        let mut metadata = ProgressMetadata::new();
+        metadata.record_event(&serde_json::json!({"type": "system", "subtype": "init"}));
+        assert_eq!(metadata, ProgressMetadata::new());
+    }
+
+    #[test]
+    fn test_extract_tool_result_text_handles_array_content() {
+        let block = serde_json::json!({
+            "content": [{"type": "text", "text": "hello"}, {"type": "text", "text": " world"}],
+        });
+        assert_eq!(
+            extract_tool_result_text(&block),
+            Some("hello world".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_tool_result_text_handles_string_content() {
+        let block = serde_json::json!({"content": "plain text"});
+        assert_eq!(
+            extract_tool_result_text(&block),
+            Some("plain text".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_tool_result_text_none_when_missing() {
+        let block = serde_json::json!({});
+        assert_eq!(extract_tool_result_text(&block), None);
+    }
+
+    #[test]
+    fn test_progress_throttle_first_call_is_always_due() {
+        let mut throttle = ProgressThrottle::new(std::time::Duration::from_secs(30));
+        assert!(throttle.should_update());
+    }
+
+    #[test]
+    fn test_progress_throttle_immediate_second_call_is_not_due() {
+        let mut throttle = ProgressThrottle::new(std::time::Duration::from_secs(30));
+        assert!(throttle.should_update());
+        assert!(!throttle.should_update());
+    }
+
+    #[test]
+    fn test_progress_throttle_due_again_after_interval_elapses() {
+        let mut throttle = ProgressThrottle::new(std::time::Duration::from_millis(1));
+        assert!(throttle.should_update());
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(throttle.should_update());
     }
 }

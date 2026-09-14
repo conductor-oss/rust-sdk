@@ -329,10 +329,7 @@ fn serialize_node(node: &GraphNode) -> Value {
     match node {
         GraphNode::Agent { agent, .. } => {
             map.insert("kind".to_string(), Value::String("agent".to_string()));
-            map.insert(
-                "agent".to_string(),
-                AgentConfigSerializer::serialize(agent),
-            );
+            map.insert("agent".to_string(), AgentConfigSerializer::serialize(agent));
         }
         GraphNode::Tool { tool, .. } => {
             map.insert("kind".to_string(), Value::String("tool".to_string()));

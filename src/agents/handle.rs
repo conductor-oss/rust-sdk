@@ -3,31 +3,27 @@
 
 //! Non-blocking control surface for a running agent execution.
 //!
-//! [`AgentHandle`] is what `AgentRuntime::start`/`AgentRuntime::resume` return instead of
-//! blocking to a result the way `AgentRuntime::run` does (see `docs/agents/parity-plan.md` §
-//! "Runtime + Transport" and its example 2). It is a thin, cheaply-`Clone`-able pairing of an
-//! [`AgentClient`] with the top-level `execution_id` `start`/`resume` produced — no local
-//! polling task, no background thread. Callers choose how to wait on it:
-//!
-//! - `tokio::spawn(async move { handle.join().await })` for "run in the background, act on the
-//!   result later" (no bespoke callback API needed — see parity-plan.md example 2).
-//! - `handle.stream()` to observe `AgentEvent`s as they happen and make human-in-the-loop
-//!   decisions (`approve`/`reject`/`respond`) at the call site.
-//!
-//! `execution_id` is a mandatory argument on every HITL method here, never taken implicitly from
-//! `self`: `Handoff`/`Sequential`/`Parallel` strategies put the pending `HUMAN` step in a nested
-//! sub-execution, so the id a caller must respond against is usually *not* this handle's own
-//! top-level execution id — it is whatever id came back on the `AgentEvent::Waiting` (or
-//! equivalent) that raised the request. See parity-plan.md § 2 for why this can't be optional.
+//! [`AgentHandle`] is what `AgentRuntime::start` returns instead of blocking to a result the
+//! way `AgentRuntime::run` does. Mirrors python-sdk's `AgentHandle` (`result.py`) — in
+//! particular, [`AgentHandle::approve`]/[`AgentHandle::reject`]/[`AgentHandle::respond`] target
+//! *this handle's own* `execution_id` by default, matching python's actual behavior
+//! (`self._runtime.respond(_target_execution_id(self.execution_id, event), output)`, which
+//! defaults to `self.execution_id` and only targets a different, nested sub-execution when the
+//! caller explicitly passes the streamed event that raised the request). This crate doesn't yet
+//! carry an execution id on `AgentEvent`, so that override isn't available here — every method
+//! below always targets `self.execution_id`. Get the streamed event's execution id from
+//! [`AgentHandle::stream`] and build a second `AgentHandle` over it (via
+//! `AgentClient`/`AgentHandle::new`) if a HANDOFF/SEQUENTIAL/PARALLEL sub-execution needs a
+//! direct response.
 
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use crate::client::AgentClient;
-use crate::error::{ConductorError, Result};
+use crate::error::Result;
 
-use super::result::{AgentResult, AgentStatus};
+use super::result::{poll_until_terminal, AgentResult, AgentStatus};
 use super::stream::AgentStream;
 
 /// Interval between `get_status` polls in [`AgentHandle::join`].
@@ -35,9 +31,8 @@ const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Non-blocking handle to a running (or already-finished) agent execution.
 ///
-/// Returned by `AgentRuntime::start`/`AgentRuntime::resume`. Cheap to clone and to hand to
-/// `tokio::spawn` — it holds only a cloned [`AgentClient`] and the execution id, no runtime
-/// state of its own.
+/// Returned by `AgentRuntime::start`. Cheap to clone and to hand to `tokio::spawn` — it holds
+/// only a cloned [`AgentClient`] and the execution id, no runtime state of its own.
 #[derive(Clone)]
 pub struct AgentHandle {
     client: AgentClient,
@@ -45,11 +40,10 @@ pub struct AgentHandle {
 }
 
 impl AgentHandle {
-    /// Build a handle over an already-started (or resumed) execution.
+    /// Build a handle over an already-started execution.
     ///
-    /// Called by `AgentRuntime::start`/`AgentRuntime::resume` once the server has accepted the
-    /// execution and handed back an `execution_id`; not normally constructed directly by SDK
-    /// users.
+    /// Called by `AgentRuntime::start` once the server has accepted the execution and handed
+    /// back an `execution_id`; not normally constructed directly by SDK users.
     pub fn new(client: AgentClient, execution_id: impl Into<String>) -> Self {
         Self {
             client,
@@ -57,98 +51,67 @@ impl AgentHandle {
         }
     }
 
-    /// The top-level execution id this handle was constructed with.
-    ///
-    /// Not necessarily the id to pass to [`AgentHandle::approve`]/[`AgentHandle::reject`]/
-    /// [`AgentHandle::respond`] — those target the *event's* execution id, which may be a nested
-    /// sub-execution. See the module docs.
+    /// The execution id this handle targets.
     pub fn execution_id(&self) -> &str {
         &self.execution_id
     }
 
-    /// Block until the execution reaches a terminal [`AgentStatus`], then return its
-    /// [`AgentResult`].
-    ///
-    /// Polls `GET /agent/{id}/status` on a fixed interval (same terminal-detection contract as
-    /// `AgentRuntime::run`, via [`AgentStatus::is_terminal`]) and fetches the full execution
-    /// record with `GET /agent/execution/{id}` once terminal. Intended to be wrapped in
-    /// `tokio::spawn` for "run in the background, act on the result later" — see the module
-    /// docs and parity-plan.md example 2.
-    pub async fn join(&self) -> Result<AgentResult> {
-        loop {
-            let status_value = self.client.get_status(&self.execution_id).await?;
-            let status: AgentStatus = serde_json::from_value(status_value).map_err(|e| {
-                ConductorError::agent(format!(
-                    "invalid agent status payload for execution {}: {e}",
-                    self.execution_id
-                ))
-            })?;
-
-            if status.is_terminal() {
-                let execution_value = self.client.get_execution(&self.execution_id).await?;
-                return serde_json::from_value(execution_value).map_err(|e| {
-                    ConductorError::agent(format!(
-                        "invalid agent execution payload for execution {}: {e}",
-                        self.execution_id
-                    ))
-                });
-            }
-
-            tokio::time::sleep(POLL_INTERVAL).await;
-        }
+    /// Fetch the current status without blocking. Mirrors python's `AgentHandle.get_status`.
+    pub async fn status(&self) -> Result<AgentStatus> {
+        let value = self.client.get_status(&self.execution_id).await?;
+        Ok(AgentStatus::from_response(
+            self.execution_id.clone(),
+            &value,
+        ))
     }
 
-    /// Open a live [`AgentStream`] of [`super::AgentEvent`]s for this handle's top-level
-    /// execution, over the server's SSE endpoint.
+    /// Block until the execution reaches a terminal status, then return its [`AgentResult`].
     ///
-    /// Does not consume `self` — a caller can hold the handle and stream it at the same time
-    /// (e.g. to call `approve`/`reject` in response to events observed on the stream, as in
-    /// parity-plan.md example 2).
+    /// Polls `GET /agent/{id}/status` on a fixed interval and builds the result straight from
+    /// that response's own `output` — mirrors python's `_poll_status_until_complete` +
+    /// `AgentResult(output=status.output, ...)`; there is no separate `get_execution` fetch in
+    /// the common path, because the terminal `/status` response already carries the output.
+    pub async fn join(&self) -> Result<AgentResult> {
+        poll_until_terminal(POLL_INTERVAL, || self.status()).await
+    }
+
+    /// Open a live [`AgentStream`] of [`super::AgentEvent`]s for this execution, over the
+    /// server's SSE endpoint.
     pub async fn stream(&self) -> Result<AgentStream> {
         let response = self.client.stream(&self.execution_id).await?;
         Ok(AgentStream::new(response))
     }
 
+    /// Complete a pending human task with an arbitrary output body. Lower-level than
+    /// [`AgentHandle::approve`]/[`AgentHandle::reject`] — use this when the pending step expects
+    /// free-form input (e.g. a `ToolType::Human` question) rather than a binary approve/reject
+    /// decision.
+    pub async fn respond(&self, body: &Value) -> Result<()> {
+        self.client.respond(&self.execution_id, body).await
+    }
+
     /// Approve a pending human-in-the-loop step.
-    ///
-    /// `execution_id` must be the execution id the pending request was raised against (see the
-    /// module docs) — not necessarily [`AgentHandle::execution_id`].
-    pub async fn approve(&self, execution_id: &str) -> Result<()> {
-        self.client.respond(execution_id, &approve_payload()).await
+    pub async fn approve(&self) -> Result<()> {
+        self.respond(&approve_payload()).await
     }
 
     /// Reject a pending human-in-the-loop step with a reason.
-    ///
-    /// `execution_id` must be the execution id the pending request was raised against (see the
-    /// module docs) — not necessarily [`AgentHandle::execution_id`].
-    pub async fn reject(&self, execution_id: &str, reason: &str) -> Result<()> {
-        self.client
-            .respond(execution_id, &reject_payload(reason))
-            .await
+    pub async fn reject(&self, reason: &str) -> Result<()> {
+        self.respond(&reject_payload(reason)).await
     }
 
-    /// Send an arbitrary response body to a pending human-in-the-loop step.
-    ///
-    /// Lower-level than [`AgentHandle::approve`]/[`AgentHandle::reject`] — use this when the
-    /// pending step expects free-form input (e.g. a `ToolType::Human` question) rather than a
-    /// binary approve/reject decision. `execution_id` must be the execution id the pending
-    /// request was raised against (see the module docs) — not necessarily
-    /// [`AgentHandle::execution_id`].
-    pub async fn respond(&self, execution_id: &str, body: &Value) -> Result<()> {
-        self.client.respond(execution_id, body).await
+    /// Gracefully stop the running execution.
+    pub async fn stop(&self) -> Result<()> {
+        self.client.stop(&self.execution_id).await
     }
 }
 
-// `{"action": "approve"|"reject", "reason": ...}` is this crate's best-effort payload shape for
-// `POST /agent/{id}/respond` against a pending HITL step — the exact server-side contract isn't
-// pinned down in docs/agents/*.md yet (unlike, e.g., the `agentConfig` shape, which has a schema
-// to check against). Revisit against the real server/java-sdk before treating this as load-bearing.
 fn approve_payload() -> Value {
-    json!({ "action": "approve" })
+    json!({ "approved": true })
 }
 
 fn reject_payload(reason: &str) -> Value {
-    json!({ "action": "reject", "reason": reason })
+    json!({ "approved": false, "reason": reason })
 }
 
 #[cfg(test)]
@@ -171,16 +134,18 @@ mod tests {
 
     #[test]
     fn approve_payload_has_expected_shape() {
+        // Matches python's `respond({"approved": True}, ...)` exactly.
         let payload = approve_payload();
-        assert_eq!(payload, json!({ "action": "approve" }));
+        assert_eq!(payload, json!({ "approved": true }));
     }
 
     #[test]
     fn reject_payload_has_expected_shape() {
+        // Matches python's `respond({"approved": False, "reason": reason}, ...)`.
         let payload = reject_payload("needs a manager");
         assert_eq!(
             payload,
-            json!({ "action": "reject", "reason": "needs a manager" })
+            json!({ "approved": false, "reason": "needs a manager" })
         );
     }
 

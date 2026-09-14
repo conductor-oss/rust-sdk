@@ -100,6 +100,7 @@ impl FrameworkAgent for OpenAiAgent {
                     credentials: Vec::new(),
                     sub_agent: None,
                     handler: None,
+                    guardrails: Vec::new(),
                 }
             })
             .collect()
