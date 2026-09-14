@@ -71,6 +71,32 @@ pub enum ConductorError {
     /// Channel error (for async communication)
     #[error("Channel error: {0}")]
     Channel(String),
+
+    /// Agent definition, tool-definition, or agent-config-serialization error.
+    #[cfg(feature = "agents")]
+    #[error("Agent error: {0}")]
+    Agent(String),
+
+    /// One or more declared credentials were not present in `Task.runtime_metadata`.
+    ///
+    /// Per `docs/agents/secrets-and-credentials.md`, credential resolution fails closed: a
+    /// name a tool/agent declared but that the server didn't attach to the polled `Task` is
+    /// always an error, never a silent fallback to the process environment. Carries only the
+    /// missing *names* — never a value — matching python-sdk's `CredentialNotFoundError`.
+    #[cfg(feature = "agents")]
+    #[error("Required credentials not found: {}", .0.join(", "))]
+    CredentialNotFound(Vec<String>),
+
+    /// A tool/worker failure explicitly marked non-retryable, matching python-sdk's
+    /// `TerminalToolError` (raised by e.g. `cli_config.py`'s `ScriptRunner`/
+    /// `_CliCommandRunner` for a timed-out or missing-executable command). A `ToolHandler`
+    /// returns this instead of any other error variant to signal it; the tool-dispatch worker
+    /// (`ToolWorker` in `agents/runtime.rs`) recognizes it and reports
+    /// `WorkerOutput::FailedWithTerminalError` (`FAILED_WITH_TERMINAL_ERROR`) instead of the
+    /// default retryable `Failed`.
+    #[cfg(feature = "agents")]
+    #[error("Terminal tool error: {0}")]
+    TerminalTool(String),
 }
 
 impl ConductorError {
@@ -113,6 +139,24 @@ impl ConductorError {
             message: message.into(),
             code,
         }
+    }
+
+    /// Create an agent error
+    #[cfg(feature = "agents")]
+    pub fn agent(msg: impl Into<String>) -> Self {
+        ConductorError::Agent(msg.into())
+    }
+
+    /// Create a terminal (non-retryable) tool error — see [`ConductorError::TerminalTool`].
+    #[cfg(feature = "agents")]
+    pub fn terminal_tool(msg: impl Into<String>) -> Self {
+        ConductorError::TerminalTool(msg.into())
+    }
+
+    /// Create a "credential not found" error for one or more missing declared credential names.
+    #[cfg(feature = "agents")]
+    pub fn credential_not_found(names: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        ConductorError::CredentialNotFound(names.into_iter().map(Into::into).collect())
     }
 
     /// Check if this error is retryable

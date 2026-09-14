@@ -31,6 +31,12 @@ pub fn exception_label(err: &ConductorError) -> &'static str {
         ConductorError::Internal(_) => "Internal",
         ConductorError::Io(_) => "Io",
         ConductorError::Channel(_) => "Channel",
+        #[cfg(feature = "agents")]
+        ConductorError::Agent(_) => "Agent",
+        #[cfg(feature = "agents")]
+        ConductorError::CredentialNotFound(_) => "CredentialNotFound",
+        #[cfg(feature = "agents")]
+        ConductorError::TerminalTool(_) => "TerminalTool",
     }
 }
 
@@ -89,6 +95,11 @@ mod tests {
                 message: "boom".into(),
             }),
             "Server"
+        );
+        #[cfg(feature = "agents")]
+        assert_eq!(
+            exception_label(&ConductorError::TerminalTool("boom".into())),
+            "TerminalTool"
         );
     }
 

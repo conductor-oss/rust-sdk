@@ -6,6 +6,8 @@ use crate::error::Result;
 use crate::events::EventDispatcher;
 use crate::http::ApiClient;
 
+#[cfg(feature = "agents")]
+use super::AgentClient;
 use super::{
     AuthorizationClient, EventClient, IntegrationClient, MetadataClient, OrkesMetadataClient,
     PromptClient, SchedulerClient, SchemaClient, SecretClient, TaskClient, WorkflowClient,
@@ -171,6 +173,20 @@ impl ConductorClient {
     /// Alias for event_client() - matches Python SDK naming
     pub fn get_event_client(&self) -> EventClient {
         self.event_client()
+    }
+
+    /// Get the agent client for the Agent Runtime control-plane API (`/agent/*`).
+    ///
+    /// Requires the `agents` Cargo feature.
+    #[cfg(feature = "agents")]
+    pub fn agent_client(&self) -> AgentClient {
+        AgentClient::new(self.api.clone())
+    }
+
+    /// Alias for agent_client() - matches Python SDK naming
+    #[cfg(feature = "agents")]
+    pub fn get_agent_client(&self) -> AgentClient {
+        self.agent_client()
     }
 
     /// Get the underlying API client

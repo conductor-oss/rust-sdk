@@ -17,8 +17,18 @@ pub enum WorkerOutput {
     /// Task completed successfully with output
     Completed(HashMap<String, Value>),
 
-    /// Task failed with an error message
+    /// Task failed with an error message — retried by the server per the task's retry policy.
     Failed(String),
+
+    /// Task failed permanently and should not be retried (`FAILED_WITH_TERMINAL_ERROR`).
+    ///
+    /// Return this instead of [`WorkerOutput::Failed`] — or instead of a plain `Err` from
+    /// [`Worker::execute`], which always maps to [`WorkerOutput::Failed`] in `task_runner.rs` —
+    /// when the failure is definitively not worth retrying (a malformed input that will fail
+    /// identically every time, a missing local dependency like an interpreter binary, etc.).
+    /// There is currently no way to signal this from an `Err` return; a worker that needs it
+    /// must construct this variant directly and return it via `Ok(...)`.
+    FailedWithTerminalError(String),
 
     /// Task is still in progress (for long-running tasks)
     InProgress(TaskInProgress),
@@ -71,6 +81,14 @@ impl WorkerOutput {
                 workflow_instance_id: task.workflow_instance_id.clone(),
                 worker_id: Some(worker_id.to_string()),
                 status: TaskResultStatus::Failed,
+                reason_for_incompletion: Some(reason),
+                ..Default::default()
+            },
+            WorkerOutput::FailedWithTerminalError(reason) => TaskResult {
+                task_id: task.task_id.clone(),
+                workflow_instance_id: task.workflow_instance_id.clone(),
+                worker_id: Some(worker_id.to_string()),
+                status: TaskResultStatus::FailedWithTerminalError,
                 reason_for_incompletion: Some(reason),
                 ..Default::default()
             },
@@ -133,6 +151,14 @@ pub trait Worker: Send + Sync {
     /// Used when `register_task_def` is enabled to register output schema.
     fn output_schema(&self) -> Option<serde_json::Value> {
         None
+    }
+
+    /// Get the names of credentials this worker declares as required (optional)
+    ///
+    /// Used when `register_task_def` is enabled to stamp `TaskDef::runtime_metadata`
+    /// so the server can resolve credentials before dispatching the task.
+    fn declared_credentials(&self) -> Vec<String> {
+        Vec::new()
     }
 }
 
@@ -473,6 +499,38 @@ mod tests {
 
         assert_eq!(result.task_id, "task-1");
         assert_eq!(result.status, TaskResultStatus::Completed);
+        assert_eq!(result.worker_id, Some("worker-1".to_string()));
+    }
+
+    #[test]
+    fn test_worker_output_failed_is_retryable_status() {
+        let task = Task::default();
+        let result =
+            WorkerOutput::Failed("transient error".to_string()).into_task_result(&task, "worker-1");
+        assert_eq!(result.status, TaskResultStatus::Failed);
+        assert_eq!(
+            result.reason_for_incompletion,
+            Some("transient error".to_string())
+        );
+    }
+
+    #[test]
+    fn test_worker_output_failed_with_terminal_error_conversion() {
+        let task = Task {
+            task_id: "task-1".to_string(),
+            workflow_instance_id: "wf-1".to_string(),
+            ..Default::default()
+        };
+
+        let output = WorkerOutput::FailedWithTerminalError("not retryable".to_string());
+        let result = output.into_task_result(&task, "worker-1");
+
+        assert_eq!(result.task_id, "task-1");
+        assert_eq!(result.status, TaskResultStatus::FailedWithTerminalError);
+        assert_eq!(
+            result.reason_for_incompletion,
+            Some("not retryable".to_string())
+        );
         assert_eq!(result.worker_id, Some("worker-1".to_string()));
     }
 }

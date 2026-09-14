@@ -205,7 +205,7 @@ impl TaskHandler {
         let start = std::time::Instant::now();
 
         // Drain handles using futures::future::join_all for cleaner handling
-        let handles: Vec<_> = self.handles.drain(..).collect();
+        let handles = std::mem::take(&mut self.handles);
 
         if !handles.is_empty() {
             let wait_result =
@@ -328,8 +328,9 @@ impl TaskHandler {
         }
 
         // Create task definition from worker
-        let task_def =
-            TaskDef::new(task_name).with_description("Task registered by Rust SDK worker");
+        let task_def = TaskDef::new(task_name)
+            .with_description("Task registered by Rust SDK worker")
+            .with_runtime_metadata(worker.declared_credentials());
 
         if exists {
             info!(

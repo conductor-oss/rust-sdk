@@ -94,6 +94,12 @@ pub enum TaskType {
     /// LLM store embeddings task
     #[serde(rename = "LLM_STORE_EMBEDDINGS")]
     LlmStoreEmbeddings,
+    /// List available tools from an MCP (Model Context Protocol) server
+    #[serde(rename = "LIST_MCP_TOOLS")]
+    ListMcpTools,
+    /// Call a tool on an MCP server
+    #[serde(rename = "CALL_MCP_TOOL")]
+    CallMcpTool,
     /// Get document task
     #[serde(rename = "GET_DOCUMENT")]
     GetDocument,
@@ -441,6 +447,34 @@ impl WorkflowTask {
             name: "http".to_string(),
             task_reference_name: task_ref_name.into(),
             task_type: TaskType::Http,
+            input_parameters: input,
+            ..Default::default()
+        }
+    }
+
+    /// Create a `LIST_MCP_TOOLS` task — lists available tools from an MCP server, matching
+    /// python-sdk's `ListMcpTools` task wrapper.
+    pub fn list_mcp_tools(
+        task_ref_name: impl Into<String>,
+        mcp_server: impl Into<String>,
+        headers: Option<HashMap<String, String>>,
+    ) -> Self {
+        let mut input = HashMap::new();
+        input.insert(
+            "mcpServer".to_string(),
+            serde_json::Value::String(mcp_server.into()),
+        );
+        if let Some(headers) = headers {
+            input.insert(
+                "headers".to_string(),
+                serde_json::to_value(headers).unwrap_or_default(),
+            );
+        }
+
+        Self {
+            name: "list_mcp_tools".to_string(),
+            task_reference_name: task_ref_name.into(),
+            task_type: TaskType::ListMcpTools,
             input_parameters: input,
             ..Default::default()
         }
@@ -1310,5 +1344,41 @@ mod tests {
         let json = serde_json::to_string(&wf).unwrap();
         assert!(json.contains("\"name\":\"test\""));
         assert!(json.contains("\"tasks\":["));
+    }
+
+    #[test]
+    fn test_list_mcp_tools_task_builder() {
+        let task = WorkflowTask::list_mcp_tools("list_tools", "http://localhost:3001/mcp", None);
+        assert_eq!(task.task_type, TaskType::ListMcpTools);
+        assert_eq!(
+            task.input_parameters.get("mcpServer"),
+            Some(&serde_json::Value::String(
+                "http://localhost:3001/mcp".to_string()
+            ))
+        );
+        assert!(!task.input_parameters.contains_key("headers"));
+    }
+
+    #[test]
+    fn test_list_mcp_tools_task_includes_headers_when_given() {
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), "Bearer x".to_string());
+        let task = WorkflowTask::list_mcp_tools("list_tools", "http://mcp", Some(headers));
+        assert_eq!(
+            task.input_parameters.get("headers"),
+            Some(&serde_json::json!({"Authorization": "Bearer x"}))
+        );
+    }
+
+    #[test]
+    fn test_list_mcp_tools_and_call_mcp_tool_wire_strings() {
+        assert_eq!(
+            serde_json::to_string(&TaskType::ListMcpTools).unwrap(),
+            "\"LIST_MCP_TOOLS\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskType::CallMcpTool).unwrap(),
+            "\"CALL_MCP_TOOL\""
+        );
     }
 }

@@ -46,9 +46,10 @@ members = [".", "conductor-macros", "harness"]
 tokio = { version = "1.35", features = ["full", "macros", "rt-multi-thread", "sync", "time"] }
 
 # HTTP client
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "stream"], default-features = false }
 hyper = { version = "0.14", features = ["server", "http1", "http2", "tcp"] }
 urlencoding = "2.1"
+bytes = "1"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -87,15 +88,43 @@ schemars = "0.8"
 # Procedural macros (optional feature)
 conductor-macros = { version = "0.1.0", path = "conductor-macros", optional = true }
 
+# Guardrail pattern matching (agents feature)
+regex = { version = "1", optional = true }
+
+# Shell-word splitting/quoting for CliConfig's run_command tool (agents feature) — matches
+# python-sdk's use of the stdlib `shlex` module exactly (split/quote semantics), rather than
+# hand-rolling shell tokenization, which is exactly the kind of parsing bug that turns into a
+# command-injection vulnerability.
+shell-words = { version = "1.1", optional = true }
+
+# YAML frontmatter parsing for skill.rs (agents feature) — matches python-sdk's use of PyYAML's
+# `yaml.safe_load`. `serde_yaml` (dtolnay's original) is archived/unmaintained; this is an
+# actively maintained drop-in fork with the same API.
+serde_yaml_ng = { version = "0.10", optional = true }
+
+# OpenAI FrameworkAgent adapter (openai-adapter feature)
+async-openai = { version = "0.28", optional = true }
+
+# JupyterCodeExecutor's real Jupyter kernel wire protocol (jupyter feature, not bundled into the
+# base `agents` feature — a heavier, more niche dependency set than the rest of that feature).
+# `zeromq` is a pure-Rust, tokio-native ZeroMQ implementation (no libzmq C dependency); `hmac`/
+# `sha2` implement the HMAC-SHA256 message signing the Jupyter wire protocol requires.
+zeromq = { version = "0.6", optional = true, default-features = false, features = ["tokio-runtime", "tcp-transport"] }
+hmac = { version = "0.13", optional = true }
+sha2 = { version = "0.11", optional = true }
+
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.5"
 mockall = "0.12"
-criterion = "0.5"
 
 [features]
 default = []
 macros = ["conductor-macros"]
+agents = ["macros", "regex", "shell-words", "serde_yaml_ng"]
+openai-adapter = ["async-openai", "agents"]
+claude-agent-sdk = ["agents"]
+jupyter = ["zeromq", "hmac", "sha2", "agents"]
 
 [[example]]
 name = "hello_world"
@@ -165,6 +194,11 @@ path = "examples/metrics_example.rs"
 name = "worker_macro_example"
 path = "examples/worker_macro_example.rs"
 required-features = ["macros"]
+
+[[example]]
+name = "agent_config_example"
+path = "examples/agent_config_example.rs"
+required-features = ["agents"]
 
 # Orkes AI/LLM examples
 [[example]]
@@ -245,6 +279,11 @@ path = "examples/connection_config_example.rs"
 [[example]]
 name = "kitchensink_workers"
 path = "examples/kitchensink_workers.rs"
+
+[[test]]
+name = "agent_client_tests"
+path = "tests/agent_client_tests.rs"
+required-features = ["agents"]
 
 [lib]
 name = "conductor"
