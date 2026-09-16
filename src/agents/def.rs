@@ -658,21 +658,35 @@ impl AgentDef {
         }
         // Matches python-sdk's `Agent.__init__`: a PARALLEL parent needs a model for the
         // server-side aggregation step, or compilation fails with an opaque HTTP 400 ("Cannot
-        // compile external agent directly"). Auto-inherit from the first child that has a
-        // model, so the common case `.with_sub_agent(a1)?.with_sub_agent(a2)?
-        // .with_strategy(Strategy::Parallel)` works without repeating the model on the parent.
-        // Picks the *first* match by design -- children may have differing models for their own
-        // work, and the parent's model is only used for aggregation; an explicit
-        // `.with_model(...)` before this call still overrides. If no child has a model either,
-        // raise here rather than surfacing the opaque server 400 later.
-        if strategy == Strategy::Parallel && self.model.is_none() && !self.agents.is_empty() {
+        // compile external agent directly") -- the server's `AgentConfig.external` is derived
+        // from "no model" (`Agent.external`'s python docstring: "An agent with no model is
+        // treated as external"), unconditionally, for every strategy. Auto-inherit from the
+        // first child that has a model, so the common case `.with_sub_agent(a1)?
+        // .with_sub_agent(a2)?.with_strategy(Strategy::Parallel)` works without repeating the
+        // model on the parent. Picks the *first* match by design -- children may have differing
+        // models for their own work, and the parent's model is only used for aggregation; an
+        // explicit `.with_model(...)` before this call still overrides. If no child has a model
+        // either, raise here rather than surfacing the opaque server 400 later.
+        //
+        // Also applied to SEQUENTIAL, which python's plain `Agent(agents=[...],
+        // strategy=SEQUENTIAL)` constructor does *not* do -- only its `>>` operator shorthand
+        // (`agent_a >> agent_b`) happens to dodge the same external-agent 400 by setting
+        // `model=self.model` (the leftmost agent's model) as a side effect of chaining. Since
+        // Rust has no operator-overload equivalent to `>>`, the explicit builder shape is the
+        // *only* way to build a sequential pipeline here -- without this, every model-less
+        // Rust sequential pipeline would be permanently uncompilable, a strictly worse gap than
+        // python's (which at least has the operator escape hatch for the common case).
+        if matches!(strategy, Strategy::Parallel | Strategy::Sequential)
+            && self.model.is_none()
+            && !self.agents.is_empty()
+        {
             match self.agents.iter().find_map(|a| a.model.clone()) {
                 Some(inherited) => self.model = Some(inherited),
                 None => {
                     return Err(ConductorError::agent(format!(
-                        "strategy 'parallel' agent '{}' has no model and no child agent has \
-                         one to inherit from: set a model on the parent (used for aggregation) \
-                         or on at least one child",
+                        "strategy '{strategy:?}' agent '{}' has no model and no child agent \
+                         has one to inherit from: set a model on the parent (used for \
+                         aggregation) or on at least one child",
                         self.name
                     )));
                 }
@@ -1117,6 +1131,38 @@ mod tests {
             .unwrap();
 
         assert!(agent.with_strategy(Strategy::Parallel).is_err());
+    }
+
+    /// Matches the model-inheriting half of python's `>>` operator (`Agent.__rshift__`'s
+    /// `model=self.model`) -- the only python construction path that avoids the same
+    /// external-agent 400 for a model-less sequential pipeline. Rust has no operator-overload
+    /// equivalent, so the plain builder path needs this itself; see the comment on
+    /// `with_strategy`.
+    #[test]
+    fn test_with_strategy_sequential_inherits_first_child_model() {
+        let researcher = AgentDef::new("researcher").unwrap().with_model("gpt-4o");
+        let writer = AgentDef::new("writer").unwrap();
+        let pipeline = AgentDef::new("content_pipeline")
+            .unwrap()
+            .with_sub_agent(researcher)
+            .unwrap()
+            .with_sub_agent(writer)
+            .unwrap()
+            .with_strategy(Strategy::Sequential)
+            .unwrap();
+
+        assert_eq!(pipeline.model, Some("gpt-4o".to_string()));
+    }
+
+    #[test]
+    fn test_with_strategy_sequential_errors_when_no_model_anywhere() {
+        let child = AgentDef::new("child").unwrap();
+        let agent = AgentDef::new("parent")
+            .unwrap()
+            .with_sub_agent(child)
+            .unwrap();
+
+        assert!(agent.with_strategy(Strategy::Sequential).is_err());
     }
 
     #[test]

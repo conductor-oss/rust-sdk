@@ -980,7 +980,7 @@ mod tests {
         let bare_json = AgentConfigSerializer::serialize(&bare);
         assert!(!bare_json.as_object().unwrap().contains_key("strategy"));
 
-        let child = AgentDef::new("child").unwrap();
+        let child = AgentDef::new("child").unwrap().with_model("gpt-4o");
         let parent = AgentDef::new("parent")
             .unwrap()
             .with_sub_agent(child)

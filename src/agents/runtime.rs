@@ -98,9 +98,20 @@ impl Worker for ToolWorker {
             Err(e) => return Err(e),
         };
 
-        let mut result_map = match WorkerOutput::completed_with_result(output) {
-            WorkerOutput::Completed(map) => map,
-            other => return Ok(other),
+        // Matches python's `run_tool_task`/`_dispatch.py`: `if isinstance(result, dict):
+        // task_result.output_data = result else: task_result.output_data = {"result": result}`
+        // — an object return becomes the task output directly (its fields are the output keys
+        // the agent loop/LLM sees), not nested one level down under a "result" key. Only
+        // non-object returns (numbers, strings, arrays, null) get the "result" wrapper. Found by
+        // actually running a tool that returns a dict against a recorded playback fixture: the
+        // old unconditional `completed_with_result` wrap produced `{"result": {...}}`, which
+        // never matches what real tool-using agents (python or otherwise) actually send.
+        let mut result_map = match output {
+            Value::Object(map) => map.into_iter().collect(),
+            other => match WorkerOutput::completed_with_result(other) {
+                WorkerOutput::Completed(map) => map,
+                other => return Ok(other),
+            },
         };
         let state_updates = context.state_snapshot();
         if !state_updates.is_empty() {
@@ -1105,9 +1116,26 @@ impl AgentRuntime {
     ///   batch — the common agent-based router case already needs no worker at all (the server
     ///   evaluates it natively).
     ///
+    /// Recurses into every sub-agent in [`AgentDef::agents`] and registers the same set of
+    /// workers for each of them too, matching python's `_register_workers`, whose last step is
+    /// exactly this recursion (`for sub in agent.agents: ... self._register_workers(sub, ...)`)
+    /// — every handoff/swarm/hierarchical/parallel/sequential sub-agent's own tools need a
+    /// locally-invoked worker just as much as the top-level agent's do. Unlike python, this
+    /// crate has no notion of an "external" (already-deployed-elsewhere) sub-agent to skip —
+    /// [`AgentDef`] doesn't model that concept yet — so every sub-agent is recursed into
+    /// unconditionally.
+    ///
     /// Blocks for as long as the underlying [`TaskHandler::start`] keeps its runners alive; call
     /// [`AgentRuntime::shutdown`] (from another task) to stop them.
     pub async fn serve(&mut self, agent: &AgentDef) -> Result<()> {
+        self.register_agent_workers(agent);
+        self.task_handler.start().await
+    }
+
+    /// Registers every worker [`AgentRuntime::serve`]'s doc comment describes for `agent` alone,
+    /// then recurses into `agent.agents`. Does not start polling — callers call
+    /// [`AgentRuntime::serve`], which does that once after the whole tree is registered.
+    fn register_agent_workers(&mut self, agent: &AgentDef) {
         for tool in &agent.tools {
             if let Some(worker) = ToolWorker::from_tool_def(tool) {
                 self.task_handler.add_worker(worker);
@@ -1261,7 +1289,9 @@ impl AgentRuntime {
                 name_to_idx,
             });
         }
-        self.task_handler.start().await
+        for sub in &agent.agents {
+            self.register_agent_workers(sub);
+        }
     }
 
     /// Register every locally-invoked tool in `tools` (i.e. every [`ToolDef`] whose `handler` is
@@ -1565,9 +1595,49 @@ mod tests {
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
-        let echoed = map.get("result").unwrap();
-        assert!(echoed.get("_agent_state").is_none());
-        assert_eq!(echoed.get("n"), Some(&Value::from(1)));
+        // An object-shaped tool return becomes the task output directly (matching python's
+        // `isinstance(result, dict)` branch), not nested under a "result" key.
+        assert!(!map.contains_key("_agent_state"));
+        assert_eq!(map.get("n"), Some(&Value::from(1)));
+    }
+
+    #[tokio::test]
+    async fn test_tool_worker_object_return_is_not_wrapped_under_result_key() {
+        let tool = ToolDef::function::<Value, _, _>(
+            "get_weather",
+            "returns a dict-shaped result",
+            serde_json::json!({"type": "object"}),
+            |_args: Value| async move {
+                Ok(serde_json::json!({"city": "SF", "temp_f": 72, "condition": "Sunny"}))
+            },
+        );
+        let worker = ToolWorker::from_tool_def(&tool).expect("tool has a local handler");
+
+        let output = worker.execute(&Task::default()).await.unwrap();
+        let WorkerOutput::Completed(map) = output else {
+            panic!("expected Completed")
+        };
+        assert!(!map.contains_key("result"));
+        assert_eq!(map.get("city"), Some(&Value::from("SF")));
+        assert_eq!(map.get("temp_f"), Some(&Value::from(72)));
+        assert_eq!(map.get("condition"), Some(&Value::from("Sunny")));
+    }
+
+    #[tokio::test]
+    async fn test_tool_worker_scalar_return_is_wrapped_under_result_key() {
+        let tool = ToolDef::function::<Value, _, _>(
+            "count",
+            "returns a bare number",
+            serde_json::json!({"type": "object"}),
+            |_args: Value| async move { Ok(Value::from(42)) },
+        );
+        let worker = ToolWorker::from_tool_def(&tool).expect("tool has a local handler");
+
+        let output = worker.execute(&Task::default()).await.unwrap();
+        let WorkerOutput::Completed(map) = output else {
+            panic!("expected Completed")
+        };
+        assert_eq!(map.get("result"), Some(&Value::from(42)));
     }
 
     fn stop_when_worker(handler: super::super::def::StopWhenHandler) -> StopWhenWorker {
@@ -1787,6 +1857,46 @@ mod tests {
         }
 
         assert_eq!(runtime.task_handler.worker_count(), 1);
+    }
+
+    #[test]
+    fn test_register_agent_workers_recurses_into_sub_agents() {
+        // Matches python's `_register_workers`, whose last step recurses into `agent.agents` —
+        // a handoff/swarm/hierarchical parent's sub-agents' own tools need local workers just
+        // as much as the parent's do. `register_agent_workers` (unlike `serve`, which blocks
+        // forever polling) doesn't start polling, so it's directly testable here.
+        let config = Configuration::new("http://localhost:8080/api");
+        let mut runtime = AgentRuntime::new(config).unwrap();
+
+        let billing =
+            AgentDef::new("billing")
+                .unwrap()
+                .with_tool(ToolDef::function::<Value, _, _>(
+                    "check_balance",
+                    "checks a balance",
+                    serde_json::json!({"type": "object"}),
+                    |_args: Value| async move { Ok(Value::Null) },
+                ));
+        let technical = AgentDef::new("technical")
+            .unwrap()
+            .with_tool(ToolDef::function::<Value, _, _>(
+                "lookup_order",
+                "looks up an order",
+                serde_json::json!({"type": "object"}),
+                |_args: Value| async move { Ok(Value::Null) },
+            ));
+        let support = AgentDef::new("support")
+            .unwrap()
+            .with_sub_agent(billing)
+            .unwrap()
+            .with_sub_agent(technical)
+            .unwrap();
+
+        runtime.register_agent_workers(&support);
+
+        // `support` itself has no tools; both workers below only exist if the recursion into
+        // its two sub-agents ran.
+        assert_eq!(runtime.task_handler.worker_count(), 2);
     }
 
     #[tokio::test]

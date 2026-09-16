@@ -336,6 +336,12 @@ impl ToolDef {
 
         let mut tool = Self::base(name, description, ToolType::Http);
         tool.credentials = credentials;
+        // Matches python's `http_tool`: `input_schema=input_schema or {"type": "object",
+        // "properties": {}}` -- a tool with no input parameters still needs a non-null schema
+        // on the wire (a bare `{"type": "object"}`, or `null`, is a different JSON value from
+        // `{"type": "object", "properties": {}}` and fails the mock-LLM-provider's exact
+        // request match on any tool-calling turn).
+        tool.input_schema = serde_json::json!({"type": "object", "properties": {}});
         tool.config.insert("url".to_string(), Value::String(url));
         tool.config
             .insert("method".to_string(), Value::String(method.to_uppercase()));
@@ -405,11 +411,21 @@ impl ToolDef {
     }
 
     /// An MCP-backed tool. Same `${NAME}` credential-placeholder validation as [`ToolDef::http`].
+    ///
+    /// `max_tools` is the threshold (matching python's `mcp_tool`'s `max_tools: int = 64`
+    /// default) above which the server compiles a runtime LLM-filtering step instead of listing
+    /// every discovered MCP tool directly — always emitted on the wire as `config["max_tools"]`
+    /// (python does this unconditionally too), since the server's own compiler falls back to a
+    /// *different*, lower default (32) when the key is absent entirely, silently changing
+    /// compiled behavior for any MCP server exposing more than 32 tools. `tool_names` is an
+    /// optional whitelist of MCP tool names to include, only emitted when `Some`.
     pub fn mcp(
         server_url: impl Into<String>,
         name: impl Into<String>,
         description: impl Into<String>,
         headers: HashMap<String, String>,
+        tool_names: Option<Vec<String>>,
+        max_tools: u32,
         credentials: Vec<String>,
     ) -> Result<Self> {
         let server_url = server_url.into();
@@ -425,6 +441,14 @@ impl ToolDef {
             .insert("server_url".to_string(), Value::String(server_url));
         tool.config
             .insert("headers".to_string(), serde_json::to_value(&headers)?);
+        if let Some(tool_names) = tool_names {
+            tool.config.insert(
+                "tool_names".to_string(),
+                Value::Array(tool_names.into_iter().map(Value::String).collect()),
+            );
+        }
+        tool.config
+            .insert("max_tools".to_string(), Value::from(max_tools));
         Ok(tool)
     }
 
@@ -1080,6 +1104,64 @@ mod tests {
             tool.config.get("method"),
             Some(&Value::String("GET".to_string()))
         );
+    }
+
+    #[test]
+    fn test_http_tool_defaults_to_empty_object_input_schema() {
+        // Matches python's `http_tool`'s `input_schema or {"type": "object", "properties":
+        // {}}` default -- not `null`, and not a bare `{"type": "object"}` with no `properties`
+        // key, both of which are different JSON values on the wire.
+        let tool = ToolDef::http(
+            "t",
+            "d",
+            "https://example.com",
+            "get",
+            HashMap::new(),
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(
+            tool.input_schema,
+            serde_json::json!({"type": "object", "properties": {}})
+        );
+    }
+
+    #[test]
+    fn test_mcp_tool_always_emits_max_tools_defaulting_to_64() {
+        // The server's own compiler falls back to a *different*, lower default (32) when
+        // `max_tools` is absent from the wire config entirely -- matches python's `mcp_tool`,
+        // which unconditionally sets `config["max_tools"] = max_tools` (default 64).
+        let tool = ToolDef::mcp(
+            "https://mcp.example.com",
+            "t",
+            "d",
+            HashMap::new(),
+            None,
+            64,
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(tool.config.get("max_tools"), Some(&Value::from(64)));
+        assert!(!tool.config.contains_key("tool_names"));
+    }
+
+    #[test]
+    fn test_mcp_tool_emits_tool_names_when_given() {
+        let tool = ToolDef::mcp(
+            "https://mcp.example.com",
+            "t",
+            "d",
+            HashMap::new(),
+            Some(vec!["search".to_string(), "fetch".to_string()]),
+            32,
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(
+            tool.config.get("tool_names"),
+            Some(&Value::from(vec!["search", "fetch"]))
+        );
+        assert_eq!(tool.config.get("max_tools"), Some(&Value::from(32)));
     }
 
     #[test]

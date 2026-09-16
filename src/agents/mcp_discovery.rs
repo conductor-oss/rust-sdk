@@ -13,11 +13,17 @@
 //! compile time and expands one `mcp_tool()` call into N real per-tool schemas... Rust's
 //! `ToolDef::mcp()` always produces one static, opaque tool definition" overstated python's
 //! *actual* behavior: `mcp_tool()` itself only ever builds the same static, unexpanded
-//! `{"server_url", "headers"?, "tool_names"?, "max_tools"}` config both SDKs already produce
-//! identically. `mcp_discovery.py` is real, working, but dead code on the python side too — a
-//! capability nothing currently calls. This module ports that same capability (a caller can
-//! invoke [`discover_mcp_tools`]/[`expand_mcp_tool_def`] explicitly before handing tools to
+//! `{"server_url", "headers"?, "tool_names"?, "max_tools"}` config both SDKs are *meant* to
+//! produce identically. `mcp_discovery.py` is real, working, but dead code on the python side
+//! too — a capability nothing currently calls. This module ports that same capability (a caller
+//! can invoke [`discover_mcp_tools`]/[`expand_mcp_tool_def`] explicitly before handing tools to
 //! [`super::AgentDef::with_tool`]), not a live pipeline wired into [`super::AgentRuntime`].
+//!
+//! One real, narrower gap this module's own tests didn't catch, since they never called
+//! [`super::tool::ToolDef::mcp`] directly: that constructor didn't set `max_tools`/`tool_names`
+//! on the wire at all until a live playback-verification pass (`sdk_playback_04_http_and_mcp_tools`)
+//! found the server's own compiler falls back to a *different*, lower default (32, not python's
+//! 64) when the key is absent — fixed directly in `ToolDef::mcp`.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
