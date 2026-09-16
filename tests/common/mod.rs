@@ -1,36 +1,36 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+// This shared file is included by every `tests/*_tests.rs` integration test binary; which of
+// these constants/helpers are actually used varies per binary, so a per-item
+// `#[expect(dead_code)]` is unfulfilled in whichever binaries do use a given item. A single
+// file-level `allow` covers every binary uniformly instead.
+#![allow(dead_code)]
+#![allow(clippy::allow_attributes)]
+
 use conductor::{
     client::ConductorClient, configuration::Configuration, error::Result, models::WorkflowStatus,
 };
 use std::time::Duration;
 
 /// Common test constants
-#[allow(dead_code)]
 pub const TEST_WORKFLOW_NAME: &str = "test-sdk-rust-workflow";
-#[allow(dead_code)]
 pub const TEST_TASK_NAME: &str = "test-sdk-rust-task";
-#[allow(dead_code)]
 pub const TEST_OWNER_EMAIL: &str = "test@orkes.io";
-#[allow(dead_code)]
 pub const TEST_WORKFLOW_VERSION: i32 = 1;
 
 /// Get test configuration from environment
-#[allow(dead_code)]
 pub fn test_config() -> Configuration {
     Configuration::from_env()
 }
 
 /// Generate a unique workflow name with prefix
-#[allow(dead_code)]
 pub fn generate_unique_workflow_name(prefix: &str) -> String {
     let uuid = uuid::Uuid::new_v4().to_string();
     format!("{}_{}", prefix, &uuid[..8])
 }
 
 /// Generate a unique task name with prefix
-#[allow(dead_code)]
 pub fn generate_unique_task_name(prefix: &str) -> String {
     let uuid = uuid::Uuid::new_v4().to_string();
     format!("{}_{}", prefix, &uuid[..8])
@@ -43,7 +43,6 @@ pub fn generate_unique_name(prefix: &str) -> String {
 }
 
 /// Cleanup workflow by ID (best effort - doesn't fail)
-#[allow(dead_code)]
 pub async fn cleanup_workflow(client: &ConductorClient, workflow_id: &str) {
     let workflow_client = client.workflow_client();
 
@@ -61,7 +60,6 @@ pub async fn cleanup_workflow(client: &ConductorClient, workflow_id: &str) {
 }
 
 /// Cleanup task definition (best effort - doesn't fail)
-#[allow(dead_code)]
 pub async fn cleanup_task_def(client: &ConductorClient, task_name: &str) {
     client
         .metadata_client()
@@ -71,7 +69,6 @@ pub async fn cleanup_task_def(client: &ConductorClient, task_name: &str) {
 }
 
 /// Cleanup workflow definition (best effort - doesn't fail)
-#[allow(dead_code)]
 pub async fn cleanup_workflow_def(client: &ConductorClient, name: &str, version: i32) {
     client
         .metadata_client()
@@ -107,7 +104,6 @@ where
 }
 
 /// Wait for workflow to reach a specific status
-#[allow(dead_code)]
 pub async fn wait_for_workflow_status(
     client: &ConductorClient,
     workflow_id: &str,
@@ -120,8 +116,7 @@ pub async fn wait_for_workflow_status(
     loop {
         if start.elapsed() > timeout {
             return Err(conductor::error::ConductorError::Timeout(format!(
-                "Workflow {} did not reach status {:?} within timeout",
-                workflow_id, expected_status
+                "Workflow {workflow_id} did not reach status {expected_status:?} within timeout"
             )));
         }
 
@@ -135,7 +130,6 @@ pub async fn wait_for_workflow_status(
 }
 
 /// Wait for workflow to complete (success or failure)
-#[allow(dead_code)]
 pub async fn wait_for_workflow_completion(
     client: &ConductorClient,
     workflow_id: &str,
@@ -147,8 +141,7 @@ pub async fn wait_for_workflow_completion(
     loop {
         if start.elapsed() > timeout {
             return Err(conductor::error::ConductorError::Timeout(format!(
-                "Workflow {} did not complete within timeout",
-                workflow_id
+                "Workflow {workflow_id} did not complete within timeout"
             )));
         }
 
@@ -215,7 +208,7 @@ mod tests {
                 attempt.set(current + 1);
                 if current < 2 {
                     Err(conductor::error::ConductorError::Internal(
-                        "not yet".to_string(),
+                        "not yet".to_owned(),
                     ))
                 } else {
                     Ok(42)
@@ -234,13 +227,13 @@ mod tests {
         let result = retry_with_backoff(
             || async {
                 Err::<i32, _>(conductor::error::ConductorError::Internal(
-                    "always fails".to_string(),
+                    "always fails".to_owned(),
                 ))
             },
             3,
         )
         .await;
 
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 }

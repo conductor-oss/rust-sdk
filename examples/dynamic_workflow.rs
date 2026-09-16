@@ -30,13 +30,12 @@ async fn main() -> Result<()> {
     let get_user_email = FnWorker::new("get_user_email", |task: Task| async move {
         let user_id = task
             .get_input_string("userid")
-            .unwrap_or_else(|| "unknown".to_string());
+            .unwrap_or_else(|| "unknown".to_owned());
 
         info!("Getting email for user: {}", user_id);
 
         Ok(WorkerOutput::completed_with_result(format!(
-            "{}@example.com",
-            user_id
+            "{user_id}@example.com"
         )))
     })
     .with_thread_count(5);
@@ -44,13 +43,13 @@ async fn main() -> Result<()> {
     let send_email = FnWorker::new("send_email", |task: Task| async move {
         let email = task
             .get_input_string("email")
-            .unwrap_or_else(|| "unknown@example.com".to_string());
+            .unwrap_or_else(|| "unknown@example.com".to_owned());
         let subject = task
             .get_input_string("subject")
-            .unwrap_or_else(|| "No Subject".to_string());
+            .unwrap_or_else(|| "No Subject".to_owned());
         let _body = task
             .get_input_string("body")
-            .unwrap_or_else(|| "No Body".to_string());
+            .unwrap_or_else(|| "No Body".to_owned());
 
         info!("Sending email to {} with subject: {}", email, subject);
 

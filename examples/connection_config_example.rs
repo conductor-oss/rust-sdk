@@ -50,8 +50,8 @@ async fn main() -> anyhow::Result<()> {
     println!("Code:");
     println!(r#"  let config = Configuration::new("https://conductor.example.com/api")"#);
     println!(r#"      .with_auth("your-key", "your-secret")"#);
-    println!(r#"      .with_timeout(Duration::from_secs(60))"#);
-    println!(r#"      .with_debug(true);"#);
+    println!("      .with_timeout(Duration::from_secs(60))");
+    println!("      .with_debug(true);");
     println!();
 
     let custom_config = Configuration::new("https://conductor.example.com/api")
@@ -77,8 +77,8 @@ async fn main() -> anyhow::Result<()> {
     println!();
     println!("Code:");
     println!(r#"  let config = Configuration::new("http://localhost:8080/api");"#);
-    println!(r#"  // Simply don't set auth credentials"#);
-    println!(r#"  let client = ConductorClient::new(config)?;"#);
+    println!("  // Simply don't set auth credentials");
+    println!("  let client = ConductorClient::new(config)?;");
     println!();
 
     let oss_config = Configuration::new("http://localhost:8080/api");
@@ -103,7 +103,7 @@ async fn main() -> anyhow::Result<()> {
     println!("Code:");
     println!(r#"  let config = Configuration::new("https://conductor.example.com/api")"#);
     println!(r#"      .with_auth("key", "secret")"#);
-    println!(r#"      .with_token_ttl(Duration::from_secs(30 * 60)); // 30 minutes"#);
+    println!("      .with_token_ttl(Duration::from_secs(30 * 60)); // 30 minutes");
     println!();
 
     let token_config = Configuration::new("https://example.com/api")
@@ -165,7 +165,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("  Found {} workflow definitions", workflows.len());
                 }
                 Err(e) => {
-                    println!("  Could not connect: {}", e);
+                    println!("  Could not connect: {e}");
                     println!();
                     println!("  Troubleshooting:");
                     println!("  - Check CONDUCTOR_SERVER_URL is correct");
@@ -175,7 +175,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Err(e) => {
-            println!("  Could not create client: {}", e);
+            println!("  Could not create client: {e}");
         }
     }
 

@@ -35,10 +35,10 @@ async fn test_worker_poll_and_execute() {
 
     // Create worker
     let execution_count = Arc::new(AtomicUsize::new(0));
-    let count = execution_count.clone();
+    let count = Arc::clone(&execution_count);
 
     let worker = FnWorker::new(task_name.clone(), move |_task| {
-        let c = count.clone();
+        let c = Arc::clone(&count);
         async move {
             c.fetch_add(1, Ordering::SeqCst);
             Ok(WorkerOutput::completed_with_result("success"))
@@ -91,12 +91,12 @@ async fn test_worker_concurrency_control() {
     let concurrent_executions = Arc::new(AtomicUsize::new(0));
     let max_concurrent = Arc::new(AtomicUsize::new(0));
 
-    let current = concurrent_executions.clone();
-    let max = max_concurrent.clone();
+    let current = Arc::clone(&concurrent_executions);
+    let max = Arc::clone(&max_concurrent);
 
     let worker = FnWorker::new(task_name.clone(), move |_task| {
-        let curr = current.clone();
-        let mx = max.clone();
+        let curr = Arc::clone(&current);
+        let mx = Arc::clone(&max);
         async move {
             let now_running = curr.fetch_add(1, Ordering::SeqCst) + 1;
 

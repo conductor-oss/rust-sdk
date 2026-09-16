@@ -6,14 +6,15 @@ use crate::http::{ApiClient, ApiPath};
 use crate::models::{MetadataTag, PromptTemplate};
 use std::collections::HashMap;
 
-/// Client for managing AI prompt templates
+/// Client for managing AI prompt templates.
 #[derive(Clone)]
 pub struct PromptClient {
     api: ApiClient,
 }
 
 impl PromptClient {
-    /// Create a new prompt client
+    /// Create a new prompt client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self { api }
     }
@@ -22,6 +23,10 @@ impl PromptClient {
 
     /// Creates or updates a prompt template (simplified method)
     /// This creates a new version or updates the latest version.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn save_prompt(
         &self,
         prompt_name: &str,
@@ -32,15 +37,19 @@ impl PromptClient {
             .await
     }
 
-    /// Creates or updates a prompt template with full control over versioning and model associations
+    /// Creates or updates a prompt template with full control over versioning and model associations.
     ///
     /// # Arguments
     /// * `prompt_name` - The name of the prompt template
     /// * `description` - A description of what the prompt does
     /// * `prompt_template` - The template content with optional variable placeholders
-    /// * `models` - Optional list of AI model names this prompt is compatible with (e.g., ["openai:gpt-4", "anthropic:sonnet-4.5"])
+    /// * `models` - Optional list of AI model names this prompt is compatible with (e.g., `["openai:gpt-4", "anthropic:sonnet-4.5"]`)
     /// * `version` - Specific version number to create or update, or None to update the latest version
     /// * `auto_increment` - If true, automatically creates a new version instead of updating existing
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn save_prompt_with_options(
         &self,
         prompt_name: &str,
@@ -50,16 +59,16 @@ impl PromptClient {
         version: Option<i32>,
         auto_increment: bool,
     ) -> Result<()> {
-        let path = format!("/prompts/{}", prompt_name);
+        let path = format!("/prompts/{prompt_name}");
 
-        let mut params: Vec<(&str, String)> = vec![("description", description.to_string())];
+        let mut params: Vec<(&str, String)> = vec![("description", description.to_owned())];
 
         if let Some(v) = version {
             params.push(("version", v.to_string()));
         }
 
         if auto_increment {
-            params.push(("autoIncrement", "true".to_string()));
+            params.push(("autoIncrement", "true".to_owned()));
         }
 
         if let Some(m) = models {
@@ -78,7 +87,7 @@ impl PromptClient {
             .await
     }
 
-    /// Updates an existing prompt template at a specific version
+    /// Updates an existing prompt template at a specific version.
     ///
     /// # Arguments
     /// * `prompt_name` - The name of the prompt template
@@ -86,6 +95,10 @@ impl PromptClient {
     /// * `description` - A description of what the prompt does
     /// * `prompt_template` - The template content with optional variable placeholders
     /// * `models` - Optional list of AI model names this prompt is compatible with
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn update_prompt(
         &self,
         prompt_name: &str,
@@ -94,9 +107,9 @@ impl PromptClient {
         prompt_template: &str,
         models: Option<&[String]>,
     ) -> Result<()> {
-        let path = format!("/prompts/{}/{}", prompt_name, version);
+        let path = format!("/prompts/{prompt_name}/{version}");
 
-        let mut params: Vec<(&str, String)> = vec![("description", description.to_string())];
+        let mut params: Vec<(&str, String)> = vec![("description", description.to_owned())];
 
         if let Some(m) = models {
             for model in m {
@@ -114,13 +127,17 @@ impl PromptClient {
             .await
     }
 
-    /// Creates multiple prompt templates in a single bulk operation
+    /// Creates multiple prompt templates in a single bulk operation.
     ///
     /// # Arguments
     /// * `prompts` - List of prompt templates to create
     /// * `new_version` - If true, creates new versions for existing prompts; if false, updates existing versions
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn save_prompts(&self, prompts: &[PromptTemplate], new_version: bool) -> Result<()> {
-        let path = format!("/prompts?newVersion={}", new_version);
+        let path = format!("/prompts?newVersion={new_version}");
         let _: serde_json::Value = self
             .api
             .post(ApiPath::templated(&path, "/prompts"), prompts)
@@ -128,64 +145,88 @@ impl PromptClient {
         Ok(())
     }
 
-    /// Retrieves the latest version of a prompt template by name
+    /// Retrieves the latest version of a prompt template by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_prompt(&self, prompt_name: &str) -> Result<PromptTemplate> {
-        let path = format!("/prompts/{}", prompt_name);
+        let path = format!("/prompts/{prompt_name}");
         self.api
             .get(ApiPath::templated(&path, "/prompts/{promptName}"))
             .await
     }
 
-    /// Retrieves a specific version of a prompt template
+    /// Retrieves a specific version of a prompt template.
     ///
     /// # Arguments
     /// * `prompt_name` - The name of the prompt template
     /// * `version` - The version number to retrieve
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_prompt_version(
         &self,
         prompt_name: &str,
         version: i32,
     ) -> Result<PromptTemplate> {
-        let path = format!("/prompts/{}/{}", prompt_name, version);
+        let path = format!("/prompts/{prompt_name}/{version}");
         self.api
             .get(ApiPath::templated(&path, "/prompts/{promptName}/{version}"))
             .await
     }
 
-    /// Retrieves all versions of a specific prompt template
+    /// Retrieves all versions of a specific prompt template.
     ///
     /// # Arguments
     /// * `prompt_name` - The name of the prompt template
     ///
     /// # Returns
-    /// List of all versions of the prompt template, ordered by version number
+    /// List of all versions of the prompt template, ordered by version number.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_all_prompt_versions(&self, prompt_name: &str) -> Result<Vec<PromptTemplate>> {
-        let path = format!("/prompts/{}/versions", prompt_name);
+        let path = format!("/prompts/{prompt_name}/versions");
         self.api
             .get(ApiPath::templated(&path, "/prompts/{promptName}/versions"))
             .await
     }
 
-    /// Retrieves all prompt templates (latest versions only)
+    /// Retrieves all prompt templates (latest versions only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn get_prompts(&self) -> Result<Vec<PromptTemplate>> {
         self.api.get("/prompts").await
     }
 
-    /// Deletes all versions of a prompt template
+    /// Deletes all versions of a prompt template.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_prompt(&self, prompt_name: &str) -> Result<()> {
-        let path = format!("/prompts/{}", prompt_name);
+        let path = format!("/prompts/{prompt_name}");
         self.api
             .delete_no_content(ApiPath::templated(&path, "/prompts/{promptName}"))
             .await
     }
 
-    /// Deletes a specific version of a prompt template
+    /// Deletes a specific version of a prompt template.
     ///
     /// # Arguments
     /// * `prompt_name` - The name of the prompt template
     /// * `version` - The version number to delete
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_prompt_version(&self, prompt_name: &str, version: i32) -> Result<()> {
-        let path = format!("/prompts/{}/{}", prompt_name, version);
+        let path = format!("/prompts/{prompt_name}/{version}");
         self.api
             .delete_no_content(ApiPath::templated(&path, "/prompts/{promptName}/{version}"))
             .await
@@ -193,24 +234,32 @@ impl PromptClient {
 
     // ==================== Tag management ====================
 
-    /// Retrieves all tags associated with a prompt template
+    /// Retrieves all tags associated with a prompt template.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_tags_for_prompt_template(
         &self,
         prompt_name: &str,
     ) -> Result<Vec<MetadataTag>> {
-        let path = format!("/prompts/{}/tags", prompt_name);
+        let path = format!("/prompts/{prompt_name}/tags");
         self.api
             .get(ApiPath::templated(&path, "/prompts/{promptName}/tags"))
             .await
     }
 
-    /// Adds or updates tags for a prompt template
+    /// Adds or updates tags for a prompt template.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn update_tag_for_prompt_template(
         &self,
         prompt_name: &str,
         tags: &[MetadataTag],
     ) -> Result<()> {
-        let path = format!("/prompts/{}/tags", prompt_name);
+        let path = format!("/prompts/{prompt_name}/tags");
         self.api
             .put_no_response(
                 ApiPath::templated(&path, "/prompts/{promptName}/tags"),
@@ -219,13 +268,17 @@ impl PromptClient {
             .await
     }
 
-    /// Deletes specific tags from a prompt template
+    /// Deletes specific tags from a prompt template.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn delete_tag_for_prompt_template(
         &self,
         prompt_name: &str,
         tags: &[MetadataTag],
     ) -> Result<()> {
-        let path = format!("/prompts/{}/tags", prompt_name);
+        let path = format!("/prompts/{prompt_name}/tags");
         self.api
             .delete_with_body(
                 ApiPath::templated(&path, "/prompts/{promptName}/tags"),
@@ -236,7 +289,7 @@ impl PromptClient {
 
     // ==================== Testing ====================
 
-    /// Tests a prompt template by substituting variables and processing through the specified AI model
+    /// Tests a prompt template by substituting variables and processing through the specified AI model.
     ///
     /// This allows you to validate prompt templates before saving them or using them in workflows.
     ///
@@ -250,8 +303,12 @@ impl PromptClient {
     /// * `stop_words` - Optional list of words at which to stop generating further text
     ///
     /// # Returns
-    /// The processed prompt text after variable substitution and AI model processing
-    #[allow(clippy::too_many_arguments)]
+    /// The processed prompt text after variable substitution and AI model processing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    #[expect(clippy::too_many_arguments)]
     pub async fn test_prompt(
         &self,
         prompt_text: &str,

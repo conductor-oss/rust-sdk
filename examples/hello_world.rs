@@ -34,13 +34,13 @@ async fn main() -> Result<()> {
     let greet_worker = FnWorker::new("greet", |task: Task| async move {
         let name = task
             .get_input_string("name")
-            .unwrap_or_else(|| "World".to_string());
+            .unwrap_or_else(|| "World".to_owned());
 
         info!("Greeting: {}", name);
 
         let mut output = std::collections::HashMap::new();
         output.insert(
-            "result".to_string(),
+            "result".to_owned(),
             serde_json::json!(format!("Hello, {}!", name)),
         );
 

@@ -1,5 +1,5 @@
-//! One-off probe: exercises the new plan.rs typed builder + static_plan wire delivery against
-//! a real local Conductor server. Not part of the crate's example set.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{plan_execute, AgentRuntime, Op, Plan, PlanExecuteOptions, Step, ToolDef};
 use conductor::configuration::Configuration;
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
         "audit-plan-agent",
         vec![tool],
         PlanExecuteOptions {
-            model: Some("mock/mockLLM".to_string()),
+            model: Some("mock/mockLLM".to_owned()),
             ..Default::default()
         },
     )?;

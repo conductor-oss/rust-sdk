@@ -11,10 +11,10 @@ use std::sync::Arc;
 use crate::error::Result;
 use crate::models::{Task, TaskInProgress, TaskResult, TaskResultStatus};
 
-/// Output type for worker execution
+/// Output type for worker execution.
 #[derive(Debug, Clone)]
 pub enum WorkerOutput {
-    /// Task completed successfully with output
+    /// Task completed successfully with output.
     Completed(HashMap<String, Value>),
 
     /// Task failed with an error message — retried by the server per the task's retry policy.
@@ -30,48 +30,52 @@ pub enum WorkerOutput {
     /// must construct this variant directly and return it via `Ok(...)`.
     FailedWithTerminalError(String),
 
-    /// Task is still in progress (for long-running tasks)
+    /// Task is still in progress (for long-running tasks).
     InProgress(TaskInProgress),
 }
 
 impl WorkerOutput {
-    /// Create a completed output with a single result value
+    /// Create a completed output with a single result value.
     pub fn completed_with_result(result: impl serde::Serialize) -> Self {
         let mut output = HashMap::new();
         output.insert(
-            "result".to_string(),
+            "result".to_owned(),
             serde_json::to_value(result).unwrap_or(Value::Null),
         );
         WorkerOutput::Completed(output)
     }
 
-    /// Create a completed output with a map
+    /// Create a completed output with a map.
+    #[must_use]
     pub fn completed(output: HashMap<String, Value>) -> Self {
         WorkerOutput::Completed(output)
     }
 
-    /// Create a completed output with no data
+    /// Create a completed output with no data.
+    #[must_use]
     pub fn complete() -> Self {
         WorkerOutput::Completed(HashMap::new())
     }
 
-    /// Create a failed output
+    /// Create a failed output.
     pub fn failed(reason: impl Into<String>) -> Self {
         WorkerOutput::Failed(reason.into())
     }
 
-    /// Create an in-progress output
+    /// Create an in-progress output.
+    #[must_use]
     pub fn in_progress(callback_after_seconds: i64) -> Self {
         WorkerOutput::InProgress(TaskInProgress::new(callback_after_seconds))
     }
 
-    /// Convert to TaskResult
+    /// Convert to `TaskResult`.
+    #[must_use]
     pub fn into_task_result(self, task: &Task, worker_id: &str) -> TaskResult {
         match self {
             WorkerOutput::Completed(output) => TaskResult {
                 task_id: task.task_id.clone(),
                 workflow_instance_id: task.workflow_instance_id.clone(),
-                worker_id: Some(worker_id.to_string()),
+                worker_id: Some(worker_id.to_owned()),
                 status: TaskResultStatus::Completed,
                 output_data: output,
                 ..Default::default()
@@ -79,7 +83,7 @@ impl WorkerOutput {
             WorkerOutput::Failed(reason) => TaskResult {
                 task_id: task.task_id.clone(),
                 workflow_instance_id: task.workflow_instance_id.clone(),
-                worker_id: Some(worker_id.to_string()),
+                worker_id: Some(worker_id.to_owned()),
                 status: TaskResultStatus::Failed,
                 reason_for_incompletion: Some(reason),
                 ..Default::default()
@@ -87,7 +91,7 @@ impl WorkerOutput {
             WorkerOutput::FailedWithTerminalError(reason) => TaskResult {
                 task_id: task.task_id.clone(),
                 workflow_instance_id: task.workflow_instance_id.clone(),
-                worker_id: Some(worker_id.to_string()),
+                worker_id: Some(worker_id.to_owned()),
                 status: TaskResultStatus::FailedWithTerminalError,
                 reason_for_incompletion: Some(reason),
                 ..Default::default()
@@ -95,7 +99,7 @@ impl WorkerOutput {
             WorkerOutput::InProgress(tip) => TaskResult {
                 task_id: task.task_id.clone(),
                 workflow_instance_id: task.workflow_instance_id.clone(),
-                worker_id: Some(worker_id.to_string()),
+                worker_id: Some(worker_id.to_owned()),
                 status: TaskResultStatus::InProgress,
                 callback_after_seconds: tip.callback_after_seconds,
                 output_data: tip.output,
@@ -116,9 +120,10 @@ pub trait Worker: Send + Sync {
 
     /// Get the worker identity (optional, defaults to hostname-pid)
     fn identity(&self) -> String {
-        let hostname = hostname::get()
-            .map(|h| h.to_string_lossy().into_owned())
-            .unwrap_or_else(|_| "unknown".to_string());
+        let hostname = hostname::get().map_or_else(
+            |_| "unknown".to_owned(),
+            |h| h.to_string_lossy().into_owned(),
+        );
         format!("{}-{}", hostname, std::process::id())
     }
 
@@ -162,11 +167,11 @@ pub trait Worker: Send + Sync {
     }
 }
 
-/// Type alias for async worker functions
+/// Type alias for async worker functions.
 pub type WorkerFn =
     Arc<dyn Fn(Task) -> Pin<Box<dyn Future<Output = Result<WorkerOutput>> + Send>> + Send + Sync>;
 
-/// Simple function-based worker implementation
+/// Simple function-based worker implementation.
 pub struct FnWorker {
     task_name: String,
     execute_fn: WorkerFn,
@@ -179,7 +184,7 @@ pub struct FnWorker {
 }
 
 impl FnWorker {
-    /// Create a new function-based worker
+    /// Create a new function-based worker.
     pub fn new<F, Fut>(task_name: impl Into<String>, f: F) -> Self
     where
         F: Fn(Task) -> Fut + Send + Sync + 'static,
@@ -188,9 +193,10 @@ impl FnWorker {
         let task_name = task_name.into();
         let identity = format!(
             "{}-{}",
-            hostname::get()
-                .map(|h| h.to_string_lossy().into_owned())
-                .unwrap_or_else(|_| "unknown".to_string()),
+            hostname::get().map_or_else(
+                |_| "unknown".to_owned(),
+                |h| h.to_string_lossy().into_owned()
+            ),
             std::process::id()
         );
 
@@ -206,50 +212,64 @@ impl FnWorker {
         }
     }
 
-    /// Set the worker domain
+    /// Set the worker domain.
+    #[must_use]
     pub fn with_domain(mut self, domain: impl Into<String>) -> Self {
         self.domain = Some(domain.into());
         self
     }
 
-    /// Set the poll interval
+    /// Set the poll interval.
+    #[must_use]
     pub fn with_poll_interval_millis(mut self, millis: u64) -> Self {
         self.poll_interval_millis = millis;
         self
     }
 
-    /// Set the thread count
+    /// Set the thread count.
+    #[must_use]
     pub fn with_thread_count(mut self, count: usize) -> Self {
         self.thread_count = count;
         self
     }
 
-    /// Set the worker identity
+    /// Set the worker identity.
+    #[must_use]
     pub fn with_identity(mut self, identity: impl Into<String>) -> Self {
         self.identity = identity.into();
         self
     }
 
-    /// Set the input JSON Schema
+    /// Set the input JSON Schema.
+    #[must_use]
     pub fn with_input_schema(mut self, schema: serde_json::Value) -> Self {
         self.input_schema = Some(schema);
         self
     }
 
-    /// Set the output JSON Schema
+    /// Set the output JSON Schema.
+    #[must_use]
     pub fn with_output_schema(mut self, schema: serde_json::Value) -> Self {
         self.output_schema = Some(schema);
         self
     }
 
-    /// Set input schema from a JsonSchema type
-    pub fn with_input_schema_from<T: schemars::JsonSchema>(mut self, strict: bool) -> Self {
+    /// Set input schema from a `JsonSchema` type.
+    #[must_use]
+    pub fn with_input_schema_from<T>(mut self, strict: bool) -> Self
+    where
+        T: schemars::JsonSchema,
+    {
         self.input_schema = Some(crate::schema::generate_schema::<T>(strict));
         self
     }
 
-    /// Set output schema from a JsonSchema type
-    pub fn with_output_schema_from<T: schemars::JsonSchema>(mut self, strict: bool) -> Self {
+    /// Set output schema from a `JsonSchema` type.
+    #[must_use]
+    pub fn with_output_schema_from<T>(mut self, strict: bool) -> Self
+    where
+        T: schemars::JsonSchema,
+    {
         self.output_schema = Some(crate::schema::generate_schema::<T>(strict));
         self
     }
@@ -290,12 +310,12 @@ impl Worker for FnWorker {
     }
 }
 
-/// Type alias for async worker functions that use `Arc<Task>` (zero-copy)
+/// Type alias for async worker functions that use `Arc<Task>` (zero-copy).
 pub type WorkerFnArc = Arc<
     dyn Fn(Arc<Task>) -> Pin<Box<dyn Future<Output = Result<WorkerOutput>> + Send>> + Send + Sync,
 >;
 
-/// High-performance function-based worker that uses `Arc<Task>` to avoid cloning
+/// High-performance function-based worker that uses `Arc<Task>` to avoid cloning.
 ///
 /// Use this instead of `FnWorker` for high-throughput scenarios where task
 /// cloning overhead is significant.
@@ -319,7 +339,7 @@ pub struct FnWorkerArc {
 }
 
 impl FnWorkerArc {
-    /// Create a new high-performance function-based worker
+    /// Create a new high-performance function-based worker.
     pub fn new<F, Fut>(task_name: impl Into<String>, f: F) -> Self
     where
         F: Fn(Arc<Task>) -> Fut + Send + Sync + 'static,
@@ -328,9 +348,10 @@ impl FnWorkerArc {
         let task_name = task_name.into();
         let identity = format!(
             "{}-{}",
-            hostname::get()
-                .map(|h| h.to_string_lossy().into_owned())
-                .unwrap_or_else(|_| "unknown".to_string()),
+            hostname::get().map_or_else(
+                |_| "unknown".to_owned(),
+                |h| h.to_string_lossy().into_owned()
+            ),
             std::process::id()
         );
 
@@ -346,55 +367,73 @@ impl FnWorkerArc {
         }
     }
 
-    /// Set the worker domain
+    /// Set the worker domain.
+    #[must_use]
     pub fn with_domain(mut self, domain: impl Into<String>) -> Self {
         self.domain = Some(domain.into());
         self
     }
 
-    /// Set the poll interval
+    /// Set the poll interval.
+    #[must_use]
     pub fn with_poll_interval_millis(mut self, millis: u64) -> Self {
         self.poll_interval_millis = millis;
         self
     }
 
-    /// Set the thread count
+    /// Set the thread count.
+    #[must_use]
     pub fn with_thread_count(mut self, count: usize) -> Self {
         self.thread_count = count;
         self
     }
 
-    /// Set the worker identity
+    /// Set the worker identity.
+    #[must_use]
     pub fn with_identity(mut self, identity: impl Into<String>) -> Self {
         self.identity = identity.into();
         self
     }
 
-    /// Set the input JSON Schema
+    /// Set the input JSON Schema.
+    #[must_use]
     pub fn with_input_schema(mut self, schema: serde_json::Value) -> Self {
         self.input_schema = Some(schema);
         self
     }
 
-    /// Set the output JSON Schema
+    /// Set the output JSON Schema.
+    #[must_use]
     pub fn with_output_schema(mut self, schema: serde_json::Value) -> Self {
         self.output_schema = Some(schema);
         self
     }
 
-    /// Set input schema from a JsonSchema type
-    pub fn with_input_schema_from<T: schemars::JsonSchema>(mut self, strict: bool) -> Self {
+    /// Set input schema from a `JsonSchema` type.
+    #[must_use]
+    pub fn with_input_schema_from<T>(mut self, strict: bool) -> Self
+    where
+        T: schemars::JsonSchema,
+    {
         self.input_schema = Some(crate::schema::generate_schema::<T>(strict));
         self
     }
 
-    /// Set output schema from a JsonSchema type
-    pub fn with_output_schema_from<T: schemars::JsonSchema>(mut self, strict: bool) -> Self {
+    /// Set output schema from a `JsonSchema` type.
+    #[must_use]
+    pub fn with_output_schema_from<T>(mut self, strict: bool) -> Self
+    where
+        T: schemars::JsonSchema,
+    {
         self.output_schema = Some(crate::schema::generate_schema::<T>(strict));
         self
     }
 
-    /// Execute with `Arc<Task>` directly (internal use)
+    /// Execute with `Arc<Task>` directly (internal use).
+    ///
+    /// # Errors
+    ///
+    /// Propagates whatever error the worker's `execute_fn` returns.
     pub async fn execute_arc(&self, task: Arc<Task>) -> Result<WorkerOutput> {
         (self.execute_fn)(task).await
     }
@@ -436,7 +475,7 @@ impl Worker for FnWorkerArc {
     }
 }
 
-/// Macro to simplify worker creation from closures
+/// Macro to simplify worker creation from closures.
 ///
 /// # Example
 /// ```rust,ignore
@@ -460,10 +499,9 @@ mod tests {
         let worker = FnWorker::new("test_task", |task: Task| async move {
             let name = task
                 .get_input_string("name")
-                .unwrap_or_else(|| "World".to_string());
+                .unwrap_or_else(|| "World".to_owned());
             Ok(WorkerOutput::completed_with_result(format!(
-                "Hello, {}!",
-                name
+                "Hello, {name}!"
             )))
         })
         .with_thread_count(5)
@@ -475,7 +513,7 @@ mod tests {
 
         let mut task = Task::default();
         task.input_data
-            .insert("name".to_string(), serde_json::json!("Rust"));
+            .insert("name".to_owned(), serde_json::json!("Rust"));
 
         let result = worker.execute(&task).await.unwrap();
         match result {
@@ -489,8 +527,8 @@ mod tests {
     #[test]
     fn test_worker_output_conversion() {
         let task = Task {
-            task_id: "task-1".to_string(),
-            workflow_instance_id: "wf-1".to_string(),
+            task_id: "task-1".to_owned(),
+            workflow_instance_id: "wf-1".to_owned(),
             ..Default::default()
         };
 
@@ -499,38 +537,38 @@ mod tests {
 
         assert_eq!(result.task_id, "task-1");
         assert_eq!(result.status, TaskResultStatus::Completed);
-        assert_eq!(result.worker_id, Some("worker-1".to_string()));
+        assert_eq!(result.worker_id, Some("worker-1".to_owned()));
     }
 
     #[test]
     fn test_worker_output_failed_is_retryable_status() {
         let task = Task::default();
         let result =
-            WorkerOutput::Failed("transient error".to_string()).into_task_result(&task, "worker-1");
+            WorkerOutput::Failed("transient error".to_owned()).into_task_result(&task, "worker-1");
         assert_eq!(result.status, TaskResultStatus::Failed);
         assert_eq!(
             result.reason_for_incompletion,
-            Some("transient error".to_string())
+            Some("transient error".to_owned())
         );
     }
 
     #[test]
     fn test_worker_output_failed_with_terminal_error_conversion() {
         let task = Task {
-            task_id: "task-1".to_string(),
-            workflow_instance_id: "wf-1".to_string(),
+            task_id: "task-1".to_owned(),
+            workflow_instance_id: "wf-1".to_owned(),
             ..Default::default()
         };
 
-        let output = WorkerOutput::FailedWithTerminalError("not retryable".to_string());
+        let output = WorkerOutput::FailedWithTerminalError("not retryable".to_owned());
         let result = output.into_task_result(&task, "worker-1");
 
         assert_eq!(result.task_id, "task-1");
         assert_eq!(result.status, TaskResultStatus::FailedWithTerminalError);
         assert_eq!(
             result.reason_for_incompletion,
-            Some("not retryable".to_string())
+            Some("not retryable".to_owned())
         );
-        assert_eq!(result.worker_id, Some("worker-1".to_string()));
+        assert_eq!(result.worker_id, Some("worker-1".to_owned()));
     }
 }

@@ -1,10 +1,5 @@
-//! Reproduces `llm-recordings/09_human_in_the_loop` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/09_human_in_the_loop.py`, minus
-//! its interactive SSE-streaming console loop — this just polls `AgentHandle::status` directly
-//! and auto-approves the pending `transfer_funds` call the moment `is_waiting` is seen, which
-//! reaches the same three recorded LLM turns without needing real stdin/terminal interaction.
-//!
-//! `cargo run --features agents --example sdk_playback_09_human_in_the_loop`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;

@@ -1,13 +1,5 @@
-//! Reproduces `llm-recordings/04_http_and_mcp_tools` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/04_http_and_mcp_tools.py`. Needs a
-//! real `mcp-testkit` instance running (`pip install mcp-testkit && mcp-testkit --transport
-//! http`, default port 3001, no `--auth`) — both `reverse_string` (server-side HTTP task) and
-//! the bundled MCP tool catalog are executed for real by the Conductor server against it, not
-//! mocked. Running without `--auth` means the credential-templated `Authorization` header
-//! resolves to a literal, unresolved `${...}` string at request time; mcp-testkit ignores it
-//! either way when it wasn't started with `--auth`, so the recorded results still match.
-//!
-//! `cargo run --features agents --example sdk_playback_04_http_and_mcp_tools`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -55,10 +47,10 @@ async fn main() -> Result<()> {
         "http://localhost:3001/api/string/reverse",
         "POST",
         HashMap::from([(
-            "Authorization".to_string(),
-            "Bearer ${HTTP_TEST_API_KEY}".to_string(),
+            "Authorization".to_owned(),
+            "Bearer ${HTTP_TEST_API_KEY}".to_owned(),
         )]),
-        vec!["HTTP_TEST_API_KEY".to_string()],
+        vec!["HTTP_TEST_API_KEY".to_owned()],
     )?;
     reverse_api.input_schema = json!({
         "type": "object",
@@ -71,14 +63,14 @@ async fn main() -> Result<()> {
     let mcp_test_tools = ToolDef::mcp(
         "http://localhost:3001/mcp",
         "mcp_test_tools",
-        "Deterministic test tools via MCP — math, string, collection, encoding, hash, datetime, validation, and conversion operations.",
+        "Deterministic test tools via MCP \u{2014} math, string, collection, encoding, hash, datetime, validation, and conversion operations.",
         HashMap::from([(
-            "Authorization".to_string(),
-            "Bearer ${MCP_TEST_API_KEY}".to_string(),
+            "Authorization".to_owned(),
+            "Bearer ${MCP_TEST_API_KEY}".to_owned(),
         )]),
         None,
         64,
-        vec!["MCP_TEST_API_KEY".to_string()],
+        vec!["MCP_TEST_API_KEY".to_owned()],
     )?;
 
     let agent = AgentDef::new("http_tools_demo")?

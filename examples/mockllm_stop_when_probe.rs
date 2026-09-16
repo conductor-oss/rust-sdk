@@ -1,5 +1,5 @@
-//! One-off probe: exercises the new stop_when wire field + worker registration against a real
-//! local Conductor server. Not part of the crate's example set.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime};
 use conductor::configuration::Configuration;

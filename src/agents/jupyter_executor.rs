@@ -9,7 +9,7 @@
 //!
 //! There is no `jupyter_client`/`ipykernel` installation available in this crate's development
 //! environment, so — unlike every other module ported this session — the actual kernel
-//! round-trip here (spawn a kernel process, connect over ZeroMQ, execute code, read back
+//! round-trip here (spawn a kernel process, connect over `ZeroMQ`, execute code, read back
 //! results) has **not** been exercised against a real kernel. This was implemented directly
 //! from the public Jupyter wire protocol specification and python-sdk's `JupyterCodeExecutor`/
 //! `jupyter_client` as reference, and the parts that don't need a live kernel — kernelspec
@@ -19,9 +19,9 @@
 //!
 //! # Wire protocol, briefly
 //!
-//! A Jupyter kernel exposes 5 ZeroMQ sockets (shell/iopub/stdin/control/heartbeat); this client
+//! A Jupyter kernel exposes 5 `ZeroMQ` sockets (shell/iopub/stdin/control/heartbeat); this client
 //! only uses shell (DEALER, for `execute_request`) and iopub (SUB, for streamed output). Every
-//! message is a multipart ZeroMQ message: `[b"<IDS|MSG>", hmac_signature, header_json,
+//! message is a multipart `ZeroMQ` message: `[b"<IDS|MSG>", hmac_signature, header_json,
 //! parent_header_json, metadata_json, content_json]`, where the signature is an HMAC-SHA256
 //! (or empty, if the connection file's `key` is empty) over the four JSON frames using that key.
 
@@ -31,14 +31,14 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use hmac::{Hmac, KeyInit, Mac};
+use hmac::{Hmac, KeyInit as _, Mac as _};
 use serde_json::{json, Value};
 use sha2::Sha256;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use uuid::Uuid;
-use zeromq::{DealerSocket, Socket, SocketRecv, SocketSend, SubSocket, ZmqMessage};
+use zeromq::{DealerSocket, Socket as _, SocketRecv as _, SocketSend as _, SubSocket, ZmqMessage};
 
 use crate::error::{ConductorError, Result};
 
@@ -50,7 +50,11 @@ const DELIMITER: &[u8] = b"<IDS|MSG>";
 const PROTOCOL_VERSION: &str = "5.3";
 
 fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    use std::fmt::Write as _;
+    bytes.iter().fold(String::new(), |mut out, b| {
+        let _ = write!(out, "{b:02x}");
+        out
+    })
 }
 
 /// HMAC-SHA256 signature over the four JSON frames, matching the Jupyter wire protocol's
@@ -162,7 +166,7 @@ impl ConnectionInfo {
             stdin_port: free_port()?,
             control_port: free_port()?,
             hb_port: free_port()?,
-            ip: "127.0.0.1".to_string(),
+            ip: "127.0.0.1".to_owned(),
             key: Uuid::new_v4().to_string(),
         })
     }
@@ -253,6 +257,7 @@ fn decode_message(raw: ZmqMessage) -> Option<DecodedMessage> {
     if rest.len() < 5 {
         return None;
     }
+    assert!(rest.len() > 4, "checked above");
     Some(DecodedMessage {
         header: serde_json::from_slice(&rest[1]).ok()?,
         parent_header: serde_json::from_slice(&rest[2]).ok()?,
@@ -272,7 +277,7 @@ impl Drop for KernelProcess {
     }
 }
 
-async fn spawn_kernel(
+fn spawn_kernel(
     spec: &KernelSpec,
     connection: &ConnectionInfo,
     kernel_name: &str,
@@ -463,11 +468,13 @@ impl JupyterCodeExecutor {
         }
     }
 
+    #[must_use]
     pub fn with_timeout_seconds(mut self, timeout_seconds: u64) -> Self {
         self.timeout_seconds = timeout_seconds;
         self
     }
 
+    #[must_use]
     pub fn with_startup_code(mut self, startup_code: impl Into<String>) -> Self {
         self.startup_code = Some(startup_code.into());
         self
@@ -479,7 +486,7 @@ impl JupyterCodeExecutor {
         }
         let spec = find_kernelspec(&self.kernel_name).map_err(ConductorError::agent)?;
         let connection = ConnectionInfo::generate()?;
-        let process = spawn_kernel(&spec, &connection, &self.kernel_name).await?;
+        let process = spawn_kernel(&spec, &connection, &self.kernel_name)?;
 
         // A fixed grace period for the kernel to bind its sockets before we connect — this
         // crate does not implement the `kernel_info_request`/reply readiness handshake
@@ -552,13 +559,13 @@ impl CodeExecutor for JupyterCodeExecutor {
 
         ExecutionResult {
             output,
-            exit_code: if error.is_empty() { 0 } else { 1 },
+            exit_code: i32::from(!error.is_empty()),
             error,
             timed_out: false,
         }
     }
 
-    fn language(&self) -> &str {
+    fn language(&self) -> &'static str {
         "python"
     }
 
@@ -604,8 +611,8 @@ mod tests {
             stdin_port: 3,
             control_port: 4,
             hb_port: 5,
-            ip: "127.0.0.1".to_string(),
-            key: "secret".to_string(),
+            ip: "127.0.0.1".to_owned(),
+            key: "secret".to_owned(),
         };
         let json = info.to_json("python3");
         assert_eq!(json["shell_port"], 1);
@@ -624,7 +631,7 @@ mod tests {
             stdin_port: 0,
             control_port: 0,
             hb_port: 0,
-            ip: "127.0.0.1".to_string(),
+            ip: "127.0.0.1".to_owned(),
             key: String::new(),
         };
         assert_eq!(info.endpoint(info.shell_port), "tcp://127.0.0.1:12345");
@@ -657,7 +664,7 @@ mod tests {
         )
         .unwrap();
 
-        let spec = find_kernelspec_in(&[dir.clone()], "python3").unwrap();
+        let spec = find_kernelspec_in(std::slice::from_ref(&dir), "python3").unwrap();
         assert_eq!(
             spec.argv,
             vec![
@@ -752,7 +759,7 @@ mod tests {
             .with_startup_code("import sys");
         assert_eq!(executor.kernel_name, "python3");
         assert_eq!(executor.timeout_seconds, 45);
-        assert_eq!(executor.startup_code, Some("import sys".to_string()));
+        assert_eq!(executor.startup_code, Some("import sys".to_owned()));
         assert_eq!(CodeExecutor::language(&executor), "python");
         assert_eq!(CodeExecutor::timeout_seconds(&executor), 45);
     }

@@ -5,29 +5,29 @@ use crate::error::Result;
 use crate::http::{ApiClient, ApiPath};
 use serde::{Deserialize, Serialize};
 
-/// Client for event operations (queue configurations)
+/// Client for event operations (queue configurations).
 #[derive(Clone)]
 pub struct EventClient {
     api: ApiClient,
 }
 
-/// Queue configuration for event handling
+/// Queue configuration for event handling.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueConfiguration {
-    /// Queue name (e.g., topic name for Kafka)
+    /// Queue name (e.g., topic name for Kafka).
     pub queue_name: String,
 
-    /// Queue type (e.g., "kafka", "sqs", "amqp")
+    /// Queue type (e.g., "kafka", "sqs", "amqp").
     pub queue_type: String,
 
-    /// Queue-specific configuration
+    /// Queue-specific configuration.
     #[serde(default)]
     pub configuration: serde_json::Value,
 }
 
 impl QueueConfiguration {
-    /// Create a new queue configuration
+    /// Create a new queue configuration.
     pub fn new(queue_type: impl Into<String>, queue_name: impl Into<String>) -> Self {
         Self {
             queue_name: queue_name.into(),
@@ -36,22 +36,23 @@ impl QueueConfiguration {
         }
     }
 
-    /// Create a Kafka queue configuration
+    /// Create a Kafka queue configuration.
     pub fn kafka(topic: impl Into<String>) -> Self {
         Self::new("kafka", topic)
     }
 
-    /// Create an SQS queue configuration
+    /// Create an SQS queue configuration.
     pub fn sqs(queue_url: impl Into<String>) -> Self {
         Self::new("sqs", queue_url)
     }
 
-    /// Create an AMQP queue configuration
+    /// Create an AMQP queue configuration.
     pub fn amqp(queue_name: impl Into<String>) -> Self {
         Self::new("amqp_queue", queue_name)
     }
 
-    /// Set the configuration
+    /// Set the configuration.
+    #[must_use]
     pub fn with_configuration(mut self, config: serde_json::Value) -> Self {
         self.configuration = config;
         self
@@ -59,12 +60,17 @@ impl QueueConfiguration {
 }
 
 impl EventClient {
-    /// Create a new event client
+    /// Create a new event client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self { api }
     }
 
-    /// Delete a queue configuration
+    /// Delete a queue configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_queue_configuration(
         &self,
         queue_config: &QueueConfiguration,
@@ -81,7 +87,11 @@ impl EventClient {
             .await
     }
 
-    /// Get a Kafka queue configuration by topic
+    /// Get a Kafka queue configuration by topic.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_kafka_queue_configuration(
         &self,
         queue_topic: &str,
@@ -89,13 +99,17 @@ impl EventClient {
         self.get_queue_configuration("kafka", queue_topic).await
     }
 
-    /// Get a queue configuration by type and name
+    /// Get a queue configuration by type and name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_queue_configuration(
         &self,
         queue_type: &str,
         queue_name: &str,
     ) -> Result<QueueConfiguration> {
-        let path = format!("/event/queue/config/{}/{}", queue_type, queue_name);
+        let path = format!("/event/queue/config/{queue_type}/{queue_name}");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -104,7 +118,11 @@ impl EventClient {
             .await
     }
 
-    /// Create or update a queue configuration
+    /// Create or update a queue configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn put_queue_configuration(&self, queue_config: &QueueConfiguration) -> Result<()> {
         let path = format!(
             "/event/queue/config/{}/{}",
@@ -118,12 +136,20 @@ impl EventClient {
             .await
     }
 
-    /// Get all queue configurations
+    /// Get all queue configurations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_all_queue_configurations(&self) -> Result<Vec<QueueConfiguration>> {
         self.api.get("/event/queue/config").await
     }
 
-    /// Get event handlers for a specific event
+    /// Get event handlers for a specific event.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_event_handlers(
         &self,
         event: &str,
@@ -139,24 +165,40 @@ impl EventClient {
             .await
     }
 
-    /// Get all event handlers
+    /// Get all event handlers.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn get_all_event_handlers(&self) -> Result<Vec<serde_json::Value>> {
         self.api.get("/event").await
     }
 
-    /// Register an event handler
+    /// Register an event handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn register_event_handler(&self, event_handler: &serde_json::Value) -> Result<()> {
         self.api.post_no_response("/event", event_handler).await
     }
 
-    /// Update an event handler
+    /// Update an event handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn update_event_handler(&self, event_handler: &serde_json::Value) -> Result<()> {
         self.api.put_no_response("/event", event_handler).await
     }
 
-    /// Remove an event handler
+    /// Remove an event handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn remove_event_handler(&self, name: &str) -> Result<()> {
-        let path = format!("/event/{}", name);
+        let path = format!("/event/{name}");
         self.api
             .delete_no_content(ApiPath::templated(&path, "/event/{event}"))
             .await

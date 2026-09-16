@@ -1,7 +1,5 @@
-//! Reproduces `llm-recordings/07_parallel_agents` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/07_parallel_agents.py`.
-//!
-//! `cargo run --features agents --example sdk_playback_07_parallel_agents`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime, Strategy};
 use conductor::configuration::Configuration;

@@ -28,10 +28,7 @@ async fn test_scheduler_save_and_get() {
         .with_task(conductor::models::WorkflowTask::wait("wait_ref"));
 
     if let Err(e) = metadata.register_workflow_def(&workflow_def).await {
-        eprintln!(
-            "Warning: Could not create workflow for schedule test: {:?}",
-            e
-        );
+        eprintln!("Warning: Could not create workflow for schedule test: {e:?}");
         return;
     }
 
@@ -41,23 +38,20 @@ async fn test_scheduler_save_and_get() {
         .paused(true); // Create paused so it doesn't run
 
     match scheduler.save_schedule(&schedule_request).await {
-        Ok(_) => {
+        Ok(()) => {
             // Get Schedule
             match scheduler.get_schedule(&schedule_name).await {
                 Ok(schedule) => {
                     assert_eq!(schedule.name, schedule_name);
                 }
-                Err(e) => eprintln!("Warning: get_schedule failed: {:?}", e),
+                Err(e) => eprintln!("Warning: get_schedule failed: {e:?}"),
             }
 
             // Cleanup
             scheduler.delete_schedule(&schedule_name).await.ok();
         }
         Err(e) => {
-            eprintln!(
-                "Warning: save_schedule failed (may require specific permissions): {:?}",
-                e
-            );
+            eprintln!("Warning: save_schedule failed (may require specific permissions): {e:?}");
         }
     }
 
@@ -80,7 +74,7 @@ async fn test_scheduler_pause_resume() {
         .with_task(conductor::models::WorkflowTask::wait("wait_ref"));
 
     if let Err(e) = metadata.register_workflow_def(&workflow_def).await {
-        eprintln!("Warning: Could not create workflow: {:?}", e);
+        eprintln!("Warning: Could not create workflow: {e:?}");
         return;
     }
 
@@ -90,22 +84,22 @@ async fn test_scheduler_pause_resume() {
         .paused(false);
 
     match scheduler.save_schedule(&schedule_request).await {
-        Ok(_) => {
+        Ok(()) => {
             // Pause schedule
             if let Err(e) = scheduler.pause_schedule(&schedule_name).await {
-                eprintln!("Warning: pause_schedule failed: {:?}", e);
+                eprintln!("Warning: pause_schedule failed: {e:?}");
             }
 
             // Resume schedule
             if let Err(e) = scheduler.resume_schedule(&schedule_name).await {
-                eprintln!("Warning: resume_schedule failed: {:?}", e);
+                eprintln!("Warning: resume_schedule failed: {e:?}");
             }
 
             // Cleanup
             scheduler.delete_schedule(&schedule_name).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: save_schedule failed: {:?}", e);
+            eprintln!("Warning: save_schedule failed: {e:?}");
         }
     }
 
@@ -127,7 +121,7 @@ async fn test_scheduler_search_executions() {
             assert!(results.total_hits >= 0);
         }
         Err(e) => {
-            eprintln!("Warning: search_schedule_executions failed: {:?}", e);
+            eprintln!("Warning: search_schedule_executions failed: {e:?}");
         }
     }
 }
@@ -148,10 +142,7 @@ async fn test_scheduler_get_next_execution_times() {
             assert!(times.len() <= 5);
         }
         Err(e) => {
-            eprintln!(
-                "Warning: get_next_few_schedule_execution_times failed: {:?}",
-                e
-            );
+            eprintln!("Warning: get_next_few_schedule_execution_times failed: {e:?}");
         }
     }
 }
@@ -171,23 +162,20 @@ async fn test_secret_put_and_get() {
 
     // Put secret
     match secret.put_secret(&secret_key, secret_value).await {
-        Ok(_) => {
+        Ok(()) => {
             // Get secret
             match secret.get_secret(&secret_key).await {
                 Ok(value) => {
                     assert_eq!(value, secret_value);
                 }
-                Err(e) => eprintln!("Warning: get_secret failed: {:?}", e),
+                Err(e) => eprintln!("Warning: get_secret failed: {e:?}"),
             }
 
             // Cleanup
             secret.delete_secret(&secret_key).await.ok();
         }
         Err(e) => {
-            eprintln!(
-                "Warning: put_secret failed (may require specific permissions): {:?}",
-                e
-            );
+            eprintln!("Warning: put_secret failed (may require specific permissions): {e:?}");
         }
     }
 }
@@ -205,7 +193,7 @@ async fn test_secret_list_all() {
             println!("Found {} secrets", secrets.len());
         }
         Err(e) => {
-            eprintln!("Warning: list_all_secret_names failed: {:?}", e);
+            eprintln!("Warning: list_all_secret_names failed: {e:?}");
         }
     }
 }
@@ -220,13 +208,13 @@ async fn test_secret_exists() {
 
     // Put secret
     match secret.put_secret(&secret_key, "value").await {
-        Ok(_) => {
+        Ok(()) => {
             // Check exists
             match secret.secret_exists(&secret_key).await {
                 Ok(exists) => {
                     assert!(exists, "Secret should exist after creation");
                 }
-                Err(e) => eprintln!("Warning: secret_exists failed: {:?}", e),
+                Err(e) => eprintln!("Warning: secret_exists failed: {e:?}"),
             }
 
             // Delete
@@ -240,11 +228,11 @@ async fn test_secret_exists() {
                 Ok(exists) => {
                     assert!(!exists, "Secret should not exist after deletion");
                 }
-                Err(e) => eprintln!("Warning: secret_exists after delete failed: {:?}", e),
+                Err(e) => eprintln!("Warning: secret_exists after delete failed: {e:?}"),
             }
         }
         Err(e) => {
-            eprintln!("Warning: put_secret failed: {:?}", e);
+            eprintln!("Warning: put_secret failed: {e:?}");
         }
     }
 }
@@ -270,23 +258,20 @@ async fn test_prompt_save_and_get() {
         )
         .await
     {
-        Ok(_) => {
+        Ok(()) => {
             // Get prompt
             match prompt.get_prompt(&prompt_name).await {
                 Ok(template) => {
                     assert_eq!(template.name, prompt_name);
                 }
-                Err(e) => eprintln!("Warning: get_prompt failed: {:?}", e),
+                Err(e) => eprintln!("Warning: get_prompt failed: {e:?}"),
             }
 
             // Cleanup
             prompt.delete_prompt(&prompt_name).await.ok();
         }
         Err(e) => {
-            eprintln!(
-                "Warning: save_prompt failed (may require AI module): {:?}",
-                e
-            );
+            eprintln!("Warning: save_prompt failed (may require AI module): {e:?}");
         }
     }
 }
@@ -303,7 +288,7 @@ async fn test_prompt_get_prompts() {
             println!("Found {} prompts", prompts.len());
         }
         Err(e) => {
-            eprintln!("Warning: get_prompts failed: {:?}", e);
+            eprintln!("Warning: get_prompts failed: {e:?}");
         }
     }
 }
@@ -321,11 +306,11 @@ async fn test_prompt_test() {
         .save_prompt(&prompt_name, "Test prompt", "Say hello to ${name}.")
         .await
     {
-        Ok(_) => {
+        Ok(()) => {
             // Test the prompt (requires AI integration to be configured)
             let mut vars: std::collections::HashMap<String, serde_json::Value> =
                 std::collections::HashMap::new();
-            vars.insert("name".to_string(), serde_json::json!("World"));
+            vars.insert("name".to_owned(), serde_json::json!("World"));
 
             // Note: test_prompt requires a valid AI integration to be configured
             // Also requires a valid LLM model name and integration
@@ -336,7 +321,7 @@ async fn test_prompt_test() {
             prompt.delete_prompt(&prompt_name).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: save_prompt failed: {:?}", e);
+            eprintln!("Warning: save_prompt failed: {e:?}");
         }
     }
 }
@@ -357,7 +342,7 @@ async fn test_get_all_event_handlers() {
             println!("Found {} event handlers", handlers.len());
         }
         Err(e) => {
-            eprintln!("Warning: get_all_event_handlers failed: {:?}", e);
+            eprintln!("Warning: get_all_event_handlers failed: {e:?}");
         }
     }
 }
@@ -377,7 +362,7 @@ async fn test_event_handlers() {
             println!("Found {} handlers for event", handlers.len());
         }
         Err(e) => {
-            eprintln!("Warning: get_event_handlers failed: {:?}", e);
+            eprintln!("Warning: get_event_handlers failed: {e:?}");
         }
     }
 }
@@ -394,7 +379,7 @@ async fn test_event_queue_configuration() {
             println!("Found {} queue configurations", configs.len());
         }
         Err(e) => {
-            eprintln!("Warning: get_all_queue_configurations failed (may require queue configuration): {:?}", e);
+            eprintln!("Warning: get_all_queue_configurations failed (may require queue configuration): {e:?}");
         }
     }
 }

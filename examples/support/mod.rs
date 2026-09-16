@@ -1,8 +1,5 @@
-//! Shared helper for the `sdk_playback_*` examples (not a standalone example itself — included
-//! via `#[path = "playback_common.rs"] mod playback_common;`). These examples replay
-//! `llm-recordings` (from conductor-oss/conductor PR #1614, "Share SDK playback recordings")
-//! through `mock/mockLLM` against a locally running server with
-//! `conductor.ai.enable-llm-mocks=true`.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentResult, AgentRuntime};
 use conductor::configuration::Configuration;
@@ -16,7 +13,12 @@ use serde_json::Value;
 /// then abort the spawned poller. Confirmed against python-sdk's `runtime.py::run`, which calls
 /// `self._prepare_workers(...)` internally right after starting — a real, currently-undocumented
 /// parity gap in this crate's `AgentRuntime::run`, not something specific to these examples.
+// This shared file is included by every `sdk_playback_*` example; the function is actually
+// called by most of them but not by `sdk_playback_09_human_in_the_loop`/`_09c_hitl_streaming`
+// (no client-side tools there), so `#[expect(dead_code)]` would be "unfulfilled" in the
+// examples that do call it. `allow` is the correct choice here, not a stale suppression.
 #[allow(dead_code)]
+#[allow(clippy::allow_attributes)]
 pub async fn run_with_local_tools(
     config: &Configuration,
     agent: &AgentDef,

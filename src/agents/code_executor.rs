@@ -9,10 +9,10 @@
 //! - [`ServerlessCodeExecutor`] — POSTs code to a remote execution HTTP endpoint.
 //!
 //! **Not ported: `JupyterCodeExecutor`.** Python's version talks to a real Jupyter kernel over
-//! `jupyter_client`'s ZeroMQ wire protocol, maintaining kernel state (variables/imports) across
+//! `jupyter_client`'s `ZeroMQ` wire protocol, maintaining kernel state (variables/imports) across
 //! calls — itself an optional, `jupyter_client`-gated capability in python (raises `ImportError`
 //! with an install hint if that package is missing). Reproducing this would mean implementing
-//! the Jupyter messaging protocol over ZeroMQ from scratch; no existing crate in this workspace
+//! the Jupyter messaging protocol over `ZeroMQ` from scratch; no existing crate in this workspace
 //! provides it, and there is no partial version of "stateful kernel execution" worth shipping.
 //! Deferred entirely rather than half-modeled, matching this crate's practice elsewhere (e.g.
 //! MCP dynamic discovery, router/handoff/swarm-transfer worker registration).
@@ -39,6 +39,7 @@ pub struct ExecutionResult {
 impl ExecutionResult {
     /// `true` if the execution succeeded (exit code 0, no timeout) — matches python's
     /// `ExecutionResult.success` property.
+    #[must_use]
     pub fn success(&self) -> bool {
         self.exit_code == 0 && !self.timed_out
     }
@@ -99,11 +100,13 @@ impl LocalCodeExecutor {
         }
     }
 
+    #[must_use]
     pub fn with_timeout_seconds(mut self, timeout_seconds: u64) -> Self {
         self.timeout_seconds = timeout_seconds;
         self
     }
 
+    #[must_use]
     pub fn with_working_dir(mut self, working_dir: impl Into<String>) -> Self {
         self.working_dir = Some(working_dir.into());
         self
@@ -115,7 +118,7 @@ impl CodeExecutor for LocalCodeExecutor {
     async fn execute(&self, code: &str) -> ExecutionResult {
         if code.is_empty() {
             return ExecutionResult {
-                output: "No code provided. Nothing to execute.".to_string(),
+                output: "No code provided. Nothing to execute.".to_owned(),
                 ..Default::default()
             };
         }
@@ -127,8 +130,7 @@ impl CodeExecutor for LocalCodeExecutor {
             };
         };
 
-        let mut tmp_path = std::env::temp_dir();
-        tmp_path.push(format!(
+        let tmp_path = std::env::temp_dir().join(format!(
             "conductor_code_exec_{}{}",
             Uuid::new_v4().simple(),
             local_file_extension(&self.language)
@@ -201,8 +203,8 @@ pub struct DockerCodeExecutor {
 impl Default for DockerCodeExecutor {
     fn default() -> Self {
         Self {
-            image: "python:3.12-slim".to_string(),
-            language: "python".to_string(),
+            image: "python:3.12-slim".to_owned(),
+            language: "python".to_owned(),
             timeout_seconds: 30,
             network_enabled: false,
             memory_limit: None,
@@ -212,35 +214,42 @@ impl Default for DockerCodeExecutor {
 }
 
 impl DockerCodeExecutor {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn with_image(mut self, image: impl Into<String>) -> Self {
         self.image = image.into();
         self
     }
 
+    #[must_use]
     pub fn with_language(mut self, language: impl Into<String>) -> Self {
         self.language = language.into();
         self
     }
 
+    #[must_use]
     pub fn with_timeout_seconds(mut self, timeout_seconds: u64) -> Self {
         self.timeout_seconds = timeout_seconds;
         self
     }
 
+    #[must_use]
     pub fn with_network_enabled(mut self, network_enabled: bool) -> Self {
         self.network_enabled = network_enabled;
         self
     }
 
+    #[must_use]
     pub fn with_memory_limit(mut self, memory_limit: impl Into<String>) -> Self {
         self.memory_limit = Some(memory_limit.into());
         self
     }
 
+    #[must_use]
     pub fn with_volume(
         mut self,
         host_path: impl Into<String>,
@@ -284,7 +293,7 @@ impl CodeExecutor for DockerCodeExecutor {
                 timed_out: false,
             },
             Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => ExecutionResult {
-                error: "Docker not found. Install Docker to use DockerCodeExecutor.".to_string(),
+                error: "Docker not found. Install Docker to use DockerCodeExecutor.".to_owned(),
                 exit_code: 127,
                 ..Default::default()
             },
@@ -333,27 +342,31 @@ impl ServerlessCodeExecutor {
         Self {
             endpoint: endpoint.into(),
             api_key: None,
-            language: "python".to_string(),
+            language: "python".to_owned(),
             timeout_seconds: 30,
             headers: HashMap::new(),
         }
     }
 
+    #[must_use]
     pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
         self.api_key = Some(api_key.into());
         self
     }
 
+    #[must_use]
     pub fn with_language(mut self, language: impl Into<String>) -> Self {
         self.language = language.into();
         self
     }
 
+    #[must_use]
     pub fn with_timeout_seconds(mut self, timeout_seconds: u64) -> Self {
         self.timeout_seconds = timeout_seconds;
         self
     }
 
+    #[must_use]
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.insert(key.into(), value.into());
         self
@@ -397,14 +410,17 @@ impl CodeExecutor for ServerlessCodeExecutor {
                         .or_else(|| data.get("stdout"))
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
-                        .to_string(),
+                        .to_owned(),
                     error: data
                         .get("error")
                         .or_else(|| data.get("stderr"))
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
-                        .to_string(),
-                    exit_code: data.get("exit_code").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+                        .to_owned(),
+                    exit_code: data
+                        .get("exit_code")
+                        .and_then(serde_json::Value::as_i64)
+                        .unwrap_or(0) as i32,
                     timed_out: false,
                 },
                 Err(e) => ExecutionResult {

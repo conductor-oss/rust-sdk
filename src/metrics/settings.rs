@@ -3,22 +3,22 @@
 
 use std::time::Duration;
 
-/// Settings for metrics collection
+/// Settings for metrics collection.
 #[derive(Debug, Clone)]
 pub struct MetricsSettings {
-    /// Enable metrics collection
+    /// Enable metrics collection.
     pub enabled: bool,
 
-    /// HTTP port for metrics endpoint (if Some, serves metrics via HTTP)
+    /// HTTP port for metrics endpoint (if Some, serves metrics via HTTP).
     pub http_port: Option<u16>,
 
-    /// Metrics endpoint path (default: /metrics)
+    /// Metrics endpoint path (default: /metrics).
     pub metrics_path: String,
 
-    /// Health endpoint path (default: /health)
+    /// Health endpoint path (default: /health).
     pub health_path: String,
 
-    /// Update interval for metrics
+    /// Update interval for metrics.
     pub update_interval: Duration,
 
     /// Optional namespace prefix for all metric names. Defaults to `""` so
@@ -35,8 +35,8 @@ impl Default for MetricsSettings {
         Self {
             enabled: true,
             http_port: None,
-            metrics_path: "/metrics".to_string(),
-            health_path: "/health".to_string(),
+            metrics_path: "/metrics".to_owned(),
+            health_path: "/health".to_owned(),
             update_interval: Duration::from_secs(1),
             namespace: String::new(),
         }
@@ -44,36 +44,42 @@ impl Default for MetricsSettings {
 }
 
 impl MetricsSettings {
-    /// Create new metrics settings
+    /// Create new metrics settings.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Enable HTTP metrics endpoint
+    /// Enable HTTP metrics endpoint.
+    #[must_use]
     pub fn with_http_port(mut self, port: u16) -> Self {
         self.http_port = Some(port);
         self
     }
 
-    /// Set metrics path
+    /// Set metrics path.
+    #[must_use]
     pub fn with_metrics_path(mut self, path: impl Into<String>) -> Self {
         self.metrics_path = path.into();
         self
     }
 
-    /// Set namespace
+    /// Set namespace.
+    #[must_use]
     pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
         self.namespace = namespace.into();
         self
     }
 
-    /// Set update interval
+    /// Set update interval.
+    #[must_use]
     pub fn with_update_interval(mut self, interval: Duration) -> Self {
         self.update_interval = interval;
         self
     }
 
-    /// Disable metrics
+    /// Disable metrics.
+    #[must_use]
     pub fn disabled(mut self) -> Self {
         self.enabled = false;
         self

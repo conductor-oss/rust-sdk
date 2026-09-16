@@ -1,10 +1,5 @@
-//! Reproduces `llm-recordings/09c_hitl_streaming` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/09c_hitl_streaming.py`, minus the
-//! interactive SSE-streaming console loop for the same reason as
-//! `sdk_playback_09_human_in_the_loop` — polls `AgentHandle::status` directly and auto-approves
-//! (with the same `"y"` reason the recording expects) the moment `is_waiting` is seen.
-//!
-//! `cargo run --features agents --example sdk_playback_09c_hitl_streaming`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -59,7 +54,7 @@ async fn main() -> Result<()> {
 
     let delete_service_data = ToolDef::function(
         "delete_service_data",
-        "Delete service data. Destructive — requires human approval.",
+        "Delete service data. Destructive \u{2014} requires human approval.",
         json!({
             "type": "object",
             "properties": {
@@ -87,7 +82,7 @@ async fn main() -> Result<()> {
              2. If it is unhealthy, restart it with restart_service.\n\
              3. Last, if the user asked you to clear or delete data, call \
              delete_service_data.\n\
-             A human approves the deletion, not you — delete_service_data pauses for that \
+             A human approves the deletion, not you \u{2014} delete_service_data pauses for that \
              approval by itself, so never ask for approval in your own reply.",
         )
         .with_tool(check_service)

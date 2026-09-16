@@ -1,6 +1,5 @@
-//! One-off probe: exercises the new AgentDef fields (introduction, includeContents,
-//! prefillTools, gate) plus the PARALLEL model-inherit and PLAN_EXECUTE tools-required checks,
-//! against a real local Conductor server's /agent/compile. Not part of the crate's example set.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime, PrefillToolCall, Strategy, TextGate, ToolDef};
 use conductor::configuration::Configuration;

@@ -1,13 +1,5 @@
-//! Reproduces `llm-recordings/22_llm_guardrails` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/22_llm_guardrails.py`. When wired
-//! into `AgentDef.guardrails` and compiled server-side (unlike calling `LlmGuardrail::check`
-//! directly), the guardrail's own safety evaluation is a server-native LLM_CHAT_COMPLETE task
-//! using the guardrail's own `model` — no worker is registered for it, and this crate's local
-//! `LlmGuardrail::check`'s real-provider-HTTP-call code path is never reached here. Since the
-//! guardrail's `model` is set to `mock/mockLLM` too, its evaluation turns are themselves
-//! replayed from the recordings, alternating with the agent's own answer turns.
-//!
-//! `cargo run --features agents --example sdk_playback_22_llm_guardrails`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime, Guardrail, LlmGuardrail, OnFail, Position};
 use conductor::configuration::Configuration;

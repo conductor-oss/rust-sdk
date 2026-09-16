@@ -19,7 +19,7 @@ use tracing::info;
 /// Parameters are automatically extracted from task input
 #[worker(name = "greet", thread_count = 5, poll_interval = 100)]
 async fn greet(name: String) -> String {
-    format!("Hello, {}!", name)
+    format!("Hello, {name}!")
 }
 
 /// Worker with multiple parameters
@@ -58,18 +58,18 @@ async fn process_with_task(task: Task) -> WorkerOutput {
 /// Worker with domain-specific routing
 #[worker(name = "premium_task", domain = "premium", thread_count = 10)]
 async fn premium_task(customer_id: String) -> String {
-    format!("Premium processing for customer: {}", customer_id)
+    format!("Premium processing for customer: {customer_id}")
 }
 
 /// Worker that returns a Result
 #[worker(name = "validate")]
 async fn validate(value: String) -> std::result::Result<String, String> {
     if value.is_empty() {
-        Err("Value cannot be empty".to_string())
+        Err("Value cannot be empty".to_owned())
     } else if value.len() > 100 {
-        Err("Value too long".to_string())
+        Err("Value too long".to_owned())
     } else {
-        Ok(format!("Valid: {}", value))
+        Ok(format!("Valid: {value}"))
     }
 }
 

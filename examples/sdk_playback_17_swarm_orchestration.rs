@@ -1,7 +1,5 @@
-//! Reproduces `llm-recordings/17_swarm_orchestration` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/17_swarm_orchestration.py`.
-//!
-//! `cargo run --features agents --example sdk_playback_17_swarm_orchestration`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -21,7 +19,7 @@ async fn main() -> Result<()> {
         .with_instructions(
             "You are a refund specialist. Process the customer's refund request. \
              Check eligibility, confirm the refund amount, and let them know the \
-             timeline. Be empathetic and clear. Do NOT ask follow-up questions — \
+             timeline. Be empathetic and clear. Do NOT ask follow-up questions \u{2014} \
              just process the refund based on what the customer told you.",
         );
 
@@ -43,12 +41,12 @@ async fn main() -> Result<()> {
         .with_sub_agent(refund_agent)?
         .with_sub_agent(tech_agent)?
         .with_swarm_transition(SwarmTransition::OnTextMention {
-            text: "refund".to_string(),
-            target: "refund_specialist".to_string(),
+            text: "refund".to_owned(),
+            target: "refund_specialist".to_owned(),
         })
         .with_swarm_transition(SwarmTransition::OnTextMention {
-            text: "technical".to_string(),
-            target: "tech_support".to_string(),
+            text: "technical".to_owned(),
+            target: "tech_support".to_owned(),
         })
         .with_max_turns(3)?
         .with_strategy(Strategy::Swarm)?;

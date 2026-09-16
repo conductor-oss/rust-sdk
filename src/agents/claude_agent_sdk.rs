@@ -76,9 +76,9 @@
 use std::collections::HashMap;
 use std::process::Stdio;
 
-use futures::{Stream, StreamExt};
+use futures::{Stream, StreamExt as _};
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt as _, BufReader};
 use tokio::process::{Child, Command};
 
 use crate::error::{ConductorError, Result};
@@ -103,35 +103,41 @@ pub struct ClaudeAgentSdkOptions {
 impl ClaudeAgentSdkOptions {
     /// Start from defaults (no system prompt, no model override, no turn limit, default
     /// permission mode, no tool allow-list, no extra child-process env vars).
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the `--system-prompt <text>` flag.
+    #[must_use]
     pub fn with_system_prompt(mut self, system_prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(system_prompt.into());
         self
     }
 
     /// Set the `--model <name>` flag.
+    #[must_use]
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
     /// Set the `--max-turns <n>` flag.
+    #[must_use]
     pub fn with_max_turns(mut self, max_turns: u32) -> Self {
         self.max_turns = Some(max_turns);
         self
     }
 
     /// Set the `--permission-mode <mode>` flag (e.g. `"acceptEdits"`, `"bypassPermissions"`).
+    #[must_use]
     pub fn with_permission_mode(mut self, permission_mode: impl Into<String>) -> Self {
         self.permission_mode = Some(permission_mode.into());
         self
     }
 
     /// Set the `--allowedTools <comma,separated>` flag from a list of tool names.
+    #[must_use]
     pub fn with_allowed_tools(mut self, allowed_tools: Vec<String>) -> Self {
         self.allowed_tools = allowed_tools;
         self
@@ -141,6 +147,7 @@ impl ClaudeAgentSdkOptions {
     /// (via `Command::env()`), never on this process's own environment. Intended for credentials
     /// such as `ANTHROPIC_API_KEY`, resolved beforehand with e.g.
     /// [`crate::agents::Credentials::get`].
+    #[must_use]
     pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.insert(key.into(), value.into());
         self
@@ -165,40 +172,40 @@ fn build_args(
     streaming_input: bool,
 ) -> Vec<String> {
     let mut args = vec![
-        "--output-format".to_string(),
-        "stream-json".to_string(),
-        "--verbose".to_string(),
+        "--output-format".to_owned(),
+        "stream-json".to_owned(),
+        "--verbose".to_owned(),
     ];
 
     if let Some(system_prompt) = &opts.system_prompt {
-        args.push("--system-prompt".to_string());
+        args.push("--system-prompt".to_owned());
         args.push(system_prompt.clone());
     }
     if let Some(model) = &opts.model {
-        args.push("--model".to_string());
+        args.push("--model".to_owned());
         args.push(model.clone());
     }
     if let Some(max_turns) = opts.max_turns {
-        args.push("--max-turns".to_string());
+        args.push("--max-turns".to_owned());
         args.push(max_turns.to_string());
     }
     if let Some(permission_mode) = &opts.permission_mode {
-        args.push("--permission-mode".to_string());
+        args.push("--permission-mode".to_owned());
         args.push(permission_mode.clone());
     }
     if !opts.allowed_tools.is_empty() {
-        args.push("--allowedTools".to_string());
+        args.push("--allowedTools".to_owned());
         args.push(opts.allowed_tools.join(","));
     }
 
     if streaming_input {
-        args.push("--input-format".to_string());
-        args.push("stream-json".to_string());
+        args.push("--input-format".to_owned());
+        args.push("stream-json".to_owned());
     } else {
-        args.push("--print".to_string());
-        args.push("--".to_string());
+        args.push("--print".to_owned());
+        args.push("--".to_owned());
         if let Some(prompt) = prompt {
-            args.push(prompt.to_string());
+            args.push(prompt.to_owned());
         }
     }
 
@@ -218,6 +225,7 @@ pub struct ClaudeAgentSdkQuery {
 
 impl ClaudeAgentSdkQuery {
     /// Build a query session from the given options.
+    #[must_use]
     pub fn new(options: ClaudeAgentSdkOptions) -> Self {
         Self { options }
     }
@@ -228,6 +236,10 @@ impl ClaudeAgentSdkQuery {
     /// Any env vars set via [`ClaudeAgentSdkOptions::with_env`] are applied to the spawned child
     /// process only, via `Command::env()` — this never reads or mutates this process's own
     /// environment.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Io`] if spawning the `claude` binary fails (e.g. not found on `PATH`).
     pub fn spawn(&self, prompt: &str) -> Result<ClaudeAgentSdkStream> {
         let args = build_args(Some(prompt), &self.options, false);
         self.spawn_with_args(args)
@@ -239,6 +251,10 @@ impl ClaudeAgentSdkQuery {
     /// Writing turns to the child's stdin (the other half of the streaming-input protocol) is
     /// not implemented by this transport — see the module docs' "What this module explicitly is
     /// not" section. Only the argument-building and stdout-consuming halves are provided today.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Io`] if spawning the `claude` binary fails (e.g. not found on `PATH`).
     pub fn spawn_streaming(&self) -> Result<ClaudeAgentSdkStream> {
         let args = build_args(None, &self.options, true);
         self.spawn_with_args(args)
@@ -335,6 +351,7 @@ pub struct ProgressMetadata {
 }
 
 impl ProgressMetadata {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -357,7 +374,7 @@ impl ProgressMetadata {
                         if name == "Agent" || name == "Task" {
                             self.subagent_count += 1;
                         }
-                        self.tools_used.push(name.to_string());
+                        self.tools_used.push(name.to_owned());
                     }
                 }
                 Some("tool_result") => {
@@ -434,6 +451,7 @@ impl Default for ProgressThrottle {
 }
 
 impl ProgressThrottle {
+    #[must_use]
     pub fn new(interval: std::time::Duration) -> Self {
         Self {
             last_update: None,
@@ -465,7 +483,7 @@ const PROGRESS_SNIPPET_MAX_CHARS: usize = 500;
 /// `_update_task_progress_nonblocking`: lets the server (and any polling clients) see
 /// real-time progress from a long-running Claude Agent SDK passthrough worker. `tools_used` is
 /// truncated to the last 5 entries and `last_tool_output` to
-/// [`PROGRESS_SNIPPET_MAX_CHARS`] characters, matching python's slice-last-5/truncate behavior.
+/// `PROGRESS_SNIPPET_MAX_CHARS` characters, matching python's slice-last-5/truncate behavior.
 /// Like [`push_event_nonblocking`], a failed update is only logged, never propagated.
 pub fn update_task_progress_nonblocking(
     task_client: crate::client::TaskClient,
@@ -475,15 +493,15 @@ pub fn update_task_progress_nonblocking(
 ) {
     let mut output_data = HashMap::new();
     output_data.insert(
-        "tool_call_count".to_string(),
+        "tool_call_count".to_owned(),
         Value::from(metadata.tool_call_count),
     );
     output_data.insert(
-        "tool_error_count".to_string(),
+        "tool_error_count".to_owned(),
         Value::from(metadata.tool_error_count),
     );
     output_data.insert(
-        "subagent_count".to_string(),
+        "subagent_count".to_owned(),
         Value::from(metadata.subagent_count),
     );
     let recent_tools: Vec<Value> = metadata
@@ -495,13 +513,13 @@ pub fn update_task_progress_nonblocking(
         .cloned()
         .map(Value::String)
         .collect();
-    output_data.insert("tools_used".to_string(), Value::Array(recent_tools));
+    output_data.insert("tools_used".to_owned(), Value::Array(recent_tools));
     let snippet: String = metadata
         .last_tool_output
         .chars()
         .take(PROGRESS_SNIPPET_MAX_CHARS)
         .collect();
-    output_data.insert("last_tool_output".to_string(), Value::String(snippet));
+    output_data.insert("last_tool_output".to_owned(), Value::String(snippet));
 
     let result = crate::models::TaskResult {
         task_id,
@@ -547,7 +565,7 @@ mod tests {
             .with_model("claude-opus-5")
             .with_max_turns(3)
             .with_permission_mode("acceptEdits")
-            .with_allowed_tools(vec!["Read".to_string(), "Bash".to_string()]);
+            .with_allowed_tools(vec!["Read".to_owned(), "Bash".to_owned()]);
 
         let args = build_args(Some("do the thing"), &opts, false);
 
@@ -591,7 +609,7 @@ mod tests {
                 "stream-json",
             ]
         );
-        assert!(!args.contains(&"--print".to_string()));
+        assert!(!args.contains(&"--print".to_owned()));
     }
 
     #[test]
@@ -599,8 +617,8 @@ mod tests {
         let opts = ClaudeAgentSdkOptions::new();
         let args = build_args(Some("ignored"), &opts, true);
 
-        assert!(!args.contains(&"ignored".to_string()));
-        assert!(args.contains(&"--input-format".to_string()));
+        assert!(!args.contains(&"ignored".to_owned()));
+        assert!(args.contains(&"--input-format".to_owned()));
     }
 
     #[test]
@@ -608,7 +626,7 @@ mod tests {
         let opts = ClaudeAgentSdkOptions::new();
         let args = build_args(Some("hi"), &opts, false);
 
-        assert!(!args.contains(&"--allowedTools".to_string()));
+        assert!(!args.contains(&"--allowedTools".to_owned()));
     }
 
     #[test]
@@ -632,13 +650,13 @@ mod tests {
             .with_model("b")
             .with_max_turns(1)
             .with_permission_mode("c")
-            .with_allowed_tools(vec!["d".to_string()]);
+            .with_allowed_tools(vec!["d".to_owned()]);
 
         assert_eq!(opts.system_prompt.as_deref(), Some("a"));
         assert_eq!(opts.model.as_deref(), Some("b"));
         assert_eq!(opts.max_turns, Some(1));
         assert_eq!(opts.permission_mode.as_deref(), Some("c"));
-        assert_eq!(opts.allowed_tools, vec!["d".to_string()]);
+        assert_eq!(opts.allowed_tools, vec!["d".to_owned()]);
     }
 
     #[test]
@@ -649,7 +667,7 @@ mod tests {
             "message": {"content": [{"type": "tool_use", "name": "Bash", "id": "t1", "input": {}}]},
         }));
         assert_eq!(metadata.tool_call_count, 1);
-        assert_eq!(metadata.tools_used, vec!["Bash".to_string()]);
+        assert_eq!(metadata.tools_used, vec!["Bash".to_owned()]);
         assert_eq!(metadata.subagent_count, 0);
     }
 
@@ -696,7 +714,7 @@ mod tests {
         });
         assert_eq!(
             extract_tool_result_text(&block),
-            Some("hello world".to_string())
+            Some("hello world".to_owned())
         );
     }
 
@@ -705,7 +723,7 @@ mod tests {
         let block = serde_json::json!({"content": "plain text"});
         assert_eq!(
             extract_tool_result_text(&block),
-            Some("plain text".to_string())
+            Some("plain text".to_owned())
         );
     }
 

@@ -1,10 +1,5 @@
-//! Reproduces `llm-recordings/05_handoffs` (from conductor-oss/conductor PR #1614). Ported
-//! field-for-field from python-sdk's `examples/agents/05_handoffs.py`. The coordinator/routing
-//! prompt and the "is a specialist done yet" turn are both compiled and driven entirely
-//! server-side by `Strategy::Handoff` + `agents` — nothing extra to reproduce beyond the agent
-//! composition itself.
-//!
-//! `cargo run --features agents --example sdk_playback_05_handoffs`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;

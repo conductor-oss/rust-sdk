@@ -50,6 +50,7 @@ pub enum Strategy {
 
 impl Strategy {
     /// Wire-format string, matching python-sdk's `Strategy(str, Enum)` values exactly.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Strategy::Handoff => "handoff",
@@ -82,7 +83,7 @@ pub struct OutputType {
 }
 
 /// A tool call to execute before the agent's first LLM turn, with its result injected into the
-/// conversation as a tool_call + tool_response message pair.
+/// conversation as a `tool_call` + `tool_response` message pair.
 ///
 /// Mirrors python-sdk's `agent.prefill_tools` entries, serialized by
 /// `config_serializer.py` as `{"toolName": pt.tool_name, "arguments": pt.arguments}` — matches
@@ -127,6 +128,7 @@ impl TextGate {
         }
     }
 
+    #[must_use]
     pub fn case_insensitive(mut self) -> Self {
         self.case_sensitive = false;
         self
@@ -205,30 +207,36 @@ pub struct RunSettings {
 }
 
 impl RunSettings {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
+    #[must_use]
     pub fn with_temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
+    #[must_use]
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
+    #[must_use]
     pub fn with_reasoning_effort(mut self, effort: impl Into<String>) -> Self {
         self.reasoning_effort = Some(effort.into());
         self
     }
 
+    #[must_use]
     pub fn with_thinking_budget_tokens(mut self, tokens: u32) -> Self {
         self.thinking_budget_tokens = Some(tokens);
         self
@@ -277,7 +285,7 @@ pub struct AgentDef {
     /// sub-agent whose job is to select the next agent. A callable-based router is out of
     /// scope for this SDK version.
     pub router: Option<Box<AgentDef>>,
-    /// Structured-output typing for the agent's final response — see [`OutputType`]'s doc
+    /// Structured-output typing for the agent's final response — see `OutputType`'s doc
     /// comment for the python-sdk mapping and this crate's narrowing.
     pub output_type: Option<OutputType>,
     /// Rule-based agent-to-agent transitions, used when `strategy = Strategy::Swarm` (python's
@@ -299,15 +307,15 @@ pub struct AgentDef {
     pub context_window_budget: Option<u32>,
     pub termination: Option<TerminationCondition>,
     pub memory: Option<ConversationMemory>,
-    /// PLAN_EXECUTE planner sub-agent — produces the JSON plan the parent executes. Required
+    /// `PLAN_EXECUTE` planner sub-agent — produces the JSON plan the parent executes. Required
     /// when `strategy` is [`Strategy::PlanExecute`]; see [`AgentDef::with_strategy`].
     pub planner: Option<Box<AgentDef>>,
-    /// PLAN_EXECUTE fallback sub-agent, invoked when the planner's plan fails mid-execution.
-    /// Optional — PLAN_EXECUTE works without one.
+    /// `PLAN_EXECUTE` fallback sub-agent, invoked when the planner's plan fails mid-execution.
+    /// Optional — `PLAN_EXECUTE` works without one.
     pub fallback: Option<Box<AgentDef>>,
     /// Turn cap applied to `fallback` once it's invoked.
     pub fallback_max_turns: Option<u32>,
-    /// Reference text appended to the PLAN_EXECUTE planner's prompt as a
+    /// Reference text appended to the `PLAN_EXECUTE` planner's prompt as a
     /// `## Reference Context` block on every planner invocation.
     ///
     /// python-sdk's `planner_context` accepts a richer `Context` dataclass — exactly one of
@@ -352,12 +360,12 @@ pub struct AgentDef {
     pub stop_when: Option<StopWhenHandler>,
     /// CLI command execution config, set via [`AgentDef::with_cli_commands`] (python's
     /// `Agent.cli_config`, wire key `cliConfig`). Also appends a `run_command` tool to
-    /// [`AgentDef::tools`] — see [`super::cli_config`] for what is and isn't ported.
+    /// [`AgentDef::tools`] — see `super::cli_config` for what is and isn't ported.
     pub cli_config: Option<super::cli_config::CliConfig>,
     /// Code execution config, set via [`AgentDef::with_code_execution`]/
     /// [`AgentDef::with_local_code_execution`] (python's `Agent.code_execution_config`, wire key
     /// `codeExecution`). Also appends an `execute_code` tool to [`AgentDef::tools`] — see
-    /// [`super::code_execution_config`] for what is and isn't ported.
+    /// `super::code_execution_config` for what is and isn't ported.
     pub code_execution: Option<super::code_execution_config::CodeExecutionConfig>,
     /// A "framework" marker (python's `Agent._framework`), set via
     /// [`AgentDef::with_framework`] — when `Some`, this agent serializes as a flattened
@@ -404,6 +412,18 @@ impl std::fmt::Debug for AgentDef {
             .field("code_execution", &self.code_execution)
             .field("framework", &self.framework)
             .field("framework_config", &self.framework_config)
+            .field("router", &self.router)
+            .field(
+                "swarm_transitions",
+                &format!("<{} transitions>", self.swarm_transitions.len()),
+            )
+            .field("allowed_transitions", &self.allowed_transitions)
+            .field("memory", &self.memory)
+            .field("planner", &self.planner)
+            .field("fallback", &self.fallback)
+            .field("fallback_max_turns", &self.fallback_max_turns)
+            .field("planner_context", &self.planner_context)
+            .field("synthesize", &self.synthesize)
             .finish()
     }
 }
@@ -412,6 +432,10 @@ impl AgentDef {
     /// Create a new agent definition. Validates `name` against `^[a-zA-Z_][a-zA-Z0-9_-]*$` up
     /// front (matches python-sdk's `Agent.__init__`) since the name doubles as the Conductor
     /// workflow name once compiled.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `name` doesn't match `^[a-zA-Z_][a-zA-Z0-9_-]*$`.
     pub fn new(name: impl Into<String>) -> Result<Self> {
         let name = name.into();
         if !is_valid_agent_name(&name) {
@@ -461,21 +485,25 @@ impl AgentDef {
         })
     }
 
+    #[must_use]
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
+    #[must_use]
     pub fn with_base_url(mut self, url: impl Into<String>) -> Self {
         self.base_url = Some(url.into());
         self
     }
 
+    #[must_use]
     pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = Some(instructions.into());
         self
     }
 
+    #[must_use]
     pub fn with_tool(mut self, tool: ToolDef) -> Self {
         self.tools.push(tool);
         self
@@ -487,6 +515,7 @@ impl AgentDef {
     /// `{name}_run_command` tool to [`AgentDef::tools`] (matching python's
     /// `_attach_cli_tool`, called eagerly from `__init__` rather than deferred to a later build
     /// step).
+    #[must_use]
     pub fn with_cli_commands(mut self, config: super::cli_config::CliConfig) -> Self {
         if config.enabled {
             let tool = super::cli_config::cli_command_tool(&config, Some(&self.name));
@@ -501,6 +530,7 @@ impl AgentDef {
     /// [`super::code_execution_config::CodeExecutionConfig::enabled`], immediately appends the
     /// auto-built `{name}_execute_code` tool to [`AgentDef::tools`] (matching python's
     /// `_attach_code_execution_tool`, called eagerly from `__init__`).
+    #[must_use]
     pub fn with_code_execution(
         mut self,
         config: super::code_execution_config::CodeExecutionConfig,
@@ -518,13 +548,14 @@ impl AgentDef {
     /// builds an enabled [`super::code_execution_config::CodeExecutionConfig`] with the given
     /// lists, defaulting `allowed_languages` to `["python"]` when empty (matching python's `or
     /// ["python"]` fallback) and leaving `allowed_commands` unrestricted when empty.
+    #[must_use]
     pub fn with_local_code_execution(
         self,
         allowed_languages: Vec<String>,
         allowed_commands: Vec<String>,
     ) -> Self {
         let allowed_languages = if allowed_languages.is_empty() {
-            vec!["python".to_string()]
+            vec!["python".to_owned()]
         } else {
             allowed_languages
         };
@@ -541,22 +572,26 @@ impl AgentDef {
     /// `_framework` when this agent is serialized (standalone or nested as a sub-agent), so it
     /// should already be in the exact wire shape the target framework normalizer expects (e.g.
     /// [`super::skill::SkillAgent::raw_config`]).
+    #[must_use]
     pub fn with_framework(mut self, framework: impl Into<String>, raw_config: Value) -> Self {
         self.framework = Some(framework.into());
         self.framework_config = Some(raw_config);
         self
     }
 
+    #[must_use]
     pub fn with_tools(mut self, tools: impl IntoIterator<Item = ToolDef>) -> Self {
         self.tools.extend(tools);
         self
     }
 
+    #[must_use]
     pub fn with_guardrail(mut self, guardrail: Guardrail) -> Self {
         self.guardrails.push(guardrail);
         self
     }
 
+    #[must_use]
     pub fn with_guardrails(mut self, guardrails: impl IntoIterator<Item = Guardrail>) -> Self {
         self.guardrails.extend(guardrails);
         self
@@ -564,6 +599,10 @@ impl AgentDef {
 
     /// Add a sub-agent. Fails if its name collides with an already-added sub-agent's name
     /// (matches python's duplicate-name check in `Agent.__init__`, moved to construction time).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `agent`'s name collides with an already-added sub-agent's name.
     pub fn with_sub_agent(mut self, agent: AgentDef) -> Result<Self> {
         if self.agents.iter().any(|a| a.name == agent.name) {
             return Err(ConductorError::agent(format!(
@@ -581,6 +620,7 @@ impl AgentDef {
     /// the router requirement against this field's current state at the time it's called, so
     /// setting the router afterwards does not retroactively satisfy an already-failed
     /// `with_strategy` call.
+    #[must_use]
     pub fn with_router(mut self, router: AgentDef) -> Self {
         self.router = Some(Box::new(router));
         self
@@ -589,7 +629,8 @@ impl AgentDef {
     /// Set structured-output typing for the agent's final response. Follows
     /// [`ToolDef::with_output_schema`](super::tool::ToolDef::with_output_schema)'s convention of
     /// taking a raw [`serde_json::Value`] schema from the caller rather than a `JsonSchema`
-    /// generic bound — see [`OutputType`]'s doc comment for why.
+    /// generic bound — see `OutputType`'s doc comment for why.
+    #[must_use]
     pub fn with_output_type(mut self, class_name: impl Into<String>, schema: Value) -> Self {
         self.output_type = Some(OutputType {
             schema,
@@ -601,6 +642,7 @@ impl AgentDef {
     /// Add a rule-based agent-to-agent transition, used under `Strategy::Swarm` (python's
     /// `Agent(handoffs=[...])`). Accumulates like [`AgentDef::with_guardrail`] — call once per
     /// transition.
+    #[must_use]
     pub fn with_swarm_transition(mut self, transition: SwarmTransition) -> Self {
         self.swarm_transitions.push(transition);
         self
@@ -608,6 +650,7 @@ impl AgentDef {
 
     /// Restrict swarm transfer targets reachable from `from_agent` to `targets`, matching
     /// python's `Agent(allowed_transitions={...})`. Accumulates — call once per source agent.
+    #[must_use]
     pub fn with_allowed_transition(
         mut self,
         from_agent: impl Into<String>,
@@ -629,6 +672,10 @@ impl AgentDef {
     /// way to retroactively satisfy the check afterwards. `Swarm` has no such requirement —
     /// matching python-sdk's `Agent.__init__` (which has no analogous check for
     /// `strategy="swarm"`), zero `swarm_transitions` is accepted too.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `strategy` requires a composition field (router/planner/tools) that hasn't been set yet -- see the per-strategy notes above.
     pub fn with_strategy(mut self, strategy: Strategy) -> Result<Self> {
         if strategy == Strategy::Router && self.router.is_none() {
             return Err(ConductorError::agent(
@@ -698,6 +745,10 @@ impl AgentDef {
 
     /// Set the hard cap on conversation turns. Must be at least 1 (matches python's
     /// `max_turns < 1` check).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `max_turns` is `0`.
     pub fn with_max_turns(mut self, max_turns: u32) -> Result<Self> {
         if max_turns < 1 {
             return Err(ConductorError::agent("max_turns must be at least 1"));
@@ -706,21 +757,25 @@ impl AgentDef {
         Ok(self)
     }
 
+    #[must_use]
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
+    #[must_use]
     pub fn with_timeout_seconds(mut self, timeout_seconds: u64) -> Self {
         self.timeout_seconds = timeout_seconds;
         self
     }
 
+    #[must_use]
     pub fn with_temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
+    #[must_use]
     pub fn with_reasoning_effort(mut self, effort: impl Into<String>) -> Self {
         self.reasoning_effort = Some(effort.into());
         self
@@ -732,6 +787,7 @@ impl AgentDef {
     /// at registration time) -> the server resolves and delivers values back on the polled `Task`
     /// -> consume via [`Credentials::from_task`](super::Credentials::from_task) inside a tool
     /// body. See `docs/agents/secrets-and-credentials.md` for the full contract.
+    #[must_use]
     pub fn with_credentials(mut self, credentials: Vec<String>) -> Self {
         self.credentials = credentials;
         self
@@ -745,6 +801,10 @@ impl AgentDef {
     /// [`AgentDef::with_tools`]) — matching this crate's fail-fast builder convention (e.g.
     /// [`AgentDef::with_sub_agent`]'s duplicate-name check) rather than silently no-op-ing on a
     /// typo'd tool name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if no tool named `tool_name` has been added yet via [`AgentDef::with_tool`]/[`AgentDef::with_tools`].
     pub fn with_tool_credentials(
         mut self,
         tool_name: impl AsRef<str>,
@@ -765,56 +825,65 @@ impl AgentDef {
         Ok(self)
     }
 
+    #[must_use]
     pub fn with_required_tools(mut self, tools: Vec<String>) -> Self {
         self.required_tools = tools;
         self
     }
 
+    #[must_use]
     pub fn with_context_window_budget(mut self, budget: u32) -> Self {
         self.context_window_budget = Some(budget);
         self
     }
 
+    #[must_use]
     pub fn with_termination(mut self, termination: TerminationCondition) -> Self {
         self.termination = Some(termination);
         self
     }
 
+    #[must_use]
     pub fn with_memory(mut self, memory: ConversationMemory) -> Self {
         self.memory = Some(memory);
         self
     }
 
-    /// Set the PLAN_EXECUTE planner sub-agent — the agent that produces the JSON plan the
+    /// Set the `PLAN_EXECUTE` planner sub-agent — the agent that produces the JSON plan the
     /// parent executes. Call this *before* `.with_strategy(Strategy::PlanExecute)`; see that
     /// method's validation.
+    #[must_use]
     pub fn with_planner(mut self, planner: AgentDef) -> Self {
         self.planner = Some(Box::new(planner));
         self
     }
 
-    /// Set the PLAN_EXECUTE fallback sub-agent, invoked when the planner's plan fails
-    /// mid-execution. Optional — PLAN_EXECUTE works without one.
+    /// Set the `PLAN_EXECUTE` fallback sub-agent, invoked when the planner's plan fails
+    /// mid-execution. Optional — `PLAN_EXECUTE` works without one.
+    #[must_use]
     pub fn with_fallback(mut self, fallback: AgentDef) -> Self {
         self.fallback = Some(Box::new(fallback));
         self
     }
 
     /// Cap the number of turns the `fallback` agent gets once invoked.
+    #[must_use]
     pub fn with_fallback_max_turns(mut self, turns: u32) -> Self {
         self.fallback_max_turns = Some(turns);
         self
     }
 
-    /// Append one reference-text entry to the PLAN_EXECUTE planner's context. Matches
+    /// Append one reference-text entry to the `PLAN_EXECUTE` planner's context. Matches
     /// python-sdk's bare-`str` shorthand for `Context(text=...)` — see the `planner_context`
     /// field's doc comment on [`AgentDef`] for why URL-backed entries aren't modeled here yet.
+    #[must_use]
     pub fn with_planner_context(mut self, entry: impl Into<String>) -> Self {
         self.planner_context.push(entry.into());
         self
     }
 
     /// Bulk variant of [`with_planner_context`](Self::with_planner_context).
+    #[must_use]
     pub fn with_planner_contexts(
         mut self,
         entries: impl IntoIterator<Item = impl Into<String>>,
@@ -826,12 +895,14 @@ impl AgentDef {
 
     /// Toggle the final LLM synthesis step after execution completes. Defaults to `true`
     /// (matches python-sdk); only emitted on the wire when explicitly disabled.
+    #[must_use]
     pub fn with_synthesize(mut self, synthesize: bool) -> Self {
         self.synthesize = synthesize;
         self
     }
 
     /// Text this agent uses to introduce itself in group conversations.
+    #[must_use]
     pub fn with_introduction(mut self, introduction: impl Into<String>) -> Self {
         self.introduction = Some(introduction.into());
         self
@@ -840,18 +911,21 @@ impl AgentDef {
     /// Control whether a sub-agent inherits the parent's conversation context. Pass `"none"`
     /// for a fresh context (prompt only); any other value (or leaving it unset) inherits the
     /// parent's, matching python-sdk's `include_contents`.
+    #[must_use]
     pub fn with_include_contents(mut self, include_contents: impl Into<String>) -> Self {
         self.include_contents = Some(include_contents.into());
         self
     }
 
     /// Add a tool call to execute before the first LLM turn.
+    #[must_use]
     pub fn with_prefill_tool(mut self, call: PrefillToolCall) -> Self {
         self.prefill_tools.push(call);
         self
     }
 
     /// Bulk variant of [`with_prefill_tool`](Self::with_prefill_tool).
+    #[must_use]
     pub fn with_prefill_tools(mut self, calls: impl IntoIterator<Item = PrefillToolCall>) -> Self {
         self.prefill_tools.extend(calls);
         self
@@ -859,6 +933,7 @@ impl AgentDef {
 
     /// Set a gate condition for conditional sequential (`>>`) pipelines — either a [`TextGate`]
     /// or, via [`AgentDef::with_gate_fn`], a callable. See [`GateCondition`].
+    #[must_use]
     pub fn with_gate(mut self, gate: impl Into<GateCondition>) -> Self {
         self.gate = Some(gate.into());
         self
@@ -868,6 +943,7 @@ impl AgentDef {
     /// receives `{"result": <this agent's output>}` and returns `true` to continue the
     /// pipeline, `false` to stop it after this agent. Registered as a `{name}_gate` worker by
     /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) — see [`GateHandler`].
+    #[must_use]
     pub fn with_gate_fn<F, Fut>(mut self, handler: F) -> Self
     where
         F: Fn(Value) -> Fut + Send + Sync + 'static,
@@ -875,7 +951,7 @@ impl AgentDef {
     {
         let handler = Arc::new(handler);
         self.gate = Some(GateCondition::Callable(Arc::new(move |context: Value| {
-            let handler = handler.clone();
+            let handler = Arc::clone(&handler);
             Box::pin(async move { handler(context).await })
         })));
         self
@@ -885,6 +961,7 @@ impl AgentDef {
     /// (`{"result": ..., "messages": ..., "iteration": ...}`) and returns `true` to stop.
     /// Registered as a `{name}_stop_when` worker by
     /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) — see [`StopWhenHandler`].
+    #[must_use]
     pub fn with_stop_when<F, Fut>(mut self, handler: F) -> Self
     where
         F: Fn(Value) -> Fut + Send + Sync + 'static,
@@ -892,12 +969,13 @@ impl AgentDef {
     {
         let handler = Arc::new(handler);
         self.stop_when = Some(Arc::new(move |context: Value| {
-            let handler = handler.clone();
+            let handler = Arc::clone(&handler);
             Box::pin(async move { handler(context).await })
         }));
         self
     }
 
+    #[must_use]
     pub fn with_metadata_entry(mut self, key: impl Into<String>, value: Value) -> Self {
         self.metadata.insert(key.into(), value);
         self
@@ -906,6 +984,7 @@ impl AgentDef {
     /// Register a [`CallbackHandler`]. Multiple registrations accumulate and are expected to
     /// chain in registration order (see `callback.rs`'s module docs) once a dispatcher exists;
     /// this crate only stores them for now — see `serializer.rs` for why they aren't serialized.
+    #[must_use]
     pub fn with_callback(mut self, callback: impl CallbackHandler + 'static) -> Self {
         self.callbacks.push(Arc::new(callback));
         self
@@ -952,17 +1031,17 @@ mod tests {
 
     #[test]
     fn test_new_validates_name() {
-        assert!(AgentDef::new("valid_name-1").is_ok());
-        assert!(AgentDef::new("1invalid").is_err());
-        assert!(AgentDef::new("in valid").is_err());
-        assert!(AgentDef::new("").is_err());
+        AgentDef::new("valid_name-1").unwrap();
+        AgentDef::new("1invalid").unwrap_err();
+        AgentDef::new("in valid").unwrap_err();
+        AgentDef::new("").unwrap_err();
     }
 
     /// Regression test for a real bug found via live testing: the Conductor server replaces
     /// `-` with `_` wherever it derives a task/reference name from an agent name (confirmed by
     /// compiling a real `"audit-hyphen-agent"` and reading back `requiredWorkers`), but nothing
     /// in this crate did that sanitization before this fix -- every hyphenated agent name's
-    /// stop_when/termination/callback worker would silently register under the wrong task name
+    /// `stop_when/termination/callback` worker would silently register under the wrong task name
     /// and never receive a task.
     #[test]
     fn test_sanitize_for_task_name_replaces_hyphens() {
@@ -992,7 +1071,7 @@ mod tests {
     #[test]
     fn test_with_strategy_accepts_simple_variants() {
         let agent = AgentDef::new("a").unwrap();
-        assert!(agent.with_strategy(Strategy::Sequential).is_ok());
+        agent.with_strategy(Strategy::Sequential).unwrap();
     }
 
     #[test]
@@ -1010,7 +1089,7 @@ mod tests {
     fn test_with_strategy_router_fails_without_router_set() {
         let agent = AgentDef::new("a").unwrap();
         assert!(agent.router.is_none());
-        assert!(agent.with_strategy(Strategy::Router).is_err());
+        agent.with_strategy(Strategy::Router).unwrap_err();
     }
 
     #[test]
@@ -1022,7 +1101,7 @@ mod tests {
                     target: "b".into(),
                     text: "ACTIONABLE".into(),
                 });
-        assert!(agent.with_strategy(Strategy::Swarm).is_ok());
+        agent.with_strategy(Strategy::Swarm).unwrap();
     }
 
     #[test]
@@ -1030,7 +1109,7 @@ mod tests {
         // Matches python-sdk's `Agent.__init__`, which has no check requiring
         // `handoffs` to be non-empty when `strategy="swarm"`.
         let agent = AgentDef::new("a").unwrap();
-        assert!(agent.with_strategy(Strategy::Swarm).is_ok());
+        agent.with_strategy(Strategy::Swarm).unwrap();
     }
 
     #[test]
@@ -1055,20 +1134,23 @@ mod tests {
     fn test_with_strategy_plan_execute_requires_planner() {
         let agent = AgentDef::new("a").unwrap();
         // No planner set yet: rejected, matching python's "PLAN_EXECUTE requires planner=".
-        assert!(agent.clone().with_strategy(Strategy::PlanExecute).is_err());
+        agent
+            .clone()
+            .with_strategy(Strategy::PlanExecute)
+            .unwrap_err();
 
         // Planner and a tool set first (required builder-chain order): accepted.
         let planner = AgentDef::new("planner").unwrap();
         let agent_with_planner = agent.with_planner(planner).with_tool(test_tool("t"));
-        assert!(agent_with_planner
+        agent_with_planner
             .with_strategy(Strategy::PlanExecute)
-            .is_ok());
+            .unwrap();
     }
 
     /// Regression test for a real python-sdk check this crate was missing entirely: python's
-    /// `Agent.__init__` requires `tools=[...]` on a PLAN_EXECUTE parent (these are the
+    /// `Agent.__init__` requires `tools=[...]` on a `PLAN_EXECUTE` parent (these are the
     /// canonical plan-executable tools every `op.tool` in the planner's JSON plan must be one
-    /// of), and raises before ever reaching the server. Without this, a Rust-built PLAN_EXECUTE
+    /// of), and raises before ever reaching the server. Without this, a Rust-built `PLAN_EXECUTE`
     /// agent with no tools would silently compile and fail confusingly server-side instead.
     #[test]
     fn test_with_strategy_plan_execute_requires_tools() {
@@ -1076,13 +1158,16 @@ mod tests {
         let agent = AgentDef::new("a").unwrap().with_planner(planner);
 
         // No tools yet: rejected.
-        assert!(agent.clone().with_strategy(Strategy::PlanExecute).is_err());
+        agent
+            .clone()
+            .with_strategy(Strategy::PlanExecute)
+            .unwrap_err();
 
         // A tool added first: accepted.
-        assert!(agent
+        agent
             .with_tool(test_tool("t"))
             .with_strategy(Strategy::PlanExecute)
-            .is_ok());
+            .unwrap();
     }
 
     /// Regression test for python-sdk's PARALLEL model auto-inheritance: a PARALLEL parent with
@@ -1104,7 +1189,7 @@ mod tests {
             .with_strategy(Strategy::Parallel)
             .unwrap();
 
-        assert_eq!(agent.model, Some("gpt-4o".to_string()));
+        assert_eq!(agent.model, Some("gpt-4o".to_owned()));
     }
 
     #[test]
@@ -1119,7 +1204,7 @@ mod tests {
             .unwrap();
 
         // Explicit parent model always wins over inheritance.
-        assert_eq!(agent.model, Some("gpt-4o".to_string()));
+        assert_eq!(agent.model, Some("gpt-4o".to_owned()));
     }
 
     #[test]
@@ -1130,7 +1215,7 @@ mod tests {
             .with_sub_agent(child)
             .unwrap();
 
-        assert!(agent.with_strategy(Strategy::Parallel).is_err());
+        agent.with_strategy(Strategy::Parallel).unwrap_err();
     }
 
     /// Matches the model-inheriting half of python's `>>` operator (`Agent.__rshift__`'s
@@ -1151,7 +1236,7 @@ mod tests {
             .with_strategy(Strategy::Sequential)
             .unwrap();
 
-        assert_eq!(pipeline.model, Some("gpt-4o".to_string()));
+        assert_eq!(pipeline.model, Some("gpt-4o".to_owned()));
     }
 
     #[test]
@@ -1162,7 +1247,7 @@ mod tests {
             .with_sub_agent(child)
             .unwrap();
 
-        assert!(agent.with_strategy(Strategy::Sequential).is_err());
+        agent.with_strategy(Strategy::Sequential).unwrap_err();
     }
 
     #[test]
@@ -1200,14 +1285,14 @@ mod tests {
             .unwrap()
             .with_sub_agent(child_a)
             .unwrap();
-        assert!(parent.with_sub_agent(child_b).is_err());
+        parent.with_sub_agent(child_b).unwrap_err();
     }
 
     #[test]
     fn test_max_turns_validation() {
         let agent = AgentDef::new("a").unwrap();
-        assert!(agent.clone().with_max_turns(0).is_err());
-        assert!(agent.with_max_turns(1).is_ok());
+        agent.clone().with_max_turns(0).unwrap_err();
+        agent.with_max_turns(1).unwrap();
     }
 
     #[test]
@@ -1265,7 +1350,7 @@ mod tests {
         let agent = AgentDef::new("a")
             .unwrap()
             .with_callback(MockCallbackHandler);
-        let debug_str = format!("{:?}", agent);
+        let debug_str = format!("{agent:?}");
         assert!(debug_str.contains("AgentDef"));
         assert!(debug_str.contains("1 handlers"));
     }
@@ -1275,8 +1360,8 @@ mod tests {
         let agent = AgentDef::new("a").unwrap();
         assert!(agent.credentials.is_empty());
 
-        let agent = agent.with_credentials(vec!["GH_TOKEN".to_string()]);
-        assert_eq!(agent.credentials, vec!["GH_TOKEN".to_string()]);
+        let agent = agent.with_credentials(vec!["GH_TOKEN".to_owned()]);
+        assert_eq!(agent.credentials, vec!["GH_TOKEN".to_owned()]);
     }
 
     #[test]
@@ -1290,18 +1375,18 @@ mod tests {
         let agent = AgentDef::new("filer")
             .unwrap()
             .with_tool(tool)
-            .with_tool_credentials("create_issue", vec!["GH_TOKEN".to_string()])
+            .with_tool_credentials("create_issue", vec!["GH_TOKEN".to_owned()])
             .unwrap();
 
-        assert_eq!(agent.tools[0].credentials, vec!["GH_TOKEN".to_string()]);
+        assert_eq!(agent.tools[0].credentials, vec!["GH_TOKEN".to_owned()]);
     }
 
     #[test]
     fn test_with_tool_credentials_errors_on_unknown_tool_name() {
         let agent = AgentDef::new("a").unwrap();
-        assert!(agent
-            .with_tool_credentials("does_not_exist", vec!["GH_TOKEN".to_string()])
-            .is_err());
+        agent
+            .with_tool_credentials("does_not_exist", vec!["GH_TOKEN".to_owned()])
+            .unwrap_err();
     }
 
     #[test]
@@ -1315,7 +1400,7 @@ mod tests {
             agent.output_type,
             Some(OutputType {
                 schema,
-                class_name: "MyOutput".to_string(),
+                class_name: "MyOutput".to_owned(),
             })
         );
     }
@@ -1375,7 +1460,7 @@ mod tests {
         let agent = AgentDef::new("skill_agent")
             .unwrap()
             .with_framework("skill", serde_json::json!({"skillMd": "..."}));
-        assert_eq!(agent.framework, Some("skill".to_string()));
+        assert_eq!(agent.framework, Some("skill".to_owned()));
         assert_eq!(
             agent.framework_config,
             Some(serde_json::json!({"skillMd": "..."}))

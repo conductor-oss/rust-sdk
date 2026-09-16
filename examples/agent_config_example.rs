@@ -10,7 +10,6 @@ use conductor::error::Result;
 use conductor_macros::tool;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::Value;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct GetWeatherArgs {

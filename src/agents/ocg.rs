@@ -33,7 +33,7 @@ use super::tool::ToolDef;
 /// call, so relative-date queries anchor on the real current date instead of one baked in here.
 pub const OCG_SYSTEM_PROMPT: &str = "\
 Today's date is ${workflow.input.__today__} (UTC). DEFAULT: do NOT set
-start_time or end_time — OMIT BOTH ENTIRELY. Searching the full history is
+start_time or end_time \u{2014} OMIT BOTH ENTIRELY. Searching the full history is
 the norm, and an unrequested time range silently drops older context that
 is usually exactly what you need. ONLY add a time range when the user
 EXPLICITLY asks about a recent or time-bounded window (\"recent\", \"last
@@ -44,13 +44,13 @@ rejected. Never invent a range the user did not ask for.
 
 You are querying an OCG (Open Context Graph). It is a RETRIEVAL
 engine over a knowledge graph of entities (messages, channels, people)
-linked by claims and relationships — embedding/keyword search, NOT an LLM.
+linked by claims and relationships \u{2014} embedding/keyword search, NOT an LLM.
 It is NOT an aggregation engine and NOT a conversation partner: rephrasing
 the same intent returns the same results.
 
 RETRIEVAL BUDGET: make at most 3 queries total, each with a genuinely
 DIFFERENT keyword set. Never repeat or lightly rephrase a query. When the
-budget is spent — or results start repeating — STOP querying and answer
+budget is spent \u{2014} or results start repeating \u{2014} STOP querying and answer
 from what you have. Timestamps must be full RFC3339
 (2026-06-04T00:00:00Z); a bare date is rejected.
 
@@ -65,16 +65,16 @@ It CANNOT directly answer (you must do it yourself in two steps):
   - \"Group these by Y\" / \"Top N by count\"
   - Statistical or comparative questions
 
-RESPONSE SIZE: ALWAYS request max_results=100 — it is both the maximum and
+RESPONSE SIZE: ALWAYS request max_results=100 \u{2014} it is both the maximum and
 the floor for getting decent context; NEVER use a small value like 10 or
 25, which starves your answer. ALWAYS set traversal_level = 1 (never 0,
-never higher). To focus results, sharpen the KEYWORDS — never by lowering
+never higher). To focus results, sharpen the KEYWORDS \u{2014} never by lowering
 max_results or by adding an unrequested time range.
 
 DIG DEEPER: the first ocg_query is only your entry point. After it returns,
 pick the 1-3 MOST RELEVANT entities from the citations (the ones most on
-point for the question) and call ocg_neighborhood on each — using the
-entity ids from the citation rows — to pull in their linked entities
+point for the question) and call ocg_neighborhood on each \u{2014} using the
+entity ids from the citation rows \u{2014} to pull in their linked entities
 (related tickets, incidents, sub-workflows, prior fixes). The actual fix
 very often lives one hop away in a linked entity, not in the first page of
 citations. Do not answer from the initial citations alone when a clearly
@@ -85,7 +85,7 @@ For aggregation questions, use a TWO-STEP pattern:
      - Use specific terms (cluster names, error codes, channel names).
      - Use start_time (and end_time only for windows closed in the
        past) to bound the range.
-     - Avoid hedging words (\"frequently\", \"across\", \"occurrences\") —
+     - Avoid hedging words (\"frequently\", \"across\", \"occurrences\") \u{2014}
        OCG ranks by keyword presence, and these are noise tokens.
   2. AGGREGATE: count, group, rank yourself from the citation list.
 
@@ -101,7 +101,7 @@ Good (step 1): {
   \"query\": \"TIMED_OUT health check failure cluster\",
   \"max_results\": 100
 }
-(no start_time/end_time — the query runs across the full history.)
+(no start_time/end_time \u{2014} the query runs across the full history.)
 Then parse the returned citations, extract cluster names from titles,
 build the frequency table in your reasoning.";
 
@@ -130,7 +130,7 @@ fn query_tool_spec() -> OcgToolSpec {
                 "query": {"type": "string", "description": "Natural-language retrieval query."},
                 "max_results": {
                     "type": "integer",
-                    "description": "Max citations to return. ALWAYS use 100 — it is both the \
+                    "description": "Max citations to return. ALWAYS use 100 \u{2014} it is both the \
                         hard maximum and the floor for getting decent context; never request \
                         fewer.",
                     "default": 100,
@@ -139,7 +139,7 @@ fn query_tool_spec() -> OcgToolSpec {
                 },
                 "traversal_level": {
                     "type": "integer",
-                    "description": "ALWAYS 1 — pulls each citation's immediate neighborhood in \
+                    "description": "ALWAYS 1 \u{2014} pulls each citation's immediate neighborhood in \
                         alongside it. Never 0 (too shallow) and never higher (dig deeper by \
                         calling ocg_neighborhood on the most relevant entities, not by raising \
                         this).",
@@ -149,7 +149,7 @@ fn query_tool_spec() -> OcgToolSpec {
                 },
                 "start_time": {
                     "type": "string",
-                    "description": "LEAVE UNSET by default — omit it so the search covers the \
+                    "description": "LEAVE UNSET by default \u{2014} omit it so the search covers the \
                         FULL history. Set this ONLY when the user EXPLICITLY asked about a \
                         recent or time-bounded window (e.g. 'last week', 'since Friday'). \
                         RFC3339 lower bound (inclusive), e.g. 2026-06-04T00:00:00Z; a bare date \
@@ -195,7 +195,7 @@ fn neighborhood_tool_spec() -> OcgToolSpec {
         method: "GET",
         path: "/api/v1/graph/neighborhood/{entity_id}",
         description: "Get an entity plus its graph neighbors out to `depth` hops. Use limit \
-            <= 10, depth=1 on the first call — well-connected entities can have many edges and \
+            <= 10, depth=1 on the first call \u{2014} well-connected entities can have many edges and \
             large responses will be truncated.",
         schema: json!({
             "type": "object",
@@ -264,7 +264,7 @@ fn memory_set_tool_spec() -> OcgToolSpec {
                 },
                 "expires_at": {
                     "type": "string",
-                    "description": "ISO-8601 expiry. Optional — default 180 days.",
+                    "description": "ISO-8601 expiry. Optional \u{2014} default 180 days.",
                 },
                 "idempotency_key": {"type": "string", "description": "Idempotency key. Optional."},
             },
@@ -350,6 +350,10 @@ impl Default for OcgToolSelection {
 /// `credential` names a credential-store entry holding the OCG bearer token; the server
 /// resolves it at execution time, so the secret never appears in the serialized config. Errors
 /// if `url` is blank — every OCG tool set binds its own instance.
+///
+/// # Errors
+///
+/// Returns [`crate::error::ConductorError::Agent`] if `url` is blank.
 pub fn ocg_tools(
     url: impl Into<String>,
     credential: Option<&str>,
@@ -361,7 +365,7 @@ pub fn ocg_tools(
             "ocg_tools() requires a non-blank url: every OCG tool set binds its own instance.",
         ));
     }
-    let base_url = url.trim().trim_end_matches('/').to_string();
+    let base_url = url.trim().trim_end_matches('/').to_owned();
 
     let mut headers: HashMap<String, String> = HashMap::new();
     let mut credentials: Vec<String> = Vec::new();
@@ -369,10 +373,10 @@ pub fn ocg_tools(
         // Standard http-tool placeholder — resolved server-side from the credential store at
         // execution; the token never appears here.
         headers.insert(
-            "Authorization".to_string(),
+            "Authorization".to_owned(),
             format!("Bearer ${{{credential}}}"),
         );
-        credentials.push(credential.to_string());
+        credentials.push(credential.to_owned());
     }
 
     let mut specs = Vec::new();
@@ -398,7 +402,7 @@ pub fn ocg_tools(
                 spec.schema,
                 base_url.clone(),
                 spec.method,
-                Some(spec.path.to_string()),
+                Some(spec.path.to_owned()),
                 spec.query_params
                     .map(|params| params.into_iter().map(String::from).collect()),
                 headers.clone(),
@@ -427,7 +431,7 @@ pub struct OcgAgentOptions {
 impl Default for OcgAgentOptions {
     fn default() -> Self {
         Self {
-            name: "ocg_agent".to_string(),
+            name: "ocg_agent".to_owned(),
             credential: None,
             instructions: None,
             max_turns: 10,
@@ -443,6 +447,10 @@ impl Default for OcgAgentOptions {
 /// `model` is the LLM for the retrieval agent's own turns (required — the right model depends
 /// on cost/latency targets and the OCG corpus). `url` is the OCG instance base URL (required —
 /// no server-side default).
+///
+/// # Errors
+///
+/// Returns [`crate::error::ConductorError::Agent`] if `url` is blank (see [`ocg_tools`]), or if `options.name` is empty or invalid (see [`AgentDef::new`]).
 pub fn ocg_agent(
     model: impl Into<String>,
     url: impl Into<String>,
@@ -451,7 +459,7 @@ pub fn ocg_agent(
     let tools = ocg_tools(url, options.credential.as_deref(), options.tool_selection)?;
     let instructions = options
         .instructions
-        .unwrap_or_else(|| OCG_SYSTEM_PROMPT.to_string());
+        .unwrap_or_else(|| OCG_SYSTEM_PROMPT.to_owned());
     AgentDef::new(options.name)?
         .with_model(model)
         .with_instructions(instructions)
@@ -519,7 +527,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             tools[0].config.get("url"),
-            Some(&Value::String("https://ocg.example.com".to_string()))
+            Some(&Value::String("https://ocg.example.com".to_owned()))
         );
     }
 
@@ -537,11 +545,11 @@ mod tests {
         .unwrap();
         assert_eq!(
             tools[0].config.get("pathTemplate"),
-            Some(&Value::String("/api/v1/agent/query".to_string()))
+            Some(&Value::String("/api/v1/agent/query".to_owned()))
         );
         assert_eq!(
             tools[0].config.get("method"),
-            Some(&Value::String("POST".to_string()))
+            Some(&Value::String("POST".to_owned()))
         );
     }
 
@@ -576,7 +584,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(tools[0].config.get("headers").is_none());
+        assert!(!tools[0].config.contains_key("headers"));
         assert!(tools[0].credentials.is_empty());
     }
 
@@ -596,7 +604,7 @@ mod tests {
             tools[0].config.get("headers"),
             Some(&json!({"Authorization": "Bearer ${OCG_KEY}"}))
         );
-        assert_eq!(tools[0].credentials, vec!["OCG_KEY".to_string()]);
+        assert_eq!(tools[0].credentials, vec!["OCG_KEY".to_owned()]);
     }
 
     #[test]
@@ -608,8 +616,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(agent.name, "ocg_agent");
-        assert_eq!(agent.model, Some("anthropic/claude-sonnet-4-6".to_string()));
-        assert_eq!(agent.instructions, Some(OCG_SYSTEM_PROMPT.to_string()));
+        assert_eq!(agent.model, Some("anthropic/claude-sonnet-4-6".to_owned()));
+        assert_eq!(agent.instructions, Some(OCG_SYSTEM_PROMPT.to_owned()));
         assert_eq!(agent.max_turns, 10);
         assert_eq!(agent.tools.len(), 6);
     }
@@ -620,14 +628,14 @@ mod tests {
             "anthropic/claude-sonnet-4-6",
             "https://us.ocg.example.com",
             OcgAgentOptions {
-                name: "ocg_us".to_string(),
-                instructions: Some("custom prompt".to_string()),
+                name: "ocg_us".to_owned(),
+                instructions: Some("custom prompt".to_owned()),
                 ..Default::default()
             },
         )
         .unwrap();
         assert_eq!(agent.name, "ocg_us");
-        assert_eq!(agent.instructions, Some("custom prompt".to_string()));
+        assert_eq!(agent.instructions, Some("custom prompt".to_owned()));
     }
 
     #[test]

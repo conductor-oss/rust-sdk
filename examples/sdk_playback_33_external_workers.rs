@@ -1,18 +1,5 @@
-//! Reproduces `llm-recordings/33_external_workers` (from conductor-oss/conductor PR #1614).
-//! Ported from python-sdk's `examples/agents/33_external_workers.py`, with one deliberate
-//! substitution: python's `get_customer`/`check_inventory`/`process_order` are declared
-//! `@tool(external=True)` (no local implementation — some *other* process was polling for
-//! those task names when this was recorded). What matters for replaying the recorded LLM
-//! conversation is only the tool results those external workers produced, not which process
-//! executed them, so this implements them as ordinary local tools returning the exact values
-//! the recording shows, alongside the one genuinely local tool, `format_response`.
-//!
-//! `format_response`'s expected output text depends on iterating its `data` argument in the
-//! exact key order the (mocked) LLM's tool-call JSON used -- this crate's `Value::Object` (a
-//! `serde_json::Map` without the `preserve_order` feature) does not preserve wire key order, so
-//! that one recording is not expected to match here; noted rather than silently skipped.
-//!
-//! `cargo run --features agents --example sdk_playback_33_external_workers`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -37,13 +24,13 @@ struct InventoryArgs {
 }
 
 fn default_warehouse() -> String {
-    "default".to_string()
+    "default".to_owned()
 }
 
 #[derive(Deserialize)]
 struct OrderArgs {
     order_id: String,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     action: String,
 }
 

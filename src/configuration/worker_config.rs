@@ -4,37 +4,37 @@
 use std::env;
 use std::time::Duration;
 
-/// Worker configuration settings
+/// Worker configuration settings.
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
-    /// Task definition name
+    /// Task definition name.
     pub task_definition_name: String,
 
-    /// Polling interval
+    /// Polling interval.
     pub poll_interval: Duration,
 
-    /// Worker domain for task routing
+    /// Worker domain for task routing.
     pub domain: Option<String>,
 
-    /// Unique worker identifier
+    /// Unique worker identifier.
     pub worker_id: String,
 
-    /// Maximum concurrent task executions
+    /// Maximum concurrent task executions.
     pub thread_count: usize,
 
-    /// Auto-register task definition on startup
+    /// Auto-register task definition on startup.
     pub register_task_def: bool,
 
-    /// Overwrite existing task definitions when registering
+    /// Overwrite existing task definitions when registering.
     pub overwrite_task_def: bool,
 
-    /// Enforce strict schema validation (additionalProperties=false)
+    /// Enforce strict schema validation (additionalProperties=false).
     pub strict_schema: bool,
 
-    /// Poll timeout
+    /// Poll timeout.
     pub poll_timeout: Duration,
 
-    /// Whether the worker is paused
+    /// Whether the worker is paused.
     pub paused: bool,
 }
 
@@ -56,7 +56,7 @@ impl Default for WorkerConfig {
 }
 
 impl WorkerConfig {
-    /// Create a new worker config with the given task name
+    /// Create a new worker config with the given task name.
     pub fn new(task_definition_name: impl Into<String>) -> Self {
         Self {
             task_definition_name: task_definition_name.into(),
@@ -64,61 +64,70 @@ impl WorkerConfig {
         }
     }
 
-    /// Set poll interval
+    /// Set poll interval.
+    #[must_use]
     pub fn with_poll_interval(mut self, interval: Duration) -> Self {
         self.poll_interval = interval;
         self
     }
 
-    /// Set poll interval in milliseconds
+    /// Set poll interval in milliseconds.
+    #[must_use]
     pub fn with_poll_interval_millis(mut self, millis: u64) -> Self {
         self.poll_interval = Duration::from_millis(millis);
         self
     }
 
-    /// Set domain
+    /// Set domain.
+    #[must_use]
     pub fn with_domain(mut self, domain: impl Into<String>) -> Self {
         self.domain = Some(domain.into());
         self
     }
 
-    /// Set worker ID
+    /// Set worker ID.
+    #[must_use]
     pub fn with_worker_id(mut self, worker_id: impl Into<String>) -> Self {
         self.worker_id = worker_id.into();
         self
     }
 
-    /// Set thread count (max concurrent executions)
+    /// Set thread count (max concurrent executions).
+    #[must_use]
     pub fn with_thread_count(mut self, count: usize) -> Self {
         self.thread_count = count;
         self
     }
 
-    /// Enable task definition registration
+    /// Enable task definition registration.
+    #[must_use]
     pub fn with_register_task_def(mut self, register: bool) -> Self {
         self.register_task_def = register;
         self
     }
 
-    /// Set poll timeout
+    /// Set poll timeout.
+    #[must_use]
     pub fn with_poll_timeout(mut self, timeout: Duration) -> Self {
         self.poll_timeout = timeout;
         self
     }
 
-    /// Enable strict schema validation
+    /// Enable strict schema validation.
+    #[must_use]
     pub fn with_strict_schema(mut self, strict: bool) -> Self {
         self.strict_schema = strict;
         self
     }
 }
 
-/// Resolve worker configuration from environment variables
+/// Resolve worker configuration from environment variables.
 ///
 /// This follows the Python SDK's hierarchical configuration pattern:
 /// 1. Worker-specific env: `CONDUCTOR_WORKER_{WORKER_NAME}_{PROPERTY}`
 /// 2. Global env: `CONDUCTOR_WORKER_ALL_{PROPERTY}`
 /// 3. Code defaults
+#[must_use]
 pub fn resolve_worker_config(worker_name: &str, defaults: WorkerConfig) -> WorkerConfig {
     let worker_name_upper = worker_name.to_uppercase().replace('-', "_");
 
@@ -161,24 +170,25 @@ pub fn resolve_worker_config(worker_name: &str, defaults: WorkerConfig) -> Worke
     }
 }
 
-/// Generate a unique worker ID
+/// Generate a unique worker ID.
 fn generate_worker_id() -> String {
-    let hostname = hostname::get()
-        .map(|h| h.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| "unknown".to_string());
+    let hostname = hostname::get().map_or_else(
+        |_| "unknown".to_owned(),
+        |h| h.to_string_lossy().into_owned(),
+    );
     let pid = std::process::id();
-    format!("{}-{}", hostname, pid)
+    format!("{hostname}-{pid}")
 }
 
-/// Resolve a string value from environment
+/// Resolve a string value from environment.
 fn resolve_string(worker_name: &str, property: &str, default: String) -> String {
     // Try worker-specific first
-    if let Ok(val) = env::var(format!("CONDUCTOR_WORKER_{}_{}", worker_name, property)) {
+    if let Ok(val) = env::var(format!("CONDUCTOR_WORKER_{worker_name}_{property}")) {
         return val;
     }
 
     // Try global
-    if let Ok(val) = env::var(format!("CONDUCTOR_WORKER_ALL_{}", property)) {
+    if let Ok(val) = env::var(format!("CONDUCTOR_WORKER_ALL_{property}")) {
         return val;
     }
 
@@ -200,19 +210,19 @@ fn resolve_string(worker_name: &str, property: &str, default: String) -> String 
     default
 }
 
-/// Resolve an optional string value
+/// Resolve an optional string value.
 fn resolve_string_option(
     worker_name: &str,
     property: &str,
     default: Option<String>,
 ) -> Option<String> {
     // Try worker-specific first
-    if let Ok(val) = env::var(format!("CONDUCTOR_WORKER_{}_{}", worker_name, property)) {
+    if let Ok(val) = env::var(format!("CONDUCTOR_WORKER_{worker_name}_{property}")) {
         return Some(val);
     }
 
     // Try global
-    if let Ok(val) = env::var(format!("CONDUCTOR_WORKER_ALL_{}", property)) {
+    if let Ok(val) = env::var(format!("CONDUCTOR_WORKER_ALL_{property}")) {
         return Some(val);
     }
 
@@ -234,19 +244,19 @@ fn resolve_string_option(
     default
 }
 
-/// Resolve a usize value from environment
+/// Resolve a usize value from environment.
 fn resolve_usize(worker_name: &str, property: &str, default: usize) -> usize {
     let value = resolve_string(worker_name, property, default.to_string());
     value.parse().unwrap_or(default)
 }
 
-/// Resolve a boolean value from environment
+/// Resolve a boolean value from environment.
 fn resolve_bool(worker_name: &str, property: &str, default: bool) -> bool {
     let value = resolve_string(worker_name, property, default.to_string());
     matches!(value.to_lowercase().as_str(), "true" | "1" | "yes")
 }
 
-/// Resolve a duration in milliseconds
+/// Resolve a duration in milliseconds.
 fn resolve_duration_millis(worker_name: &str, property: &str, default_millis: u64) -> Duration {
     let millis = resolve_usize(worker_name, property, default_millis as usize);
     Duration::from_millis(millis as u64)
@@ -274,7 +284,7 @@ mod tests {
         assert_eq!(config.task_definition_name, "test_task");
         assert_eq!(config.thread_count, 5);
         assert_eq!(config.poll_interval.as_millis(), 500);
-        assert_eq!(config.domain, Some("production".to_string()));
+        assert_eq!(config.domain, Some("production".to_owned()));
     }
 
     #[test]

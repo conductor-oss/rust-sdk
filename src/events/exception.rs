@@ -14,6 +14,7 @@ use crate::error::ConductorError;
 ///
 /// Returns the unqualified variant name (e.g. `"Http"`, `"Json"`, `"Auth"`),
 /// which is stable, compact, and bounded in cardinality.
+#[must_use]
 pub fn exception_label(err: &ConductorError) -> &'static str {
     match err {
         ConductorError::Http(_) => "Http",
@@ -46,7 +47,10 @@ pub fn exception_label(err: &ConductorError) -> &'static str {
 /// and nested types still produce a single, short label value. Intended for
 /// values that aren't `ConductorError` — for those, prefer [`exception_label`]
 /// which is guaranteed to be `&'static str` and doesn't allocate.
-pub fn type_name_of<T: ?Sized>(_value: &T) -> &'static str {
+pub fn type_name_of<T>(_value: &T) -> &'static str
+where
+    T: ?Sized,
+{
     last_type_segment(std::any::type_name::<T>())
 }
 

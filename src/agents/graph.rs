@@ -23,7 +23,7 @@ use super::tool::ToolDef;
 /// predicate needs and forcing callers to know that node's name to look it up in `accumulated`
 /// would be needless ceremony.
 ///
-/// **Out of scope / deferred**: shared-state-across-nodes reducers (LangGraph's `StateGraph`
+/// **Out of scope / deferred**: shared-state-across-nodes reducers (`LangGraph`'s `StateGraph`
 /// state-channel/reducer machinery, where each node's return value is merged into shared state via
 /// a per-key reduce function) are not modeled here. `accumulated` is a plain last-write-wins map a
 /// caller populates however it sees fit between node executions; there is no `AgentRuntime` yet to
@@ -48,14 +48,14 @@ pub struct GraphContext {
 /// `SwarmConditionFn` returns `bool` because a `SwarmTransition` variant already carries its own
 /// single fixed `target`, so the closure only ever needs to answer "does *this* transition fire."
 /// A graph node, by contrast, may have edges to several differently-named targets from one
-/// conditional branch point (LangGraph's `add_conditional_edges(source, path_fn, path_map)|`
+/// conditional branch point (`LangGraph`'s `add_conditional_edges(source, path_fn, path_map)|`
 /// shape); a `bool` predicate cannot select *among* them; it can only gate a single fixed target.
 /// So this type returns the chosen target's `String` name directly instead.
 pub type GraphConditionFn = Arc<dyn Fn(&GraphContext) -> String + Send + Sync>;
 
 /// A single node in a [`GraphAgentDef`].
 ///
-/// Three variants, mirroring the three things a LangGraph node concretely is in practice:
+/// Three variants, mirroring the three things a `LangGraph` node concretely is in practice:
 ///
 /// - [`GraphNode::Agent`]: an LLM/agent call — boxed like [`AgentDef::router`]/
 ///   [`AgentDef::planner`]'s sub-agent nesting, for the same reason (an `AgentDef` embedding
@@ -97,6 +97,7 @@ pub enum GraphNode {
 
 impl GraphNode {
     /// The node's name, common to every variant.
+    #[must_use]
     pub fn name(&self) -> &str {
         match self {
             GraphNode::Agent { name, .. } => name,
@@ -173,7 +174,7 @@ impl std::fmt::Debug for ConditionalGraphEdge {
 ///   replacement for [`AgentDef`]'s `Strategy`-based orchestration (`Sequential`/`Parallel`/
 ///   `Router`/etc.), and not intended to grow into one.
 /// - It is **explicitly authored, not extracted**. Unlike a hypothetical adapter that reads
-///   structure out of a compiled LangGraph `StateGraph`, there is no bytecode/closure
+///   structure out of a compiled `LangGraph` `StateGraph`, there is no bytecode/closure
 ///   introspection here (Rust has no analog for that even if it were desired — see
 ///   `docs/agents/framework-support.md`'s Phase 2 entry) — a caller builds a `GraphAgentDef`
 ///   directly, node by node, edge by edge.
@@ -183,10 +184,10 @@ impl std::fmt::Debug for ConditionalGraphEdge {
 ///   verified against whatever shape the Conductor server actually expects for graph-based
 ///   execution — there is no server-side graph-execution contract this shape has been checked
 ///   against yet. Do not assume a server can execute this JSON as-is.
-/// - This is **not** feature-complete parity with python-sdk's LangGraph support (which itself
+/// - This is **not** feature-complete parity with python-sdk's `LangGraph` support (which itself
 ///   works by extracting structure from an already-compiled external graph, a fundamentally
 ///   different mechanism than this explicitly-authored type).
-/// - Shared-state-across-nodes (state reducers, LangGraph's per-key merge-function channels) is a
+/// - Shared-state-across-nodes (state reducers, `LangGraph`'s per-key merge-function channels) is a
 ///   **deferred follow-up** — see [`GraphContext`]'s doc comment.
 ///
 /// Construct via [`GraphAgentDef::new`], compose with consuming `with_*` builders (matching
@@ -215,6 +216,10 @@ impl GraphAgentDef {
     /// Create a new, empty graph definition. Validates `name` against
     /// `^[a-zA-Z_][a-zA-Z0-9_-]*$` up front, mirroring [`AgentDef::new`]'s validation exactly
     /// (same rationale: the name doubles as the Conductor workflow name once compiled).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `name` does not match `^[a-zA-Z_][a-zA-Z0-9_-]*$`.
     pub fn new(name: impl Into<String>) -> Result<Self> {
         let name = name.into();
         if !is_valid_graph_name(&name) {
@@ -232,6 +237,10 @@ impl GraphAgentDef {
 
     /// Add a node. Fails if its name collides with an already-added node's name (matches
     /// [`AgentDef::with_sub_agent`]'s duplicate-name check, moved to construction time).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if a node with the same name was already added.
     pub fn with_node(mut self, node: GraphNode) -> Result<Self> {
         if self.nodes.iter().any(|n| n.name() == node.name()) {
             return Err(ConductorError::agent(format!(
@@ -247,6 +256,10 @@ impl GraphAgentDef {
     /// name a node added via [`GraphAgentDef::with_node`] — mirroring
     /// [`AgentDef::with_sub_agent`]'s "reject the invalid state at build time" convention rather
     /// than allowing a dangling edge to only surface as a failure at execution time.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `source` or `target` does not name a node added via [`GraphAgentDef::with_node`].
     pub fn with_edge(
         mut self,
         source: impl Into<String>,
@@ -263,6 +276,10 @@ impl GraphAgentDef {
     /// Add a conditional edge from `source`, routing at runtime to one of `targets` via
     /// `condition`. Fails fast if `source` or any entry in `targets` does not already name a node
     /// added via [`GraphAgentDef::with_node`] — same rationale as [`GraphAgentDef::with_edge`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `source` or any entry in `targets` does not name a node added via [`GraphAgentDef::with_node`].
     pub fn with_conditional_edge(
         mut self,
         source: impl Into<String>,
@@ -301,17 +318,17 @@ impl GraphAgentDef {
     /// [`AgentConfigSerializer::serialize`] so this file requires no change to `serializer.rs`.
     pub fn serialize(&self) -> Value {
         let mut map = Map::new();
-        map.insert("name".to_string(), Value::String(self.name.clone()));
+        map.insert("name".to_owned(), Value::String(self.name.clone()));
         map.insert(
-            "nodes".to_string(),
+            "nodes".to_owned(),
             Value::Array(self.nodes.iter().map(serialize_node).collect()),
         );
         map.insert(
-            "edges".to_string(),
+            "edges".to_owned(),
             Value::Array(self.edges.iter().map(serialize_edge).collect()),
         );
         map.insert(
-            "conditionalEdges".to_string(),
+            "conditionalEdges".to_owned(),
             Value::Array(
                 self.conditional_edges
                     .iter()
@@ -325,19 +342,19 @@ impl GraphAgentDef {
 
 fn serialize_node(node: &GraphNode) -> Value {
     let mut map = Map::new();
-    map.insert("name".to_string(), Value::String(node.name().to_string()));
+    map.insert("name".to_owned(), Value::String(node.name().to_owned()));
     match node {
         GraphNode::Agent { agent, .. } => {
-            map.insert("kind".to_string(), Value::String("agent".to_string()));
-            map.insert("agent".to_string(), AgentConfigSerializer::serialize(agent));
+            map.insert("kind".to_owned(), Value::String("agent".to_owned()));
+            map.insert("agent".to_owned(), AgentConfigSerializer::serialize(agent));
         }
         GraphNode::Tool { tool, .. } => {
-            map.insert("kind".to_string(), Value::String("tool".to_string()));
-            map.insert("tool".to_string(), Value::String(tool.name.clone()));
+            map.insert("kind".to_owned(), Value::String("tool".to_owned()));
+            map.insert("tool".to_owned(), Value::String(tool.name.clone()));
         }
         GraphNode::Human { prompt, .. } => {
-            map.insert("kind".to_string(), Value::String("human".to_string()));
-            map.insert("prompt".to_string(), Value::String(prompt.clone()));
+            map.insert("kind".to_owned(), Value::String("human".to_owned()));
+            map.insert("prompt".to_owned(), Value::String(prompt.clone()));
         }
     }
     Value::Object(map)
@@ -345,16 +362,16 @@ fn serialize_node(node: &GraphNode) -> Value {
 
 fn serialize_edge(edge: &GraphEdge) -> Value {
     let mut map = Map::new();
-    map.insert("source".to_string(), Value::String(edge.source.clone()));
-    map.insert("target".to_string(), Value::String(edge.target.clone()));
+    map.insert("source".to_owned(), Value::String(edge.source.clone()));
+    map.insert("target".to_owned(), Value::String(edge.target.clone()));
     Value::Object(map)
 }
 
 fn serialize_conditional_edge(edge: &ConditionalGraphEdge) -> Value {
     let mut map = Map::new();
-    map.insert("source".to_string(), Value::String(edge.source.clone()));
+    map.insert("source".to_owned(), Value::String(edge.source.clone()));
     map.insert(
-        "targets".to_string(),
+        "targets".to_owned(),
         Value::Array(edge.targets.iter().cloned().map(Value::String).collect()),
     );
     Value::Object(map)
@@ -379,10 +396,10 @@ mod tests {
 
     #[test]
     fn test_new_validates_name() {
-        assert!(GraphAgentDef::new("valid_name-1").is_ok());
-        assert!(GraphAgentDef::new("1invalid").is_err());
-        assert!(GraphAgentDef::new("in valid").is_err());
-        assert!(GraphAgentDef::new("").is_err());
+        GraphAgentDef::new("valid_name-1").unwrap();
+        GraphAgentDef::new("1invalid").unwrap_err();
+        GraphAgentDef::new("in valid").unwrap_err();
+        GraphAgentDef::new("").unwrap_err();
     }
 
     #[test]
@@ -411,9 +428,9 @@ mod tests {
                 vec!["file_ticket", "triage"],
                 Arc::new(|ctx: &GraphContext| {
                     if ctx.last_output.is_some() {
-                        "file_ticket".to_string()
+                        "file_ticket".to_owned()
                     } else {
-                        "triage".to_string()
+                        "triage".to_owned()
                     }
                 }),
             )
@@ -437,8 +454,8 @@ mod tests {
                 prompt: "hi".into(),
             })
             .unwrap();
-        assert!(graph.clone().with_edge("a", "does_not_exist").is_err());
-        assert!(graph.with_edge("does_not_exist", "a").is_err());
+        graph.clone().with_edge("a", "does_not_exist").unwrap_err();
+        graph.with_edge("does_not_exist", "a").unwrap_err();
     }
 
     #[test]
@@ -453,9 +470,9 @@ mod tests {
         let result = graph.with_conditional_edge(
             "a",
             vec!["a", "missing"],
-            Arc::new(|_: &GraphContext| "a".to_string()),
+            Arc::new(|_: &GraphContext| "a".to_owned()),
         );
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     #[test]
@@ -471,7 +488,7 @@ mod tests {
             name: "a".into(),
             prompt: "bye".into(),
         });
-        assert!(dup.is_err());
+        dup.unwrap_err();
     }
 
     #[test]
@@ -493,25 +510,22 @@ mod tests {
             .with_conditional_edge(
                 "human",
                 vec!["llm"],
-                Arc::new(|_: &GraphContext| "llm".to_string()),
+                Arc::new(|_: &GraphContext| "llm".to_owned()),
             )
             .unwrap();
 
         let json = graph.serialize();
         let obj = json.as_object().unwrap();
 
-        assert_eq!(obj.get("name"), Some(&Value::String("g".to_string())));
+        assert_eq!(obj.get("name"), Some(&Value::String("g".to_owned())));
 
         let nodes = obj.get("nodes").unwrap().as_array().unwrap();
         assert_eq!(nodes.len(), 2);
         let llm_node = nodes[0].as_object().unwrap();
-        assert_eq!(
-            llm_node.get("name"),
-            Some(&Value::String("llm".to_string()))
-        );
+        assert_eq!(llm_node.get("name"), Some(&Value::String("llm".to_owned())));
         assert_eq!(
             llm_node.get("kind"),
-            Some(&Value::String("agent".to_string()))
+            Some(&Value::String("agent".to_owned()))
         );
         assert_eq!(
             llm_node
@@ -520,16 +534,16 @@ mod tests {
                 .as_object()
                 .unwrap()
                 .get("name"),
-            Some(&Value::String("triage".to_string()))
+            Some(&Value::String("triage".to_owned()))
         );
         let human_node = nodes[1].as_object().unwrap();
         assert_eq!(
             human_node.get("kind"),
-            Some(&Value::String("human".to_string()))
+            Some(&Value::String("human".to_owned()))
         );
         assert_eq!(
             human_node.get("prompt"),
-            Some(&Value::String("clarify?".to_string()))
+            Some(&Value::String("clarify?".to_owned()))
         );
 
         let edges = obj.get("edges").unwrap().as_array().unwrap();
@@ -554,7 +568,7 @@ mod tests {
                 prompt: "hi".into(),
             })
             .unwrap()
-            .with_conditional_edge("a", vec!["a"], Arc::new(|_: &GraphContext| "a".to_string()))
+            .with_conditional_edge("a", vec!["a"], Arc::new(|_: &GraphContext| "a".to_owned()))
             .unwrap();
         let debug_str = format!("{graph:?}");
         assert!(debug_str.contains("GraphAgentDef"));

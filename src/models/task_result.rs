@@ -4,85 +4,85 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Status of a task result
+/// Status of a task result.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TaskResultStatus {
-    /// Task completed successfully
+    /// Task completed successfully.
     #[default]
     Completed,
-    /// Task failed (may be retried)
+    /// Task failed (may be retried).
     Failed,
-    /// Task failed with terminal error (no retry)
+    /// Task failed with terminal error (no retry).
     FailedWithTerminalError,
-    /// Task is still in progress
+    /// Task is still in progress.
     InProgress,
 }
 
-/// Result of a task execution
+/// Result of a task execution.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskResult {
-    /// Task ID
+    /// Task ID.
     pub task_id: String,
 
-    /// Workflow instance ID
+    /// Workflow instance ID.
     pub workflow_instance_id: String,
 
-    /// Worker ID that executed the task
+    /// Worker ID that executed the task.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worker_id: Option<String>,
 
-    /// Task execution status
+    /// Task execution status.
     pub status: TaskResultStatus,
 
-    /// Output data from the task
+    /// Output data from the task.
     #[serde(default)]
     pub output_data: HashMap<String, serde_json::Value>,
 
-    /// Reason for failure (if failed)
+    /// Reason for failure (if failed).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason_for_incompletion: Option<String>,
 
-    /// Callback after seconds (for IN_PROGRESS tasks)
+    /// Callback after seconds (for `IN_PROGRESS` tasks).
     #[serde(default)]
     pub callback_after_seconds: i64,
 
-    /// Logs from task execution
+    /// Logs from task execution.
     #[serde(default)]
     pub logs: Vec<TaskExecLog>,
 
-    /// External output payload storage path
+    /// External output payload storage path.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_output_payload_storage_path: Option<String>,
 
-    /// Subworkflow ID (for subworkflow tasks)
+    /// Subworkflow ID (for subworkflow tasks).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_workflow_id: Option<String>,
 
-    /// Extend lease (keep-alive for long-running tasks)
+    /// Extend lease (keep-alive for long-running tasks).
     #[serde(default)]
     pub extend_lease: bool,
 }
 
-/// Task execution log entry
+/// Task execution log entry.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskExecLog {
-    /// Log message
+    /// Log message.
     pub log: String,
 
-    /// Task ID
+    /// Task ID.
     #[serde(default)]
     pub task_id: String,
 
-    /// Created time
+    /// Created time.
     #[serde(default)]
     pub created_time: i64,
 }
 
 impl TaskResult {
-    /// Create a new completed task result
+    /// Create a new completed task result.
     pub fn completed(task_id: impl Into<String>, workflow_instance_id: impl Into<String>) -> Self {
         Self {
             task_id: task_id.into(),
@@ -92,7 +92,7 @@ impl TaskResult {
         }
     }
 
-    /// Create a new failed task result
+    /// Create a new failed task result.
     pub fn failed(
         task_id: impl Into<String>,
         workflow_instance_id: impl Into<String>,
@@ -107,7 +107,7 @@ impl TaskResult {
         }
     }
 
-    /// Create an in-progress task result (for long-running tasks)
+    /// Create an in-progress task result (for long-running tasks).
     pub fn in_progress(
         task_id: impl Into<String>,
         workflow_instance_id: impl Into<String>,
@@ -122,19 +122,22 @@ impl TaskResult {
         }
     }
 
-    /// Set worker ID
+    /// Set worker ID.
+    #[must_use]
     pub fn with_worker_id(mut self, worker_id: impl Into<String>) -> Self {
         self.worker_id = Some(worker_id.into());
         self
     }
 
-    /// Set output data
+    /// Set output data.
+    #[must_use]
     pub fn with_output(mut self, output: HashMap<String, serde_json::Value>) -> Self {
         self.output_data = output;
         self
     }
 
-    /// Set a single output value
+    /// Set a single output value.
+    #[must_use]
     pub fn with_output_value(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
         self.output_data.insert(
             key.into(),
@@ -143,7 +146,8 @@ impl TaskResult {
         self
     }
 
-    /// Add a log entry
+    /// Add a log entry.
+    #[must_use]
     pub fn with_log(mut self, log: impl Into<String>) -> Self {
         self.logs.push(TaskExecLog {
             log: log.into(),
@@ -153,34 +157,37 @@ impl TaskResult {
         self
     }
 
-    /// Set failure reason
+    /// Set failure reason.
+    #[must_use]
     pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
         self.reason_for_incompletion = Some(reason.into());
         self
     }
 
-    /// Extend the lease (for long-running tasks)
+    /// Extend the lease (for long-running tasks).
+    #[must_use]
     pub fn with_extend_lease(mut self, extend: bool) -> Self {
         self.extend_lease = extend;
         self
     }
 }
 
-/// Task in progress marker for long-running tasks
+/// Task in progress marker for long-running tasks.
 ///
 /// Return this from a worker to indicate the task is still processing
 /// and should be polled again after `callback_after_seconds`.
 #[derive(Debug, Clone)]
 pub struct TaskInProgress {
-    /// Seconds until the task should be polled again
+    /// Seconds until the task should be polled again.
     pub callback_after_seconds: i64,
 
-    /// Intermediate output data
+    /// Intermediate output data.
     pub output: HashMap<String, serde_json::Value>,
 }
 
 impl TaskInProgress {
-    /// Create a new task in progress marker
+    /// Create a new task in progress marker.
+    #[must_use]
     pub fn new(callback_after_seconds: i64) -> Self {
         Self {
             callback_after_seconds,
@@ -188,13 +195,15 @@ impl TaskInProgress {
         }
     }
 
-    /// Add intermediate output data
+    /// Add intermediate output data.
+    #[must_use]
     pub fn with_output(mut self, output: HashMap<String, serde_json::Value>) -> Self {
         self.output = output;
         self
     }
 
-    /// Add a single output value
+    /// Add a single output value.
+    #[must_use]
     pub fn with_output_value(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
         self.output.insert(
             key.into(),
@@ -225,7 +234,7 @@ mod tests {
 
         assert_eq!(result.task_id, "task-1");
         assert_eq!(result.status, TaskResultStatus::Completed);
-        assert_eq!(result.worker_id, Some("worker-1".to_string()));
+        assert_eq!(result.worker_id, Some("worker-1".to_owned()));
         assert!(result.output_data.contains_key("result"));
     }
 
@@ -236,7 +245,7 @@ mod tests {
         assert_eq!(result.status, TaskResultStatus::Failed);
         assert_eq!(
             result.reason_for_incompletion,
-            Some("Something went wrong".to_string())
+            Some("Something went wrong".to_owned())
         );
     }
 

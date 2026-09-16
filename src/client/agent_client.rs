@@ -24,30 +24,47 @@ pub struct AgentClient {
 
 impl AgentClient {
     /// Create a new agent client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self { api }
     }
 
     /// Compile an agent definition into a Conductor workflow, without deploying it.
-    /// `POST /agent/compile`
+    /// `POST /agent/compile`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn compile_agent(&self, payload: &Value) -> Result<Value> {
         self.api.post("/agent/compile", payload).await
     }
 
     /// Compile and register an agent definition as a Conductor workflow.
-    /// `POST /agent/deploy`
+    /// `POST /agent/deploy`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn deploy_agent(&self, payload: &Value) -> Result<Value> {
         self.api.post("/agent/deploy", payload).await
     }
 
     /// Start an agent execution.
-    /// `POST /agent/start`
+    /// `POST /agent/start`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn start_agent(&self, payload: &Value) -> Result<Value> {
         self.api.post("/agent/start", payload).await
     }
 
     /// Get the current status of an agent execution.
-    /// `GET /agent/{execution_id}/status`
+    /// `GET /agent/{execution_id}/status`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_status(&self, execution_id: &str) -> Result<Value> {
         let path = format!("/agent/{execution_id}/status");
         self.api
@@ -56,7 +73,11 @@ impl AgentClient {
     }
 
     /// Get the full execution record for an agent execution.
-    /// `GET /agent/execution/{execution_id}`
+    /// `GET /agent/execution/{execution_id}`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_execution(&self, execution_id: &str) -> Result<Value> {
         let path = format!("/agent/execution/{execution_id}");
         self.api
@@ -65,13 +86,21 @@ impl AgentClient {
     }
 
     /// List agent executions matching the given query parameters.
-    /// `GET /agent/executions`
+    /// `GET /agent/executions`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn list_executions(&self, params: &[(&str, &str)]) -> Result<Value> {
         self.api.get_with_params("/agent/executions", params).await
     }
 
     /// Respond to a pending human-in-the-loop request on an agent execution.
-    /// `POST /agent/{execution_id}/respond`
+    /// `POST /agent/{execution_id}/respond`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn respond(&self, execution_id: &str, body: &Value) -> Result<()> {
         let path = format!("/agent/{execution_id}/respond");
         self.api
@@ -83,7 +112,11 @@ impl AgentClient {
     }
 
     /// Stop a running agent execution.
-    /// `POST /agent/{execution_id}/stop`
+    /// `POST /agent/{execution_id}/stop`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn stop(&self, execution_id: &str) -> Result<()> {
         let path = format!("/agent/{execution_id}/stop");
         self.api
@@ -92,7 +125,11 @@ impl AgentClient {
     }
 
     /// Send an out-of-band signal message to a running agent execution.
-    /// `POST /agent/{execution_id}/signal`
+    /// `POST /agent/{execution_id}/signal`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn signal(&self, execution_id: &str, message: &str) -> Result<()> {
         let path = format!("/agent/{execution_id}/signal");
         let body = serde_json::json!({ "message": message });
@@ -109,6 +146,10 @@ impl AgentClient {
     ///
     /// Returns the raw [`reqwest::Response`]; wrap it in `crate::agents::AgentStream` to decode
     /// SSE frames into `crate::agents::AgentEvent`s.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn stream(&self, execution_id: &str) -> Result<reqwest::Response> {
         let path = format!("/agent/stream/{execution_id}");
         self.api
@@ -122,6 +163,10 @@ impl AgentClient {
     /// subprocess loop outside Conductor's normal task lifecycle — e.g. the Claude Agent SDK
     /// passthrough transport (`crate::agents::claude_agent_sdk`, `claude-agent-sdk` feature) —
     /// to surface what's happening inside that loop to the Conductor UI/API in near-real-time.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn push_event(&self, execution_id: &str, event: &Value) -> Result<()> {
         let path = format!("/agent/events/{execution_id}");
         self.api

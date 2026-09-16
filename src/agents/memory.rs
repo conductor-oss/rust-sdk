@@ -33,6 +33,7 @@ pub enum MessageRole {
 
 impl MessageRole {
     /// Wire-format string, matching python-sdk's role values exactly.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             MessageRole::User => "user",
@@ -98,12 +99,14 @@ pub struct ConversationMemory {
 
 impl ConversationMemory {
     /// Create an empty conversation memory with no bound on message count.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the maximum number of messages to retain; oldest non-system messages are trimmed
-    /// first once this is exceeded. See [`ConversationMemory::trim`].
+    /// first once this is exceeded. See `ConversationMemory::trim`.
+    #[must_use]
     pub fn with_max_messages(mut self, max_messages: u32) -> Self {
         self.max_messages = Some(max_messages);
         self
@@ -169,6 +172,7 @@ impl ConversationMemory {
 
     /// Return a clone of the accumulated messages. Matches python's `to_chat_messages`, which
     /// deep-copies so callers can't mutate this memory's history through the returned list.
+    #[must_use]
     pub fn to_chat_messages(&self) -> Vec<Message> {
         self.messages.clone()
     }

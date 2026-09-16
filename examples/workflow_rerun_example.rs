@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let workflow_id = &workflow_run.workflow_id;
-    println!("Workflow started: {}", workflow_id);
+    println!("Workflow started: {workflow_id}");
     println!("Monitor at: {}/execution/{}", config.ui_host, workflow_id);
 
     // Complete first task
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let update = WorkflowStateUpdate {
-        task_reference_name: Some("simple_task_ref1_case1_1".to_string()),
+        task_reference_name: Some("simple_task_ref1_case1_1".to_owned()),
         task_result: Some(task_result.clone()),
         variables: HashMap::new(),
     };
@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .update_state(
             workflow_id,
             &update,
-            Some(&["simple_task_ref1_case1_2".to_string()]),
+            Some(&["simple_task_ref1_case1_2".to_owned()]),
             Some(5),
         )
         .await?;
@@ -94,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Complete second task
     println!("Completing simple_task_ref1_case1_2...");
     let update2 = WorkflowStateUpdate {
-        task_reference_name: Some("simple_task_ref1_case1_2".to_string()),
+        task_reference_name: Some("simple_task_ref1_case1_2".to_owned()),
         task_result: Some(task_result.clone()),
         variables: HashMap::new(),
     };
@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .update_state(
             workflow_id,
             &update2,
-            Some(&["simple_task_ref2_case1_1".to_string()]),
+            Some(&["simple_task_ref2_case1_1".to_owned()]),
             Some(5),
         )
         .await?;
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rerun_from_task_id = &rerun_task.task_id;
 
     println!("\n--- Rerunning workflow from simple_task_ref1_case1_2 ---");
-    println!("Task ID: {}", rerun_from_task_id);
+    println!("Task ID: {rerun_from_task_id}");
 
     // Rerun the workflow from the second task
     workflow_client

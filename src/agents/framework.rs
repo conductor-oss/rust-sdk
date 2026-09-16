@@ -7,11 +7,11 @@ use super::def::AgentDef;
 use super::tool::ToolDef;
 
 /// Generic adapter interface for an agent construct authored against someone else's agent SDK
-/// (an `openai-agents` `Agent`, a LangGraph graph, a Claude Agent SDK session, ...) — see
+/// (an `openai-agents` `Agent`, a `LangGraph` graph, a Claude Agent SDK session, ...) — see
 /// `docs/agents/parity-plan.md`'s "Frameworks" section for the phasing across frameworks. A type
 /// implementing this trait exposes just enough of its own shape (name, instructions/system
 /// prompt, model, tool definitions) for this crate to build an [`AgentDef`] from it, without this
-/// crate depending on the source framework's crate at all — [`super::framework_openai`] is the
+/// crate depending on the source framework's crate at all — `super::framework_openai` is the
 /// one concrete, feature-gated adapter that currently exists (for `async-openai`'s tool shape);
 /// nothing here depends on it.
 ///
@@ -67,6 +67,10 @@ pub trait FrameworkAgent {
 
     /// Converts this framework-authored agent into an [`AgentDef`] — see the trait doc comment
     /// for why this is a default method rather than a `std::convert::TryFrom` impl.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if [`AgentDef::new`] rejects `self.name()` (empty or invalid characters).
     fn try_into_agent_def(self) -> Result<AgentDef>
     where
         Self: Sized,
@@ -119,8 +123,8 @@ mod tests {
 
     fn bare_tool(name: &str) -> ToolDef {
         ToolDef {
-            name: name.to_string(),
-            description: "a bare tool".to_string(),
+            name: name.to_owned(),
+            description: "a bare tool".to_owned(),
             input_schema: Value::Null,
             output_schema: Value::Null,
             tool_type: ToolType::Worker,
@@ -139,9 +143,9 @@ mod tests {
     #[test]
     fn test_try_into_agent_def_maps_expected_fields() {
         let source = MinimalFrameworkAgent {
-            name: "researcher".to_string(),
-            instructions: Some("Find things out.".to_string()),
-            model: Some("openai/gpt-4o".to_string()),
+            name: "researcher".to_owned(),
+            instructions: Some("Find things out.".to_owned()),
+            model: Some("openai/gpt-4o".to_owned()),
             tools: vec![bare_tool("search")],
         };
 
@@ -157,12 +161,12 @@ mod tests {
     #[test]
     fn test_try_into_agent_def_rejects_invalid_name() {
         let source = MinimalFrameworkAgent {
-            name: "1-invalid".to_string(),
+            name: "1-invalid".to_owned(),
             instructions: None,
             model: None,
             tools: Vec::new(),
         };
 
-        assert!(source.try_into_agent_def().is_err());
+        source.try_into_agent_def().unwrap_err();
     }
 }

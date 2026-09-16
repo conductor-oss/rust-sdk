@@ -91,17 +91,18 @@ impl AgentStatus {
                 .get("status")
                 .and_then(Value::as_str)
                 .unwrap_or("UNKNOWN")
-                .to_string(),
+                .to_owned(),
             reason: data
                 .get("reasonForIncompletion")
                 .and_then(Value::as_str)
-                .map(str::to_string),
+                .map(str::to_owned),
             pending_tool: data.get("pendingTool").cloned(),
         }
     }
 
     /// `true` once this snapshot is terminal — mirrors python's `_poll_status_until_complete`,
     /// which stops polling on `status.is_complete`.
+    #[must_use]
     pub fn is_terminal(&self) -> bool {
         self.is_complete
     }
@@ -135,6 +136,7 @@ pub struct AgentResult {
 impl AgentResult {
     /// Build from a terminal [`AgentStatus`] — mirrors python's `AgentResult(status=status.status,
     /// error=status.reason if status.status in ("FAILED", "TERMINATED") else None, ...)`.
+    #[must_use]
     pub fn from_status(status: AgentStatus) -> Self {
         let error = match status.status.as_str() {
             "FAILED" | "TERMINATED" => status.reason,
@@ -150,12 +152,14 @@ impl AgentResult {
 
     /// `true` iff the execution completed successfully. Mirrors python's
     /// `AgentResult.is_success`.
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.status == "COMPLETED"
     }
 
     /// `true` iff the execution ended in failure, termination, or timeout. Mirrors python's
     /// `AgentResult.is_failed`.
+    #[must_use]
     pub fn is_failed(&self) -> bool {
         matches!(self.status.as_str(), "FAILED" | "TERMINATED" | "TIMED_OUT")
     }

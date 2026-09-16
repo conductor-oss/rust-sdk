@@ -1,7 +1,5 @@
-//! Reproduces `llm-recordings/66_handoff_to_parallel` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/66_handoff_to_parallel.py`.
-//!
-//! `cargo run --features agents --example sdk_playback_66_handoff_to_parallel`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;

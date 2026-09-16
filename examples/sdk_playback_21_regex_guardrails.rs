@@ -1,7 +1,5 @@
-//! Reproduces `llm-recordings/21_regex_guardrails` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/21_regex_guardrails.py`.
-//!
-//! `cargo run --features agents --example sdk_playback_21_regex_guardrails`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -15,7 +13,7 @@ use support::run_with_local_tools;
 
 #[derive(Deserialize)]
 struct UserArgs {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     user_id: String,
 }
 
@@ -73,7 +71,7 @@ async fn main() -> Result<()> {
         agent = agent.with_guardrail(g);
     }
 
-    println!("=== Scenario 1: Request PII — guardrails trigger ===");
+    println!("=== Scenario 1: Request PII \u{2014} guardrails trigger ===");
     let result = run_with_local_tools(
         &config,
         &agent,
@@ -83,7 +81,7 @@ async fn main() -> Result<()> {
     println!("status: {}", result.status);
     println!("output: {}", result.output);
 
-    println!("\n=== Scenario 2: Non-PII question — guardrails pass ===");
+    println!("\n=== Scenario 2: Non-PII question \u{2014} guardrails pass ===");
     let mut clean_agent = AgentDef::new("dept_assistant")?
         .with_model("mock/mockLLM")
         .with_instructions("You are an HR assistant. Answer questions about departments.");

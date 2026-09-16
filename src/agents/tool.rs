@@ -51,6 +51,7 @@ pub enum ToolType {
 
 impl ToolType {
     /// Wire-format string, matching python-sdk's `tool_type=` string literals exactly.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             ToolType::Worker => "worker",
@@ -86,7 +87,7 @@ impl ToolType {
 /// with a real read/write path — rather than inventing data for fields python itself never
 /// populates.
 ///
-/// `state` is `Arc<Mutex<...>>`, not a plain `HashMap`, so [`ToolWorker`](super::runtime)-
+/// `state` is `Arc<Mutex<...>>`, not a plain `HashMap`, so `ToolWorker` (`super::runtime`)-
 /// equivalent dispatch code can inspect it *after* an async handler call returns and fold any
 /// accumulated entries into the task output — the same mutate-in-place-then-read-back shape
 /// python's single mutable `ctx.state` dict gets from being the same object before and after
@@ -105,10 +106,11 @@ pub struct ToolContext {
 
 impl ToolContext {
     /// Read a value the current or a previous tool call in this agent run stored under `key`.
+    #[must_use]
     pub fn get_state(&self, key: &str) -> Option<Value> {
         self.state
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(key)
             .cloned()
     }
@@ -117,16 +119,17 @@ impl ToolContext {
     pub fn set_state(&self, key: impl Into<String>, value: Value) {
         self.state
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(key.into(), value);
     }
 
     /// A snapshot of every key currently held, used by dispatch code to build the task output's
     /// `_state_updates` after a handler call returns.
+    #[must_use]
     pub fn state_snapshot(&self) -> HashMap<String, Value> {
         self.state
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
@@ -245,7 +248,7 @@ impl ToolDef {
         let handler = Arc::new(handler);
         tool.handler = Some(Arc::new(
             move |raw: Value, _credentials: Credentials, _context: ToolContext| {
-                let handler = handler.clone();
+                let handler = Arc::clone(&handler);
                 Box::pin(async move {
                     let args: T = serde_json::from_value(raw)?;
                     handler(args).await
@@ -276,7 +279,7 @@ impl ToolDef {
         let handler = Arc::new(handler);
         tool.handler = Some(Arc::new(
             move |raw: Value, credentials: Credentials, _context: ToolContext| {
-                let handler = handler.clone();
+                let handler = Arc::clone(&handler);
                 Box::pin(async move {
                     let args: T = serde_json::from_value(raw)?;
                     handler(args, &credentials).await
@@ -307,7 +310,7 @@ impl ToolDef {
         let handler = Arc::new(handler);
         tool.handler = Some(Arc::new(
             move |raw: Value, _credentials: Credentials, context: ToolContext| {
-                let handler = handler.clone();
+                let handler = Arc::clone(&handler);
                 Box::pin(async move {
                     let args: T = serde_json::from_value(raw)?;
                     handler(args, context).await
@@ -319,6 +322,10 @@ impl ToolDef {
 
     /// An HTTP-backed tool. `url` and `headers` values may reference declared credentials via
     /// `${NAME}` placeholders; any placeholder not present in `credentials` is rejected.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `url` or any `headers` value references a `${NAME}` placeholder not present in `credentials`.
     pub fn http(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -330,7 +337,7 @@ impl ToolDef {
         let url = url.into();
         validate_credential_placeholders(&headers, &credentials)?;
         validate_credential_placeholders(
-            &HashMap::from([("url".to_string(), url.clone())]),
+            &HashMap::from([("url".to_owned(), url.clone())]),
             &credentials,
         )?;
 
@@ -342,18 +349,18 @@ impl ToolDef {
         // `{"type": "object", "properties": {}}` and fails the mock-LLM-provider's exact
         // request match on any tool-calling turn).
         tool.input_schema = serde_json::json!({"type": "object", "properties": {}});
-        tool.config.insert("url".to_string(), Value::String(url));
+        tool.config.insert("url".to_owned(), Value::String(url));
         tool.config
-            .insert("method".to_string(), Value::String(method.to_uppercase()));
+            .insert("method".to_owned(), Value::String(method.to_uppercase()));
         tool.config
-            .insert("headers".to_string(), serde_json::to_value(&headers)?);
+            .insert("headers".to_owned(), serde_json::to_value(&headers)?);
         tool.config.insert(
-            "accept".to_string(),
-            Value::Array(vec![Value::String("application/json".to_string())]),
+            "accept".to_owned(),
+            Value::Array(vec![Value::String("application/json".to_owned())]),
         );
         tool.config.insert(
-            "contentType".to_string(),
-            Value::String("application/json".to_string()),
+            "contentType".to_owned(),
+            Value::String("application/json".to_owned()),
         );
         Ok(tool)
     }
@@ -363,12 +370,15 @@ impl ToolDef {
     /// names which arguments get appended to the query string instead of the request body. Both
     /// are real, general `HttpTaskConfig` wire fields the compiled `EnrichTools` script consumes
     /// at dispatch time — not specific to any one caller — but [`ToolDef::http`] doesn't expose
-    /// them because no python factory does either; `ocg.py` (this crate's [`super::ocg`]) hand-
+    /// them because no python factory does either; `ocg.py` (this crate's `super::ocg`) hand-
     /// builds a `ToolDef` with these fields directly rather than going through `http_tool()`.
     /// Unlike [`ToolDef::http`], no `accept`/`contentType` defaults are set, matching that
     /// hand-built shape exactly. Same `${NAME}` credential-placeholder validation as
     /// [`ToolDef::http`].
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `url` or any `headers` value references a `${NAME}` placeholder not present in `credentials`.
     pub fn http_templated(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -383,29 +393,29 @@ impl ToolDef {
         let url = url.into();
         validate_credential_placeholders(&headers, &credentials)?;
         validate_credential_placeholders(
-            &HashMap::from([("url".to_string(), url.clone())]),
+            &HashMap::from([("url".to_owned(), url.clone())]),
             &credentials,
         )?;
 
         let mut tool = Self::base(name, description, ToolType::Http);
         tool.input_schema = input_schema;
         tool.credentials = credentials;
-        tool.config.insert("url".to_string(), Value::String(url));
+        tool.config.insert("url".to_owned(), Value::String(url));
         tool.config
-            .insert("method".to_string(), Value::String(method.to_uppercase()));
+            .insert("method".to_owned(), Value::String(method.to_uppercase()));
         if let Some(path_template) = path_template {
             tool.config
-                .insert("pathTemplate".to_string(), Value::String(path_template));
+                .insert("pathTemplate".to_owned(), Value::String(path_template));
         }
         if let Some(query_params) = query_params {
             tool.config.insert(
-                "queryParams".to_string(),
+                "queryParams".to_owned(),
                 Value::Array(query_params.into_iter().map(Value::String).collect()),
             );
         }
         if !headers.is_empty() {
             tool.config
-                .insert("headers".to_string(), serde_json::to_value(&headers)?);
+                .insert("headers".to_owned(), serde_json::to_value(&headers)?);
         }
         Ok(tool)
     }
@@ -419,6 +429,10 @@ impl ToolDef {
     /// *different*, lower default (32) when the key is absent entirely, silently changing
     /// compiled behavior for any MCP server exposing more than 32 tools. `tool_names` is an
     /// optional whitelist of MCP tool names to include, only emitted when `Some`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `server_url` or any `headers` value references a `${NAME}` placeholder not present in `credentials`.
     pub fn mcp(
         server_url: impl Into<String>,
         name: impl Into<String>,
@@ -431,29 +445,30 @@ impl ToolDef {
         let server_url = server_url.into();
         validate_credential_placeholders(&headers, &credentials)?;
         validate_credential_placeholders(
-            &HashMap::from([("server_url".to_string(), server_url.clone())]),
+            &HashMap::from([("server_url".to_owned(), server_url.clone())]),
             &credentials,
         )?;
 
         let mut tool = Self::base(name, description, ToolType::Mcp);
         tool.credentials = credentials;
         tool.config
-            .insert("server_url".to_string(), Value::String(server_url));
+            .insert("server_url".to_owned(), Value::String(server_url));
         tool.config
-            .insert("headers".to_string(), serde_json::to_value(&headers)?);
+            .insert("headers".to_owned(), serde_json::to_value(&headers)?);
         if let Some(tool_names) = tool_names {
             tool.config.insert(
-                "tool_names".to_string(),
+                "tool_names".to_owned(),
                 Value::Array(tool_names.into_iter().map(Value::String).collect()),
             );
         }
         tool.config
-            .insert("max_tools".to_string(), Value::from(max_tools));
+            .insert("max_tools".to_owned(), Value::from(max_tools));
         Ok(tool)
     }
 
     /// A tool that delegates to a sub-agent (`toolType: "agent_tool"`), recursively serialized
     /// into `config.agentConfig` by [`super::AgentConfigSerializer`].
+    #[must_use]
     pub fn agent(agent: AgentDef) -> Self {
         let mut tool = Self::base(
             agent.name.clone(),
@@ -480,7 +495,7 @@ impl ToolDef {
         tool
     }
 
-    /// A tool built from an OpenAPI spec, Swagger spec, Postman collection, or base URL (python's
+    /// A tool built from an `OpenAPI` spec, Swagger spec, Postman collection, or base URL (python's
     /// `api_tool`). At compile time the *server* fetches and parses `url`, auto-detecting the
     /// format, and expands it into individual tools — this crate never parses the spec itself,
     /// matching python exactly. Tool calls execute as ordinary Conductor `HTTP` tasks; no worker
@@ -491,6 +506,10 @@ impl ToolDef {
     /// whitelist of operation IDs to include; `max_tools` (matches python's default of `64`)
     /// is the threshold above which the server uses a filter LLM to select the most relevant
     /// operations for the user's prompt at run time.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `url` or any `headers` value references a `${NAME}` placeholder not present in `credentials`.
     pub fn api(
         url: impl Into<String>,
         name: impl Into<String>,
@@ -503,25 +522,25 @@ impl ToolDef {
         let url = url.into();
         validate_credential_placeholders(&headers, &credentials)?;
         validate_credential_placeholders(
-            &HashMap::from([("url".to_string(), url.clone())]),
+            &HashMap::from([("url".to_owned(), url.clone())]),
             &credentials,
         )?;
 
         let mut tool = Self::base(name, description, ToolType::Api);
         tool.credentials = credentials;
-        tool.config.insert("url".to_string(), Value::String(url));
+        tool.config.insert("url".to_owned(), Value::String(url));
         if !headers.is_empty() {
             tool.config
-                .insert("headers".to_string(), serde_json::to_value(&headers)?);
+                .insert("headers".to_owned(), serde_json::to_value(&headers)?);
         }
         if let Some(tool_names) = tool_names {
             tool.config.insert(
-                "tool_names".to_string(),
+                "tool_names".to_owned(),
                 Value::Array(tool_names.into_iter().map(Value::String).collect()),
             );
         }
         tool.config
-            .insert("max_tools".to_string(), Value::from(max_tools));
+            .insert("max_tools".to_owned(), Value::from(max_tools));
         Ok(tool)
     }
 
@@ -687,8 +706,8 @@ impl ToolDef {
             })
         });
         let mut config = HashMap::from([(
-            "taskType".to_string(),
-            Value::String("GENERATE_PDF".to_string()),
+            "taskType".to_owned(),
+            Value::String("GENERATE_PDF".to_owned()),
         )]);
         config.extend(defaults);
         tool.config = config;
@@ -697,7 +716,7 @@ impl ToolDef {
 
     /// Internal helper shared by [`ToolDef::image`]/[`ToolDef::audio`]/[`ToolDef::video`] —
     /// mirrors python's `_media_tool`.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn media_tool(
         tool_type: ToolType,
         task_type: &str,
@@ -711,12 +730,9 @@ impl ToolDef {
         let mut tool = Self::base(name, description, tool_type);
         tool.input_schema = input_schema;
         let mut config = HashMap::from([
-            ("taskType".to_string(), Value::String(task_type.to_string())),
-            (
-                "llmProvider".to_string(),
-                Value::String(llm_provider.into()),
-            ),
-            ("model".to_string(), Value::String(model.into())),
+            ("taskType".to_owned(), Value::String(task_type.to_owned())),
+            ("llmProvider".to_owned(), Value::String(llm_provider.into())),
+            ("model".to_owned(), Value::String(model.into())),
         ]);
         config.extend(defaults);
         tool.config = config;
@@ -727,7 +743,7 @@ impl ToolDef {
     /// system task (python's `index_tool`). No worker process is needed. `namespace` defaults
     /// to `"default_ns"` when `None`, matching python. `input_schema` defaults to a schema with
     /// `text`/`docId`/`metadata` when `None`.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn rag_index(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -754,36 +770,36 @@ impl ToolDef {
             })
         });
         tool.config.insert(
-            "taskType".to_string(),
-            Value::String("LLM_INDEX_TEXT".to_string()),
+            "taskType".to_owned(),
+            Value::String("LLM_INDEX_TEXT".to_owned()),
         );
         tool.config
-            .insert("vectorDB".to_string(), Value::String(vector_db.into()));
+            .insert("vectorDB".to_owned(), Value::String(vector_db.into()));
         tool.config.insert(
-            "namespace".to_string(),
-            Value::String(namespace.unwrap_or_else(|| "default_ns".to_string())),
+            "namespace".to_owned(),
+            Value::String(namespace.unwrap_or_else(|| "default_ns".to_owned())),
         );
         tool.config
-            .insert("index".to_string(), Value::String(index.into()));
+            .insert("index".to_owned(), Value::String(index.into()));
         tool.config.insert(
-            "embeddingModelProvider".to_string(),
+            "embeddingModelProvider".to_owned(),
             Value::String(embedding_model_provider.into()),
         );
         tool.config.insert(
-            "embeddingModel".to_string(),
+            "embeddingModel".to_owned(),
             Value::String(embedding_model.into()),
         );
         if let Some(chunk_size) = chunk_size {
             tool.config
-                .insert("chunkSize".to_string(), Value::from(chunk_size));
+                .insert("chunkSize".to_owned(), Value::from(chunk_size));
         }
         if let Some(chunk_overlap) = chunk_overlap {
             tool.config
-                .insert("chunkOverlap".to_string(), Value::from(chunk_overlap));
+                .insert("chunkOverlap".to_owned(), Value::from(chunk_overlap));
         }
         if let Some(dimensions) = dimensions {
             tool.config
-                .insert("dimensions".to_string(), Value::from(dimensions));
+                .insert("dimensions".to_owned(), Value::from(dimensions));
         }
         tool
     }
@@ -792,7 +808,7 @@ impl ToolDef {
     /// (python's `search_tool`). No worker process is needed. `namespace` defaults to
     /// `"default_ns"`, `max_results` to `5` (both matching python) when `None`. `input_schema`
     /// defaults to a schema with just `query` when `None`.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn rag_search(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -816,32 +832,32 @@ impl ToolDef {
             })
         });
         tool.config.insert(
-            "taskType".to_string(),
-            Value::String("LLM_SEARCH_INDEX".to_string()),
+            "taskType".to_owned(),
+            Value::String("LLM_SEARCH_INDEX".to_owned()),
         );
         tool.config
-            .insert("vectorDB".to_string(), Value::String(vector_db.into()));
+            .insert("vectorDB".to_owned(), Value::String(vector_db.into()));
         tool.config.insert(
-            "namespace".to_string(),
-            Value::String(namespace.unwrap_or_else(|| "default_ns".to_string())),
+            "namespace".to_owned(),
+            Value::String(namespace.unwrap_or_else(|| "default_ns".to_owned())),
         );
         tool.config
-            .insert("index".to_string(), Value::String(index.into()));
+            .insert("index".to_owned(), Value::String(index.into()));
         tool.config.insert(
-            "embeddingModelProvider".to_string(),
+            "embeddingModelProvider".to_owned(),
             Value::String(embedding_model_provider.into()),
         );
         tool.config.insert(
-            "embeddingModel".to_string(),
+            "embeddingModel".to_owned(),
             Value::String(embedding_model.into()),
         );
         tool.config.insert(
-            "maxResults".to_string(),
+            "maxResults".to_owned(),
             Value::from(max_results.unwrap_or(5)),
         );
         if let Some(dimensions) = dimensions {
             tool.config
-                .insert("dimensions".to_string(), Value::from(dimensions));
+                .insert("dimensions".to_owned(), Value::from(dimensions));
         }
         tool
     }
@@ -860,34 +876,39 @@ impl ToolDef {
         let mut tool = Self::base(name, description, ToolType::PullWorkflowMessages);
         tool.input_schema = serde_json::json!({"type": "object", "properties": {}});
         tool.config
-            .insert("batchSize".to_string(), Value::from(batch_size));
+            .insert("batchSize".to_owned(), Value::from(batch_size));
         if !blocking {
             tool.config
-                .insert("blocking".to_string(), Value::Bool(false));
+                .insert("blocking".to_owned(), Value::Bool(false));
         }
         tool
     }
 
+    #[must_use]
     pub fn with_output_schema(mut self, schema: Value) -> Self {
         self.output_schema = schema;
         self
     }
 
+    #[must_use]
     pub fn with_approval_required(mut self, approval_required: bool) -> Self {
         self.approval_required = approval_required;
         self
     }
 
+    #[must_use]
     pub fn with_stateful(mut self, stateful: bool) -> Self {
         self.stateful = stateful;
         self
     }
 
+    #[must_use]
     pub fn with_timeout_seconds(mut self, timeout_seconds: u64) -> Self {
         self.timeout_seconds = Some(timeout_seconds);
         self
     }
 
+    #[must_use]
     pub fn with_max_calls(mut self, max_calls: u32) -> Self {
         self.max_calls = Some(max_calls);
         self
@@ -899,6 +920,7 @@ impl ToolDef {
     /// them out of the `&Credentials` it's called with (see
     /// `docs/agents/secrets-and-credentials.md`). Also required (not merely declared) by
     /// [`ToolDef::http`] / [`ToolDef::mcp`]'s `${NAME}` placeholder validation.
+    #[must_use]
     pub fn with_credentials(mut self, credentials: Vec<String>) -> Self {
         self.credentials = credentials;
         self
@@ -906,11 +928,13 @@ impl ToolDef {
 
     /// Add a guardrail scoped to this tool, independent of the owning agent's guardrails.
     /// Accumulates — call once per guardrail, matching python's `ToolDef(guardrails=[...])`.
+    #[must_use]
     pub fn with_guardrail(mut self, guardrail: Guardrail) -> Self {
         self.guardrails.push(guardrail);
         self
     }
 
+    #[must_use]
     pub fn with_guardrails(mut self, guardrails: impl IntoIterator<Item = Guardrail>) -> Self {
         self.guardrails.extend(guardrails);
         self
@@ -985,15 +1009,15 @@ mod tests {
             "doubles a number, using a token",
             serde_json::json!({"type": "object"}),
             |args: Args, creds: &Credentials| {
-                let token = creds.get("API_KEY").unwrap().to_string();
+                let token = creds.get("API_KEY").unwrap().to_owned();
                 async move { Ok(Value::from(format!("{token}:{}", args.n * 2))) }
             },
         )
-        .with_credentials(vec!["API_KEY".to_string()]);
-        assert_eq!(tool.credentials, vec!["API_KEY".to_string()]);
+        .with_credentials(vec!["API_KEY".to_owned()]);
+        assert_eq!(tool.credentials, vec!["API_KEY".to_owned()]);
 
         let mut values = HashMap::new();
-        values.insert("API_KEY".to_string(), "secret".to_string());
+        values.insert("API_KEY".to_owned(), "secret".to_owned());
         let creds = Credentials::new(values);
 
         let handler = tool.handler.clone().unwrap();
@@ -1007,10 +1031,10 @@ mod tests {
     fn test_tool_context_set_and_get_state() {
         let ctx = ToolContext::default();
         assert_eq!(ctx.get_state("repo"), None);
-        ctx.set_state("repo", Value::String("conductor".to_string()));
+        ctx.set_state("repo", Value::String("conductor".to_owned()));
         assert_eq!(
             ctx.get_state("repo"),
-            Some(Value::String("conductor".to_string()))
+            Some(Value::String("conductor".to_owned()))
         );
     }
 
@@ -1038,11 +1062,11 @@ mod tests {
     #[test]
     fn test_tool_context_with_initial_state_seeds_snapshot() {
         let mut seed = HashMap::new();
-        seed.insert("repo".to_string(), Value::String("conductor".to_string()));
+        seed.insert("repo".to_owned(), Value::String("conductor".to_owned()));
         let ctx = ToolContext::default().with_initial_state(seed);
         assert_eq!(
             ctx.get_state("repo"),
-            Some(Value::String("conductor".to_string()))
+            Some(Value::String("conductor".to_owned()))
         );
     }
 
@@ -1059,7 +1083,7 @@ mod tests {
             serde_json::json!({"type": "object"}),
             |args: Args, ctx: ToolContext| async move {
                 let previous = ctx.get_state("total").and_then(|v| v.as_i64()).unwrap_or(0);
-                let total = previous + args.n as i64;
+                let total = previous + i64::from(args.n);
                 ctx.set_state("total", Value::from(total));
                 Ok(Value::from(total))
             },
@@ -1081,28 +1105,28 @@ mod tests {
     #[test]
     fn test_http_tool_rejects_undeclared_placeholder() {
         let mut headers = HashMap::new();
-        headers.insert("Authorization".to_string(), "Bearer ${API_KEY}".to_string());
+        headers.insert("Authorization".to_owned(), "Bearer ${API_KEY}".to_owned());
         let result = ToolDef::http("t", "d", "https://example.com", "get", headers, vec![]);
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     #[test]
     fn test_http_tool_accepts_declared_placeholder() {
         let mut headers = HashMap::new();
-        headers.insert("Authorization".to_string(), "Bearer ${API_KEY}".to_string());
+        headers.insert("Authorization".to_owned(), "Bearer ${API_KEY}".to_owned());
         let result = ToolDef::http(
             "t",
             "d",
             "https://example.com",
             "get",
             headers,
-            vec!["API_KEY".to_string()],
+            vec!["API_KEY".to_owned()],
         );
         assert!(result.is_ok());
         let tool = result.unwrap();
         assert_eq!(
             tool.config.get("method"),
-            Some(&Value::String("GET".to_string()))
+            Some(&Value::String("GET".to_owned()))
         );
     }
 
@@ -1152,7 +1176,7 @@ mod tests {
             "t",
             "d",
             HashMap::new(),
-            Some(vec!["search".to_string(), "fetch".to_string()]),
+            Some(vec!["search".to_owned(), "fetch".to_owned()]),
             32,
             vec![],
         )
@@ -1176,8 +1200,8 @@ mod tests {
     fn test_api_tool_wire_shape() {
         let mut headers = HashMap::new();
         headers.insert(
-            "Authorization".to_string(),
-            "Bearer ${STRIPE_KEY}".to_string(),
+            "Authorization".to_owned(),
+            "Bearer ${STRIPE_KEY}".to_owned(),
         );
         let tool = ToolDef::api(
             "https://api.stripe.com/openapi.json",
@@ -1186,7 +1210,7 @@ mod tests {
             headers,
             None,
             20,
-            vec!["STRIPE_KEY".to_string()],
+            vec!["STRIPE_KEY".to_owned()],
         )
         .unwrap();
 
@@ -1194,18 +1218,18 @@ mod tests {
         assert_eq!(
             tool.config.get("url"),
             Some(&Value::String(
-                "https://api.stripe.com/openapi.json".to_string()
+                "https://api.stripe.com/openapi.json".to_owned()
             ))
         );
-        assert_eq!(tool.config.get("max_tools"), Some(&Value::from(20u32)));
-        assert!(tool.config.get("tool_names").is_none());
-        assert_eq!(tool.credentials, vec!["STRIPE_KEY".to_string()]);
+        assert_eq!(tool.config.get("max_tools"), Some(&Value::from(20_u32)));
+        assert!(!tool.config.contains_key("tool_names"));
+        assert_eq!(tool.credentials, vec!["STRIPE_KEY".to_owned()]);
     }
 
     #[test]
     fn test_api_tool_rejects_undeclared_placeholder() {
         let mut headers = HashMap::new();
-        headers.insert("Authorization".to_string(), "Bearer ${MISSING}".to_string());
+        headers.insert("Authorization".to_owned(), "Bearer ${MISSING}".to_owned());
         let result = ToolDef::api(
             "https://api.example.com/openapi.json",
             "t",
@@ -1215,7 +1239,7 @@ mod tests {
             64,
             vec![],
         );
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     #[test]
@@ -1225,7 +1249,7 @@ mod tests {
             "t",
             "d",
             HashMap::new(),
-            Some(vec!["listUsers".to_string(), "getUser".to_string()]),
+            Some(vec!["listUsers".to_owned(), "getUser".to_owned()]),
             64,
             vec![],
         )
@@ -1242,15 +1266,15 @@ mod tests {
         assert_eq!(tool.tool_type, ToolType::GenerateImage);
         assert_eq!(
             tool.config.get("taskType"),
-            Some(&Value::String("GENERATE_IMAGE".to_string()))
+            Some(&Value::String("GENERATE_IMAGE".to_owned()))
         );
         assert_eq!(
             tool.config.get("llmProvider"),
-            Some(&Value::String("openai".to_string()))
+            Some(&Value::String("openai".to_owned()))
         );
         assert_eq!(
             tool.config.get("model"),
-            Some(&Value::String("dall-e-3".to_string()))
+            Some(&Value::String("dall-e-3".to_owned()))
         );
         assert!(tool.input_schema["properties"]["prompt"].is_object());
         assert_eq!(tool.input_schema["required"], serde_json::json!(["prompt"]));
@@ -1259,7 +1283,7 @@ mod tests {
     #[test]
     fn test_image_tool_merges_extra_defaults() {
         let mut defaults = HashMap::new();
-        defaults.insert("n".to_string(), Value::from(2));
+        defaults.insert("n".to_owned(), Value::from(2));
         let tool = ToolDef::image("t", "d", "openai", "dall-e-3", None, defaults);
         assert_eq!(tool.config.get("n"), Some(&Value::from(2)));
     }
@@ -1284,7 +1308,7 @@ mod tests {
         assert_eq!(tool.tool_type, ToolType::GenerateAudio);
         assert_eq!(
             tool.config.get("taskType"),
-            Some(&Value::String("GENERATE_AUDIO".to_string()))
+            Some(&Value::String("GENERATE_AUDIO".to_owned()))
         );
         assert!(tool.input_schema["properties"]["voice"].is_object());
         assert_eq!(tool.input_schema["required"], serde_json::json!(["text"]));
@@ -1296,7 +1320,7 @@ mod tests {
         assert_eq!(tool.tool_type, ToolType::GenerateVideo);
         assert_eq!(
             tool.config.get("taskType"),
-            Some(&Value::String("GENERATE_VIDEO".to_string()))
+            Some(&Value::String("GENERATE_VIDEO".to_owned()))
         );
         assert!(tool.input_schema["properties"]["duration"].is_object());
         assert_eq!(tool.input_schema["required"], serde_json::json!(["prompt"]));
@@ -1313,21 +1337,21 @@ mod tests {
         assert_eq!(tool.tool_type, ToolType::GeneratePdf);
         assert_eq!(
             tool.config.get("taskType"),
-            Some(&Value::String("GENERATE_PDF".to_string()))
+            Some(&Value::String("GENERATE_PDF".to_owned()))
         );
         // No llmProvider/model -- pdf generation needs no AI provider.
-        assert!(tool.config.get("llmProvider").is_none());
+        assert!(!tool.config.contains_key("llmProvider"));
         assert!(tool.input_schema["properties"]["markdown"].is_object());
     }
 
     #[test]
     fn test_pdf_tool_merges_extra_defaults() {
         let mut defaults = HashMap::new();
-        defaults.insert("pageSize".to_string(), Value::String("LETTER".to_string()));
+        defaults.insert("pageSize".to_owned(), Value::String("LETTER".to_owned()));
         let tool = ToolDef::pdf("t", "d", None, defaults);
         assert_eq!(
             tool.config.get("pageSize"),
-            Some(&Value::String("LETTER".to_string()))
+            Some(&Value::String("LETTER".to_owned()))
         );
     }
 
@@ -1349,21 +1373,21 @@ mod tests {
         assert_eq!(tool.tool_type, ToolType::RagIndex);
         assert_eq!(
             tool.config.get("taskType"),
-            Some(&Value::String("LLM_INDEX_TEXT".to_string()))
+            Some(&Value::String("LLM_INDEX_TEXT".to_owned()))
         );
         assert_eq!(
             tool.config.get("namespace"),
-            Some(&Value::String("default_ns".to_string()))
+            Some(&Value::String("default_ns".to_owned()))
         );
         assert_eq!(
             tool.config.get("vectorDB"),
-            Some(&Value::String("pgvectordb".to_string()))
+            Some(&Value::String("pgvectordb".to_owned()))
         );
         assert_eq!(
             tool.input_schema["required"],
             serde_json::json!(["text", "docId"])
         );
-        assert!(tool.config.get("chunkSize").is_none());
+        assert!(!tool.config.contains_key("chunkSize"));
     }
 
     #[test]
@@ -1375,7 +1399,7 @@ mod tests {
             "docs",
             "openai",
             "text-embedding-3-small",
-            Some("custom_ns".to_string()),
+            Some("custom_ns".to_owned()),
             Some(500),
             Some(50),
             Some(1536),
@@ -1383,7 +1407,7 @@ mod tests {
         );
         assert_eq!(
             tool.config.get("namespace"),
-            Some(&Value::String("custom_ns".to_string()))
+            Some(&Value::String("custom_ns".to_owned()))
         );
         assert_eq!(tool.config.get("chunkSize"), Some(&Value::from(500)));
         assert_eq!(tool.config.get("chunkOverlap"), Some(&Value::from(50)));
@@ -1407,12 +1431,12 @@ mod tests {
         assert_eq!(tool.tool_type, ToolType::RagSearch);
         assert_eq!(
             tool.config.get("taskType"),
-            Some(&Value::String("LLM_SEARCH_INDEX".to_string()))
+            Some(&Value::String("LLM_SEARCH_INDEX".to_owned()))
         );
         assert_eq!(tool.config.get("maxResults"), Some(&Value::from(5)));
         assert_eq!(
             tool.config.get("namespace"),
-            Some(&Value::String("default_ns".to_string()))
+            Some(&Value::String("default_ns".to_owned()))
         );
         assert_eq!(tool.input_schema["required"], serde_json::json!(["query"]));
     }
@@ -1439,7 +1463,7 @@ mod tests {
         let tool = ToolDef::wait_for_message("wait_for_message", "d", 1, true);
         assert_eq!(tool.tool_type, ToolType::PullWorkflowMessages);
         assert_eq!(tool.config.get("batchSize"), Some(&Value::from(1)));
-        assert!(tool.config.get("blocking").is_none());
+        assert!(!tool.config.contains_key("blocking"));
         assert_eq!(
             tool.input_schema,
             serde_json::json!({"type": "object", "properties": {}})

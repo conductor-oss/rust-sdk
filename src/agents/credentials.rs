@@ -49,6 +49,7 @@ impl Credentials {
     ///
     /// This is the only constructor a worker needs: build one fresh per poll from the `Task`
     /// handed to that poll, then pass `&Credentials` into the tool body.
+    #[must_use]
     pub fn from_task(task: &Task) -> Self {
         Self(Arc::new(task.runtime_metadata.clone()))
     }
@@ -58,6 +59,7 @@ impl Credentials {
     /// Lower-level than [`Credentials::from_task`] — mainly useful for tests and for the
     /// task-local ambient-accessor path described (but not implemented) in the design doc,
     /// where a `Task` isn't necessarily in hand at the construction site.
+    #[must_use]
     pub fn new(values: HashMap<String, String>) -> Self {
         Self(Arc::new(values))
     }
@@ -72,6 +74,10 @@ impl Credentials {
     /// established at all, or context established but missing this name) — this type only has
     /// one case because a `Credentials` that exists at all is, by construction, already "in
     /// context".
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::CredentialNotFound`] if `name` isn't present -- see above for exactly which cases that covers.
     pub fn get(&self, name: &str) -> Result<&str> {
         self.0
             .get(name)
@@ -80,6 +86,7 @@ impl Credentials {
     }
 
     /// True if `name` is present in this credential view, without exposing its value.
+    #[must_use]
     pub fn contains(&self, name: &str) -> bool {
         self.0.contains_key(name)
     }
@@ -145,7 +152,7 @@ mod tests {
         let err = creds.get("OPENAI_API_KEY").unwrap_err();
         match err {
             ConductorError::CredentialNotFound(names) => {
-                assert_eq!(names, vec!["OPENAI_API_KEY".to_string()]);
+                assert_eq!(names, vec!["OPENAI_API_KEY".to_owned()]);
             }
             other => panic!("expected CredentialNotFound, got: {other:?}"),
         }
@@ -156,7 +163,7 @@ mod tests {
         let task = Task::default();
         let creds = Credentials::from_task(&task);
 
-        assert!(creds.get("ANYTHING").is_err());
+        creds.get("ANYTHING").unwrap_err();
     }
 
     #[test]
@@ -167,7 +174,7 @@ mod tests {
         let task = Task::default();
         let creds = Credentials::from_task(&task);
 
-        assert!(creds.get("CONDUCTOR_CREDENTIALS_TEST_VAR").is_err());
+        creds.get("CONDUCTOR_CREDENTIALS_TEST_VAR").unwrap_err();
         std::env::remove_var("CONDUCTOR_CREDENTIALS_TEST_VAR");
     }
 
@@ -197,10 +204,10 @@ mod tests {
     #[test]
     fn new_builds_directly_from_a_map_for_tests_without_a_task() {
         let mut values = HashMap::new();
-        values.insert("GH_TOKEN".to_string(), "ghp_super_secret".to_string());
+        values.insert("GH_TOKEN".to_owned(), "ghp_super_secret".to_owned());
         let creds = Credentials::new(values);
 
         assert_eq!(creds.get("GH_TOKEN").unwrap(), "ghp_super_secret");
-        assert!(creds.get("MISSING").is_err());
+        creds.get("MISSING").unwrap_err();
     }
 }

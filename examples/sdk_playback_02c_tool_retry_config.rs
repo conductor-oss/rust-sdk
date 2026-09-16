@@ -1,14 +1,5 @@
-//! Reproduces `llm-recordings/02c_tool_retry_config` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/02c_tool_retry_config.py` — the
-//! per-tool `retry_policy`/`retry_count`/`retry_delay_seconds` settings that example
-//! demonstrates aren't part of the recorded LLM request (they're server-side task-definition
-//! config, only observable if a tool call actually fails and is retried), and this crate's
-//! `ToolDef` has no equivalent builder yet, so they're only noted here, not reproduced. The
-//! recorded conversation never actually hits a failure — the mocked model just calls
-//! `call_external_api` repeatedly with different phrasings across 11 turns before answering —
-//! so it doesn't matter for replay.
-//!
-//! `cargo run --features agents --example sdk_playback_02c_tool_retry_config`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -65,7 +56,7 @@ async fn main() -> Result<()> {
 
     let process_data = ToolDef::function(
         "process_data",
-        "Process data locally — light retries with linear backoff.",
+        "Process data locally \u{2014} light retries with linear backoff.",
         json!({
             "type": "object",
             "properties": { "data": { "type": "string" } },

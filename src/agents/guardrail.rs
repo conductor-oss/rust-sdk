@@ -15,7 +15,7 @@
 //! `__init__` builds a bound-method `func` (`self._check` / `self._evaluate`) and hands it to
 //! `Guardrail.__init__`, which stores it and later calls `self.func(content)` from `check()`.
 //! Rust has no inheritance, so this port follows `parity-plan.md`'s class diagram literally
-//! instead of reproducing the hierarchy: [`Guardrail`] holds the position/on_fail/max_retries
+//! instead of reproducing the hierarchy: [`Guardrail`] holds the `position/on_fail/max_retries`
 //! config plus **one** boxed [`GuardrailCheck`] (composition — `Guardrail "1" *-- "1"
 //! GuardrailCheck`), and [`RegexGuardrail`]/[`LlmGuardrail`] are concrete types that *implement*
 //! [`GuardrailCheck`] (`..|>` in the diagram) rather than subclass anything. This is the same
@@ -73,6 +73,7 @@ pub enum Position {
 
 impl Position {
     /// Wire-format string, matching python-sdk's `Position(str, Enum)` values exactly.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Position::Input => "input",
@@ -98,6 +99,7 @@ pub enum OnFail {
 
 impl OnFail {
     /// Wire-format string, matching python-sdk's `OnFail(str, Enum)` values exactly.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             OnFail::Retry => "retry",
@@ -136,6 +138,7 @@ pub struct GuardrailResult {
 
 impl GuardrailResult {
     /// A passing result with no message.
+    #[must_use]
     pub fn pass() -> Self {
         Self {
             passed: true,
@@ -242,6 +245,10 @@ impl Guardrail {
     /// state — `position = Input` together with an already-set `on_fail = Human` — the same
     /// invariant [`Guardrail::with_on_fail`] enforces from the other direction, so the check
     /// holds regardless of which builder call comes first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if this would combine `position = Input` with an already-set `on_fail = Human`.
     pub fn with_position(mut self, position: Position) -> Result<Self> {
         validate_position_on_fail(position, self.on_fail)?;
         self.position = position;
@@ -251,6 +258,10 @@ impl Guardrail {
     /// Set what to do when the check fails. Rejects `on_fail = Human` combined with
     /// `position = Input` (matches python's `ValueError`: input guardrails are client-side and
     /// cannot pause a workflow).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if this would combine `on_fail = Human` with an already-set `position = Input`.
     pub fn with_on_fail(mut self, on_fail: OnFail) -> Result<Self> {
         validate_position_on_fail(self.position, on_fail)?;
         self.on_fail = on_fail;
@@ -259,6 +270,10 @@ impl Guardrail {
 
     /// Set the max retry attempts used when `on_fail = Retry`. Must be at least 1 (matches
     /// python's `ValueError(f"max_retries must be >= 1, got {max_retries}")`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `max_retries` is 0.
     pub fn with_max_retries(mut self, max_retries: u32) -> Result<Self> {
         if max_retries < 1 {
             return Err(ConductorError::agent(format!(
@@ -270,6 +285,7 @@ impl Guardrail {
     }
 
     /// Run the wrapped [`GuardrailCheck`] against `content`.
+    #[must_use]
     pub fn check(&self, content: &str) -> GuardrailResult {
         self.checker.check(content)
     }
@@ -278,6 +294,7 @@ impl Guardrail {
     /// [`AgentConfigSerializer`](super::AgentConfigSerializer) — delegates to the wrapped
     /// [`GuardrailCheck`] so the serializer never needs to downcast `checker`. See
     /// [`GuardrailCheck::guardrail_type_fields`].
+    #[must_use]
     pub fn guardrail_type_fields(&self) -> Map<String, Value> {
         self.checker.guardrail_type_fields(&self.name)
     }
@@ -328,6 +345,10 @@ pub struct RegexGuardrail {
 impl RegexGuardrail {
     /// Compile one or more regex patterns. Fails if any pattern is not valid regex, or if the
     /// pattern list is empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `patterns` is empty, or if any entry is not a valid regex.
     pub fn new(patterns: impl IntoIterator<Item = impl Into<String>>) -> Result<Self> {
         let pattern_strings: Vec<String> = patterns.into_iter().map(Into::into).collect();
         if pattern_strings.is_empty() {
@@ -351,23 +372,27 @@ impl RegexGuardrail {
     }
 
     /// Set the match mode (default [`RegexMode::Block`]).
+    #[must_use]
     pub fn with_mode(mut self, mode: RegexMode) -> Self {
         self.mode = mode;
         self
     }
 
     /// Set a custom failure message (default: an auto-generated one).
+    #[must_use]
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.message = Some(message.into());
         self
     }
 
     /// The original pattern strings this guardrail was constructed with.
+    #[must_use]
     pub fn patterns(&self) -> &[String] {
         &self.pattern_strings
     }
 
     /// The configured match mode.
+    #[must_use]
     pub fn mode(&self) -> RegexMode {
         self.mode
     }
@@ -382,14 +407,14 @@ impl GuardrailCheck for RegexGuardrail {
                 let msg = self
                     .message
                     .clone()
-                    .unwrap_or_else(|| "Content matched a blocked pattern.".to_string());
+                    .unwrap_or_else(|| "Content matched a blocked pattern.".to_owned());
                 GuardrailResult::fail(msg)
             }
             (RegexMode::Allow, false) => {
                 let msg = self
                     .message
                     .clone()
-                    .unwrap_or_else(|| "Content did not match any allowed pattern.".to_string());
+                    .unwrap_or_else(|| "Content did not match any allowed pattern.".to_owned());
                 GuardrailResult::fail(msg)
             }
             _ => GuardrailResult::pass(),
@@ -399,11 +424,11 @@ impl GuardrailCheck for RegexGuardrail {
     fn guardrail_type_fields(&self, _name: &str) -> Map<String, Value> {
         let mut fields = Map::new();
         fields.insert(
-            "guardrailType".to_string(),
-            Value::String("regex".to_string()),
+            "guardrailType".to_owned(),
+            Value::String("regex".to_owned()),
         );
         fields.insert(
-            "patterns".to_string(),
+            "patterns".to_owned(),
             Value::Array(
                 self.pattern_strings
                     .iter()
@@ -413,17 +438,17 @@ impl GuardrailCheck for RegexGuardrail {
             ),
         );
         fields.insert(
-            "mode".to_string(),
+            "mode".to_owned(),
             Value::String(
                 match self.mode {
                     RegexMode::Block => "block",
                     RegexMode::Allow => "allow",
                 }
-                .to_string(),
+                .to_owned(),
             ),
         );
         if let Some(message) = &self.message {
-            fields.insert("message".to_string(), Value::String(message.clone()));
+            fields.insert("message".to_owned(), Value::String(message.clone()));
         }
         fields
     }
@@ -457,7 +482,7 @@ impl GuardrailCheck for RegexGuardrail {
 /// runtime inside a runtime" panic when `check()` is called from within this crate's own
 /// multi-threaded Tokio executor (e.g. from a guardrail-worker `Worker::execute`, which is
 /// exactly the context the trait's own doc comment anticipates) — means never calling
-/// `Handle::block_on` on the *calling* thread. Instead [`run_blocking`] spawns a fresh OS thread
+/// `Handle::block_on` on the *calling* thread. Instead `run_blocking` spawns a fresh OS thread
 /// with its own throwaway single-threaded runtime for just this one call, and the calling
 /// thread only does an ordinary, runtime-agnostic blocking channel `join()` — safe from any
 /// context, sync or async, single- or multi-threaded.
@@ -480,17 +505,20 @@ impl LlmGuardrail {
     }
 
     /// Cap the evaluation call's response length.
+    #[must_use]
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
     /// The `"provider/model"` string this guardrail evaluates against.
+    #[must_use]
     pub fn model(&self) -> &str {
         &self.model
     }
 
     /// The policy description this guardrail checks content against.
+    #[must_use]
     pub fn policy(&self) -> &str {
         &self.policy
     }
@@ -511,30 +539,27 @@ fn llm_guardrail_prompt(policy: &str, content: &str) -> String {
 /// fails closed with the first 200 characters of the raw text, matching python's
 /// `result_text[:200]`.
 fn parse_llm_guardrail_response(result_text: &str) -> GuardrailResult {
-    match serde_json::from_str::<Value>(result_text.trim()) {
-        Ok(Value::Object(data)) => {
-            let passed = data.get("passed").and_then(Value::as_bool).unwrap_or(false);
-            let reason = data
-                .get("reason")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            if passed {
-                GuardrailResult::pass()
-            } else {
-                GuardrailResult::fail(reason)
-            }
+    if let Ok(Value::Object(data)) = serde_json::from_str::<Value>(result_text.trim()) {
+        let passed = data.get("passed").and_then(Value::as_bool).unwrap_or(false);
+        let reason = data
+            .get("reason")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
+        if passed {
+            GuardrailResult::pass()
+        } else {
+            GuardrailResult::fail(reason)
         }
-        _ => {
-            let truncated: String = result_text.chars().take(200).collect();
-            GuardrailResult::fail(format!(
-                "LLM guardrail returned unparseable response: {truncated}"
-            ))
-        }
+    } else {
+        let truncated: String = result_text.chars().take(200).collect();
+        GuardrailResult::fail(format!(
+            "LLM guardrail returned unparseable response: {truncated}"
+        ))
     }
 }
 
-/// Build the OpenAI Chat Completions request body for one evaluation call.
+/// Build the `OpenAI` Chat Completions request body for one evaluation call.
 fn openai_request_body(model: &str, prompt: &str, max_tokens: Option<u32>) -> Value {
     let mut body = serde_json::json!({
         "model": model,
@@ -547,7 +572,7 @@ fn openai_request_body(model: &str, prompt: &str, max_tokens: Option<u32>) -> Va
     body
 }
 
-/// Extract the assistant's reply text from an OpenAI Chat Completions response body.
+/// Extract the assistant's reply text from an `OpenAI` Chat Completions response body.
 fn extract_openai_content(response: &Value) -> Option<String> {
     response
         .get("choices")?
@@ -555,11 +580,11 @@ fn extract_openai_content(response: &Value) -> Option<String> {
         .get("message")?
         .get("content")?
         .as_str()
-        .map(str::to_string)
+        .map(str::to_owned)
 }
 
 /// Build the Anthropic Messages request body for one evaluation call. Anthropic's API requires
-/// `max_tokens` (unlike OpenAI's, where it's optional) — python's `litellm` supplies a default
+/// `max_tokens` (unlike `OpenAI`'s, where it's optional) — python's `litellm` supplies a default
 /// when the caller didn't set one; this does the same (`1024`, litellm's own default for this
 /// call shape).
 fn anthropic_request_body(model: &str, prompt: &str, max_tokens: Option<u32>) -> Value {
@@ -578,7 +603,7 @@ fn extract_anthropic_content(response: &Value) -> Option<String> {
         .get(0)?
         .get("text")?
         .as_str()
-        .map(str::to_string)
+        .map(str::to_owned)
 }
 
 /// Run `future` to completion on a dedicated OS thread with its own throwaway single-threaded
@@ -612,7 +637,7 @@ where
         let _ = tx.send(Ok(runtime.block_on(future)));
     });
     rx.recv().unwrap_or_else(|_| {
-        Err("LlmGuardrail's evaluation thread ended without sending a result".to_string())
+        Err("LlmGuardrail's evaluation thread ended without sending a result".to_owned())
     })
 }
 
@@ -649,13 +674,13 @@ async fn call_llm_provider(
     };
 
     let api_key = std::env::var(api_key_var)
-        .map_err(|_| format!("LlmGuardrail: {api_key_var} is not set in the environment"))?;
+        .map_err(|_var_err| format!("LlmGuardrail: {api_key_var} is not set in the environment"))?;
 
     let headers: Vec<(String, String)> = match provider {
-        "openai" => vec![("Authorization".to_string(), format!("Bearer {api_key}"))],
+        "openai" => vec![("Authorization".to_owned(), format!("Bearer {api_key}"))],
         "anthropic" => vec![
-            ("x-api-key".to_string(), api_key),
-            ("anthropic-version".to_string(), "2023-06-01".to_string()),
+            ("x-api-key".to_owned(), api_key),
+            ("anthropic-version".to_owned(), "2023-06-01".to_owned()),
         ],
         _ => unreachable!("provider already validated above"),
     };
@@ -704,8 +729,8 @@ impl GuardrailCheck for LlmGuardrail {
         };
 
         let prompt = llm_guardrail_prompt(&self.policy, content);
-        let provider = provider.to_string();
-        let model = model.to_string();
+        let provider = provider.to_owned();
+        let model = model.to_owned();
         let max_tokens = self.max_tokens;
 
         let result =
@@ -721,14 +746,11 @@ impl GuardrailCheck for LlmGuardrail {
 
     fn guardrail_type_fields(&self, _name: &str) -> Map<String, Value> {
         let mut fields = Map::new();
-        fields.insert(
-            "guardrailType".to_string(),
-            Value::String("llm".to_string()),
-        );
-        fields.insert("model".to_string(), Value::String(self.model.clone()));
-        fields.insert("policy".to_string(), Value::String(self.policy.clone()));
+        fields.insert("guardrailType".to_owned(), Value::String("llm".to_owned()));
+        fields.insert("model".to_owned(), Value::String(self.model.clone()));
+        fields.insert("policy".to_owned(), Value::String(self.policy.clone()));
         if let Some(max_tokens) = self.max_tokens {
-            fields.insert("maxTokens".to_string(), Value::from(max_tokens));
+            fields.insert("maxTokens".to_owned(), Value::from(max_tokens));
         }
         fields
     }
@@ -784,10 +806,10 @@ impl GuardrailCheck for FunctionGuardrail {
     fn guardrail_type_fields(&self, name: &str) -> Map<String, Value> {
         let mut fields = Map::new();
         fields.insert(
-            "guardrailType".to_string(),
-            Value::String("custom".to_string()),
+            "guardrailType".to_owned(),
+            Value::String("custom".to_owned()),
         );
-        fields.insert("taskName".to_string(), Value::String(name.to_string()));
+        fields.insert("taskName".to_owned(), Value::String(name.to_owned()));
         fields
     }
 }
@@ -820,7 +842,7 @@ mod tests {
 
         let fixed = GuardrailResult::fail_with_fix("nope", "fixed content");
         assert!(!fixed.passed);
-        assert_eq!(fixed.fixed_output, Some("fixed content".to_string()));
+        assert_eq!(fixed.fixed_output, Some("fixed content".to_owned()));
     }
 
     #[test]
@@ -839,7 +861,7 @@ mod tests {
         let guardrail = Guardrail::new("g", checker)
             .with_position(Position::Input)
             .unwrap();
-        assert!(guardrail.with_on_fail(OnFail::Human).is_err());
+        guardrail.with_on_fail(OnFail::Human).unwrap_err();
     }
 
     #[test]
@@ -848,36 +870,36 @@ mod tests {
         let guardrail = Guardrail::new("g", checker)
             .with_on_fail(OnFail::Human)
             .unwrap();
-        assert!(guardrail.with_position(Position::Input).is_err());
+        guardrail.with_position(Position::Input).unwrap_err();
     }
 
     #[test]
     fn test_human_on_output_is_valid() {
         let checker = RegexGuardrail::new(["x"]).unwrap();
         let guardrail = Guardrail::new("g", checker).with_on_fail(OnFail::Human);
-        assert!(guardrail.is_ok());
+        guardrail.unwrap();
     }
 
     #[test]
     fn test_max_retries_validation() {
         let checker = RegexGuardrail::new(["x"]).unwrap();
         let guardrail = Guardrail::new("g", checker);
-        assert!(guardrail.with_max_retries(0).is_err());
+        guardrail.with_max_retries(0).unwrap_err();
 
         let checker = RegexGuardrail::new(["x"]).unwrap();
         let guardrail = Guardrail::new("g", checker);
-        assert!(guardrail.with_max_retries(5).is_ok());
+        guardrail.with_max_retries(5).unwrap();
     }
 
     #[test]
     fn test_regex_guardrail_rejects_empty_patterns() {
         let empty: Vec<String> = vec![];
-        assert!(RegexGuardrail::new(empty).is_err());
+        RegexGuardrail::new(empty).unwrap_err();
     }
 
     #[test]
     fn test_regex_guardrail_rejects_invalid_pattern() {
-        assert!(RegexGuardrail::new(["("]).is_err());
+        RegexGuardrail::new(["("]).unwrap_err();
     }
 
     #[test]
@@ -914,7 +936,7 @@ mod tests {
         let guardrail = RegexGuardrail::new(["a", "b"])
             .unwrap()
             .with_mode(RegexMode::Allow);
-        assert_eq!(guardrail.patterns(), &["a".to_string(), "b".to_string()]);
+        assert_eq!(guardrail.patterns(), &["a".to_owned(), "b".to_owned()]);
         assert_eq!(guardrail.mode(), RegexMode::Allow);
     }
 
@@ -1007,7 +1029,7 @@ mod tests {
         let response = serde_json::json!({
             "choices": [{"message": {"content": "hello"}}]
         });
-        assert_eq!(extract_openai_content(&response), Some("hello".to_string()));
+        assert_eq!(extract_openai_content(&response), Some("hello".to_owned()));
         assert_eq!(extract_openai_content(&serde_json::json!({})), None);
     }
 
@@ -1018,7 +1040,7 @@ mod tests {
         });
         assert_eq!(
             extract_anthropic_content(&response),
-            Some("hello".to_string())
+            Some("hello".to_owned())
         );
         assert_eq!(extract_anthropic_content(&serde_json::json!({})), None);
     }
@@ -1044,8 +1066,8 @@ mod tests {
 
     /// Regression test matching python's exact strictness: python's `_evaluate` does a bare
     /// `json.loads` with no fenced-code-block stripping, so a model that ignores "Respond with
-    /// ONLY a JSON object" and wraps its answer in ```json fences fails closed here too, not
-    /// leniently parsed through.
+    /// ONLY a JSON object" and wraps its answer in triple-backtick `json` fences fails closed
+    /// here too, not leniently parsed through.
     #[test]
     fn test_parse_llm_guardrail_response_fails_closed_on_fenced_json() {
         let result = parse_llm_guardrail_response("```json\n{\"passed\": true}\n```");
@@ -1117,11 +1139,11 @@ mod tests {
         let fields = guardrail.guardrail_type_fields();
         assert_eq!(
             fields.get("guardrailType"),
-            Some(&Value::String("custom".to_string()))
+            Some(&Value::String("custom".to_owned()))
         );
         assert_eq!(
             fields.get("taskName"),
-            Some(&Value::String("no_pii".to_string()))
+            Some(&Value::String("no_pii".to_owned()))
         );
     }
 

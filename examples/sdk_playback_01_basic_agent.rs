@@ -1,11 +1,5 @@
-//! Reproduces `llm-recordings/01_basic_agent` (from conductor-oss/conductor PR #1614) so the
-//! shared recording can be replayed through `mock/mockLLM`. Ported field-for-field from
-//! python-sdk's `examples/agents/01_basic_agent.py`; the recorded request is just a system +
-//! user message with no tools, so nothing else needs to match.
-//!
-//! Run against a server with `conductor.ai.enable-llm-mocks=true` and
-//! `conductor.ai.recordings-directory` pointed at that `llm-recordings` checkout:
-//! `cargo run --features agents --example sdk_playback_01_basic_agent`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime};
 use conductor::configuration::Configuration;

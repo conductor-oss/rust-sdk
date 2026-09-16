@@ -12,11 +12,11 @@
 //!
 //! - **Memory IDs**: python hashes `content + time.time()` with SHA-256 and truncates to 16 hex
 //!   chars when no ID is supplied. This crate has no `sha2` dependency, and the ID is never a
-//!   wire-format value (it never crosses the Conductor server boundary), so a random UUIDv4
+//!   wire-format value (it never crosses the Conductor server boundary), so a random `UUIDv4`
 //!   (already a dependency, used elsewhere in this crate) truncated to 16 hex chars is used
 //!   instead — same shape (16 lowercase hex chars), different generation mechanism, since
 //!   collision-resistance is what actually matters here, not reproducibility.
-//! - **Store ordering**: python's `InMemoryStore` is a `dict` keyed by ID, and CPython dicts
+//! - **Store ordering**: python's `InMemoryStore` is a `dict` keyed by ID, and `CPython` dicts
 //!   preserve insertion order, including keeping an existing key's original position when its
 //!   value is overwritten. [`InMemoryStore`] here uses a `Vec<MemoryEntry>` with the same
 //!   overwrite-in-place-else-append rule, matching that ordering behavior exactly rather than
@@ -77,6 +77,7 @@ pub struct InMemoryStore {
 }
 
 impl InMemoryStore {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -85,8 +86,7 @@ impl InMemoryStore {
 fn unix_timestamp() -> f64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0)
+        .map_or(0.0, |d| d.as_secs_f64())
 }
 
 fn generate_memory_id() -> String {
@@ -116,7 +116,7 @@ impl MemoryStore for InMemoryStore {
 
         let query_words: std::collections::HashSet<&str> = query.split_whitespace().collect();
         let query_words: std::collections::HashSet<String> =
-            query_words.into_iter().map(|w| w.to_lowercase()).collect();
+            query_words.into_iter().map(str::to_lowercase).collect();
 
         let mut scored: Vec<(f64, &MemoryEntry)> = self
             .memories
@@ -125,7 +125,7 @@ impl MemoryStore for InMemoryStore {
                 let entry_words: std::collections::HashSet<String> = entry
                     .content
                     .split_whitespace()
-                    .map(|w| w.to_lowercase())
+                    .map(str::to_lowercase)
                     .collect();
                 let score = if query_words.is_empty() || entry_words.is_empty() {
                     0.0
@@ -182,6 +182,7 @@ impl fmt::Debug for SemanticMemory {
         f.debug_struct("SemanticMemory")
             .field("entries", &self.store.list_all().len())
             .field("max_results", &self.max_results)
+            .field("session_id", &self.session_id)
             .finish()
     }
 }
@@ -195,6 +196,7 @@ impl Default for SemanticMemory {
 impl SemanticMemory {
     /// New memory backed by the default [`InMemoryStore`], `max_results` 5, no session scoping —
     /// matching python's constructor defaults.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             store: Box::new(InMemoryStore::new()),
@@ -204,18 +206,21 @@ impl SemanticMemory {
     }
 
     /// Use a custom [`MemoryStore`] backend instead of the default [`InMemoryStore`].
+    #[must_use]
     pub fn with_store(mut self, store: Box<dyn MemoryStore>) -> Self {
         self.store = store;
         self
     }
 
     /// Cap on memories retrieved per query.
+    #[must_use]
     pub fn with_max_results(mut self, max_results: usize) -> Self {
         self.max_results = max_results;
         self
     }
 
     /// Scope added memories to a session ID (stamped into each entry's metadata).
+    #[must_use]
     pub fn with_session_id(mut self, session_id: impl Into<String>) -> Self {
         self.session_id = Some(session_id.into());
         self
@@ -230,7 +235,7 @@ impl SemanticMemory {
     ) -> String {
         let mut meta = metadata.unwrap_or_default();
         if let Some(session_id) = &self.session_id {
-            meta.insert("session_id".to_string(), Value::String(session_id.clone()));
+            meta.insert("session_id".to_owned(), Value::String(session_id.clone()));
         }
         let entry = MemoryEntry {
             content: content.into(),
@@ -241,6 +246,7 @@ impl SemanticMemory {
     }
 
     /// Search for relevant memories, returning just their content strings, most relevant first.
+    #[must_use]
     pub fn search(&self, query: &str, top_k: Option<usize>) -> Vec<String> {
         self.search_entries(query, top_k)
             .into_iter()
@@ -249,6 +255,7 @@ impl SemanticMemory {
     }
 
     /// Search and return full [`MemoryEntry`] values.
+    #[must_use]
     pub fn search_entries(&self, query: &str, top_k: Option<usize>) -> Vec<MemoryEntry> {
         let k = top_k.unwrap_or(self.max_results);
         self.store.search(query, k)
@@ -265,18 +272,20 @@ impl SemanticMemory {
     }
 
     /// Return every stored memory.
+    #[must_use]
     pub fn list_all(&self) -> Vec<MemoryEntry> {
         self.store.list_all()
     }
 
     /// Relevant memories formatted for injection into a prompt, or an empty string when none
     /// match — matching python's `get_context`.
+    #[must_use]
     pub fn get_context(&self, query: &str) -> String {
         let memories = self.search(query, None);
         if memories.is_empty() {
             return String::new();
         }
-        let mut lines = vec!["Relevant context from memory:".to_string()];
+        let mut lines = vec!["Relevant context from memory:".to_owned()];
         for (i, mem) in memories.iter().enumerate() {
             lines.push(format!("  {}. {}", i + 1, mem));
         }
@@ -289,6 +298,9 @@ mod tests {
     use super::*;
 
     #[test]
+    // `created_at`'s default is the exact literal `0.0`, no arithmetic in between -- comparing
+    // for exact equality is safe here, not the usual "computed float" case this lint guards.
+    #[expect(clippy::float_cmp)]
     fn test_memory_entry_new_sets_only_content() {
         let entry = MemoryEntry::new("hello");
         assert_eq!(entry.content, "hello");
@@ -309,11 +321,15 @@ mod tests {
     }
 
     #[test]
+    // `created_at` is set to the exact literal `42.0` above, no arithmetic in between --
+    // comparing for exact equality is safe here, not the usual "computed float" case this lint
+    // guards.
+    #[expect(clippy::float_cmp)]
     fn test_in_memory_store_add_preserves_given_id_and_timestamp() {
         let mut store = InMemoryStore::new();
         let entry = MemoryEntry {
-            id: "fixed-id".to_string(),
-            content: "hello".to_string(),
+            id: "fixed-id".to_owned(),
+            content: "hello".to_owned(),
             created_at: 42.0,
             ..Default::default()
         };
@@ -326,18 +342,18 @@ mod tests {
     fn test_in_memory_store_add_overwrites_in_place_preserving_position() {
         let mut store = InMemoryStore::new();
         store.add(MemoryEntry {
-            id: "a".to_string(),
-            content: "first".to_string(),
+            id: "a".to_owned(),
+            content: "first".to_owned(),
             ..Default::default()
         });
         store.add(MemoryEntry {
-            id: "b".to_string(),
-            content: "second".to_string(),
+            id: "b".to_owned(),
+            content: "second".to_owned(),
             ..Default::default()
         });
         store.add(MemoryEntry {
-            id: "a".to_string(),
-            content: "first-updated".to_string(),
+            id: "a".to_owned(),
+            content: "first-updated".to_owned(),
             ..Default::default()
         });
         let all = store.list_all();
@@ -427,7 +443,7 @@ mod tests {
         let entries = memory.list_all();
         assert_eq!(
             entries[0].metadata.get("session_id"),
-            Some(&Value::String("sess-1".to_string()))
+            Some(&Value::String("sess-1".to_owned()))
         );
     }
 

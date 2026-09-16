@@ -5,26 +5,35 @@ use crate::error::Result;
 use crate::http::{ApiClient, ApiPath};
 use crate::models::SchemaDef;
 
-/// Client for managing schema definitions
+/// Client for managing schema definitions.
 #[derive(Clone)]
 pub struct SchemaClient {
     api: ApiClient,
 }
 
 impl SchemaClient {
-    /// Create a new schema client
+    /// Create a new schema client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self { api }
     }
 
-    /// Register a new schema
+    /// Register a new schema.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn register_schema(&self, schema: &SchemaDef) -> Result<()> {
         self.api.post_no_response("/schema", schema).await
     }
 
-    /// Get a schema by name and version
+    /// Get a schema by name and version.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_schema(&self, schema_name: &str, version: i32) -> Result<SchemaDef> {
-        let path = format!("/schema/{}", schema_name);
+        let path = format!("/schema/{schema_name}");
         self.api
             .get_with_params(
                 ApiPath::templated(&path, "/schema/{schemaName}"),
@@ -33,14 +42,22 @@ impl SchemaClient {
             .await
     }
 
-    /// Get all schemas
+    /// Get all schemas.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_all_schemas(&self) -> Result<Vec<SchemaDef>> {
         self.api.get("/schema").await
     }
 
-    /// Delete a schema by name and version
+    /// Delete a schema by name and version.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_schema(&self, schema_name: &str, version: i32) -> Result<()> {
-        let path = format!("/schema/{}", schema_name);
+        let path = format!("/schema/{schema_name}");
         self.api
             .delete_with_params(
                 ApiPath::templated(&path, "/schema/{schemaName}"),
@@ -49,9 +66,13 @@ impl SchemaClient {
             .await
     }
 
-    /// Delete all versions of a schema by name
+    /// Delete all versions of a schema by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_schema_by_name(&self, schema_name: &str) -> Result<()> {
-        let path = format!("/schema/{}/all", schema_name);
+        let path = format!("/schema/{schema_name}/all");
         self.api
             .delete_no_content(ApiPath::templated(&path, "/schema/{schemaName}/all"))
             .await

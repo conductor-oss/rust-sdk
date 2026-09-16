@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use futures::FutureExt;
+use futures::FutureExt as _;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 
@@ -34,7 +34,7 @@ enum TaskOutcome {
     Panic(String),
 }
 
-/// Task runner for a single worker type
+/// Task runner for a single worker type.
 pub struct TaskRunner {
     worker: Arc<dyn Worker>,
     task_client: TaskClient,
@@ -51,16 +51,16 @@ pub struct TaskRunner {
 
     // Concurrency control - use atomic counter instead of HashSet for better performance
     semaphore: Arc<Semaphore>,
-    /// Count of tasks currently being executed (after semaphore acquired)
+    /// Count of tasks currently being executed (after semaphore acquired).
     active_task_count: Arc<AtomicUsize>,
-    /// Set of task IDs currently in flight (for debugging/monitoring)
+    /// Set of task IDs currently in flight (for debugging/monitoring).
     running_tasks: Arc<parking_lot::Mutex<HashSet<String>>>,
-    /// Count of spawned tasks (including those waiting for semaphore)
+    /// Count of spawned tasks (including those waiting for semaphore).
     spawned_task_count: Arc<AtomicUsize>,
 }
 
 impl TaskRunner {
-    /// Create a new task runner
+    /// Create a new task runner.
     pub fn new(
         worker: Arc<dyn Worker>,
         task_client: TaskClient,
@@ -68,9 +68,9 @@ impl TaskRunner {
     ) -> Self {
         // Resolve configuration from environment
         let defaults = WorkerConfig {
-            task_definition_name: worker.task_definition_name().to_string(),
+            task_definition_name: worker.task_definition_name().to_owned(),
             poll_interval: Duration::from_millis(worker.poll_interval_millis()),
-            domain: worker.domain().map(|s| s.to_string()),
+            domain: worker.domain().map(std::borrow::ToOwned::to_owned),
             worker_id: worker.identity(),
             thread_count: worker.thread_count(),
             ..Default::default()
@@ -107,55 +107,61 @@ impl TaskRunner {
         }
     }
 
-    /// Get the task type this runner handles
+    /// Get the task type this runner handles.
+    #[must_use]
     pub fn task_type(&self) -> &str {
         &self.config.task_definition_name
     }
 
-    /// Get the worker configuration
+    /// Get the worker configuration.
+    #[must_use]
     pub fn config(&self) -> &WorkerConfig {
         &self.config
     }
 
-    /// Get the number of currently active tasks (executing, not waiting for semaphore)
+    /// Get the number of currently active tasks (executing, not waiting for semaphore).
+    #[must_use]
     pub fn active_task_count(&self) -> usize {
         self.active_task_count.load(Ordering::SeqCst)
     }
 
-    /// Get the number of spawned tasks (including those waiting for semaphore)
+    /// Get the number of spawned tasks (including those waiting for semaphore).
+    #[must_use]
     pub fn spawned_task_count(&self) -> usize {
         self.spawned_task_count.load(Ordering::SeqCst)
     }
 
-    /// Check if the runner is running
+    /// Check if the runner is running.
+    #[must_use]
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
 
-    /// Check if the runner is paused
+    /// Check if the runner is paused.
+    #[must_use]
     pub fn is_paused(&self) -> bool {
         self.paused.load(Ordering::SeqCst)
     }
 
-    /// Pause the runner
+    /// Pause the runner.
     pub fn pause(&self) {
         self.paused.store(true, Ordering::SeqCst);
         info!(task_type = %self.config.task_definition_name, "Task runner paused");
     }
 
-    /// Resume the runner
+    /// Resume the runner.
     pub fn resume(&self) {
         self.paused.store(false, Ordering::SeqCst);
         info!(task_type = %self.config.task_definition_name, "Task runner resumed");
     }
 
-    /// Stop the runner
+    /// Stop the runner.
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
         info!(task_type = %self.config.task_definition_name, "Task runner stopped");
     }
 
-    /// Run the polling loop
+    /// Run the polling loop.
     pub async fn run(&self) {
         self.running.store(true, Ordering::SeqCst);
 
@@ -183,7 +189,7 @@ impl TaskRunner {
         );
     }
 
-    /// Wait for all spawned tasks to complete (used during shutdown)
+    /// Wait for all spawned tasks to complete (used during shutdown).
     async fn wait_for_tasks_to_complete(&self) {
         let shutdown_timeout = Duration::from_secs(30);
         let start = Instant::now();
@@ -203,7 +209,7 @@ impl TaskRunner {
         }
     }
 
-    /// Run one iteration of the polling loop
+    /// Run one iteration of the polling loop.
     async fn run_once(&self) -> Result<()> {
         // Check if paused
         if self.paused.load(Ordering::SeqCst) {
@@ -235,7 +241,7 @@ impl TaskRunner {
 
             let elapsed = self.last_poll_time.lock().elapsed();
             if elapsed < backoff {
-                tokio::time::sleep(backoff - elapsed).await;
+                tokio::time::sleep(backoff.checked_sub(elapsed).unwrap_or_default()).await;
             }
         }
 
@@ -305,7 +311,7 @@ impl TaskRunner {
         Ok(())
     }
 
-    /// Spawn task execution in background
+    /// Spawn task execution in background.
     ///
     /// This method correctly handles the semaphore acquisition order to avoid
     /// race conditions in capacity calculation:
@@ -313,9 +319,9 @@ impl TaskRunner {
     /// 2. Spawn task
     /// 3. Acquire semaphore (wait if at capacity)
     /// 4. Increment active count (now executing)
-    /// 5. Track task ID in running_tasks
+    /// 5. Track task ID in `running_tasks`
     /// 6. Execute task
-    /// 7. Decrement active count and remove from running_tasks
+    /// 7. Decrement active count and remove from `running_tasks`
     /// 8. Decrement spawned count
     fn spawn_task_execution(&self, task: Task) {
         let task_id = task.task_id.clone();
@@ -336,14 +342,11 @@ impl TaskRunner {
 
         tokio::spawn(async move {
             // Acquire semaphore permit FIRST - this is the actual concurrency control
-            let _permit = match semaphore.acquire().await {
-                Ok(permit) => permit,
-                Err(_) => {
-                    // Semaphore was closed (shouldn't happen in normal operation)
-                    error!(task_id = %task_id, "Semaphore closed, dropping task");
-                    spawned_task_count.fetch_sub(1, Ordering::SeqCst);
-                    return;
-                }
+            let Ok(_permit) = semaphore.acquire().await else {
+                // Semaphore was closed (shouldn't happen in normal operation)
+                error!(task_id = %task_id, "Semaphore closed, dropping task");
+                spawned_task_count.fetch_sub(1, Ordering::SeqCst);
+                return;
             };
 
             // NOW increment active count and track the task
@@ -414,15 +417,15 @@ impl TaskRunner {
             Err(panic_payload) => {
                 let msg = panic_payload
                     .downcast_ref::<String>()
-                    .map(|s| s.as_str())
+                    .map(std::string::String::as_str)
                     .or_else(|| panic_payload.downcast_ref::<&str>().copied())
                     .unwrap_or("<non-string panic>");
-                TaskOutcome::Panic(msg.to_string())
+                TaskOutcome::Panic(msg.to_owned())
             }
         }
     }
 
-    /// Execute a task and update the result
+    /// Execute a task and update the result.
     ///
     /// Takes ownership of the Task to wrap it in Arc, avoiding clones
     /// when passing to workers.
@@ -550,17 +553,16 @@ mod tests {
 
     #[async_trait]
     impl Worker for TestWorker {
-        fn task_definition_name(&self) -> &str {
+        fn task_definition_name(&self) -> &'static str {
             "test_task"
         }
 
         async fn execute(&self, task: &Task) -> Result<WorkerOutput> {
             let name = task
                 .get_input_string("name")
-                .unwrap_or_else(|| "World".to_string());
+                .unwrap_or_else(|| "World".to_owned());
             Ok(WorkerOutput::completed_with_result(format!(
-                "Hello, {}!",
-                name
+                "Hello, {name}!"
             )))
         }
 

@@ -1,8 +1,7 @@
-//! One-off probe: exercises LlmGuardrail::check() against a real local OpenAI-compatible LLM
-//! server (temporarily patched into guardrail.rs's normally-hardcoded OpenAI URL for this
-//! test only). Not part of the crate's example set.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-use conductor::agents::{GuardrailCheck, LlmGuardrail};
+use conductor::agents::{GuardrailCheck as _, LlmGuardrail};
 
 fn main() {
     std::env::set_var("OPENAI_API_KEY", "not-needed-local");

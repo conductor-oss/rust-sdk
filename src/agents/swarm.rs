@@ -17,7 +17,7 @@ use std::sync::Arc;
 /// (readers reasonably expect `HandoffCondition` to configure `Strategy::HANDOFF`; it doesn't —
 /// it's swarm-only), and this port disambiguates it by giving the swarm-only, rule-driven type its
 /// own name instead of reproducing the collision. See `docs/agents/parity-plan.md` (search
-/// "SwarmTransition") for the worked example and the full rationale.
+/// "`SwarmTransition`") for the worked example and the full rationale.
 ///
 /// Each variant carries a `target` — the name of the agent to hand off to — plus whatever that
 /// variant matches against:
@@ -139,6 +139,7 @@ impl SwarmTransition {
     /// `on_text_mention` / `on_condition`). Following [`super::Strategy::as_str`]'s pattern:
     /// the wire string lives on the type itself rather than being re-derived at serialization
     /// call sites.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             SwarmTransition::OnToolResult { .. } => "on_tool_result",
@@ -149,6 +150,7 @@ impl SwarmTransition {
 
     /// The agent this transition hands off to, common to every variant (python's
     /// `HandoffCondition.target` base-class attribute).
+    #[must_use]
     pub fn target(&self) -> &str {
         match self {
             SwarmTransition::OnToolResult { target, .. } => target,
@@ -164,6 +166,7 @@ impl SwarmTransition {
     ///   is set, also requires `ctx.tool_result` to contain it (case-sensitive substring).
     /// - `OnTextMention`: `true` iff `ctx.result` contains `text`, case-insensitively.
     /// - `OnCondition`: the closure's return value, called directly against `ctx`.
+    #[must_use]
     pub fn should_transition(&self, ctx: &SwarmContext) -> bool {
         match self {
             SwarmTransition::OnToolResult {

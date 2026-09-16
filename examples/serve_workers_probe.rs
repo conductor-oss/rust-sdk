@@ -1,7 +1,5 @@
-//! One-off probe: confirms the server's requiredWorkers for a termination-bearing agent match
-//! the {name}_termination task name AgentRuntime::serve() now registers, then actually runs the
-//! agent end to end with serve() active to prove the worker gets polled and answered correctly.
-//! Not part of the crate's example set.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime, TerminationCondition, ToolDef};
 use conductor::configuration::Configuration;
@@ -13,7 +11,7 @@ async fn main() -> Result<()> {
     let config = Configuration::from_env();
     let runtime = AgentRuntime::new(config.clone())?;
 
-    let model = std::env::var("PROBE_MODEL").unwrap_or_else(|_| "mock/mockLLM".to_string());
+    let model = std::env::var("PROBE_MODEL").unwrap_or_else(|_| "mock/mockLLM".to_owned());
     let agent = AgentDef::new("audit-termination-agent")?
         .with_model(model)
         .with_instructions("Reply with exactly the single word: TERMINATE")
@@ -48,7 +46,10 @@ async fn main() -> Result<()> {
     });
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    match runtime.run(&agent, serde_json::json!({"prompt": "go"})).await {
+    match runtime
+        .run(&agent, serde_json::json!({"prompt": "go"}))
+        .await
+    {
         Ok(result) => println!("RESULT: {}", serde_json::to_string_pretty(&result)?),
         Err(e) => println!("ERROR: {e}"),
     }

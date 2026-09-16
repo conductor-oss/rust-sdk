@@ -30,13 +30,13 @@
 //! ## Span names and fields match python's exactly
 //!
 //! `agent.run`, `agent.compile`, `agent.llm_call`, `agent.tool_call`, `agent.handoff` — so a
-//! caller who bridges to a real OTel backend sees the same span taxonomy regardless of which
+//! caller who bridges to a real `OTel` backend sees the same span taxonomy regardless of which
 //! SDK produced it.
 
 use std::future::Future;
 
 use tracing::field::Empty;
-use tracing::{Instrument, Span};
+use tracing::{Instrument as _, Span};
 
 use crate::error::Result;
 
@@ -45,6 +45,7 @@ use crate::error::Result;
 /// `is_tracing_enabled()`, which checks whether `opentelemetry-api` is installed; the Rust
 /// equivalent question is whether anything is listening, not whether a crate is present (there
 /// is no "not installed" state for a dependency that's already compiled in).
+#[must_use]
 pub fn is_tracing_enabled() -> bool {
     tracing::dispatcher::has_been_set()
 }
@@ -71,6 +72,10 @@ pub fn agent_run_span(agent_name: &str, prompt: &str, model: &str, session_id: &
 /// API (that's an OTel-SDK-specific concept); recording an `tracing::error!` event scoped to the
 /// span is the idiomatic `tracing` equivalent, and is what the `tracing-opentelemetry` bridge
 /// maps back to a failed span.
+///
+/// # Errors
+///
+/// Propagates whatever error `f` returns; this function adds tracing only, no new failure modes.
 pub async fn traced_agent_run<F, Fut, T>(
     agent_name: &str,
     prompt: &str,
@@ -142,7 +147,11 @@ pub fn tool_call_span(agent_name: &str, tool_name: &str, args: Option<&str>) -> 
 
 /// Run `f` inside an `agent.tool_call` span, recording an error event on failure — same
 /// error-handling shape as [`traced_agent_run`], matching python's `trace_tool_call`'s
-/// try/except/record_exception/raise.
+/// `try/except/record_exception/raise`.
+///
+/// # Errors
+///
+/// Propagates whatever error `f` returns; this function adds tracing only, no new failure modes.
 pub async fn traced_tool_call<F, Fut, T>(
     agent_name: &str,
     tool_name: &str,
@@ -219,8 +228,7 @@ mod tests {
 
     impl Visit for FieldVisitor<'_> {
         fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-            self.0
-                .insert(field.name().to_string(), format!("{value:?}"));
+            self.0.insert(field.name().to_owned(), format!("{value:?}"));
         }
     }
 
@@ -252,8 +260,8 @@ mod tests {
         let fields = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let span_names = Arc::new(Mutex::new(Vec::new()));
         let subscriber = RecordingSubscriber {
-            fields: fields.clone(),
-            span_names: span_names.clone(),
+            fields: Arc::clone(&fields),
+            span_names: Arc::clone(&span_names),
         };
 
         tracing::subscriber::with_default(subscriber, || {
@@ -271,7 +279,7 @@ mod tests {
     fn test_agent_run_span_omits_session_id_when_empty() {
         let fields = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let subscriber = RecordingSubscriber {
-            fields: fields.clone(),
+            fields: Arc::clone(&fields),
             span_names: Arc::new(Mutex::new(Vec::new())),
         };
 
@@ -295,7 +303,7 @@ mod tests {
             Err(ConductorError::agent("boom"))
         })
         .await;
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     #[tokio::test]
@@ -308,7 +316,7 @@ mod tests {
     fn test_compile_span_omits_strategy_when_empty() {
         let fields = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let subscriber = RecordingSubscriber {
-            fields: fields.clone(),
+            fields: Arc::clone(&fields),
             span_names: Arc::new(Mutex::new(Vec::new())),
         };
         tracing::subscriber::with_default(subscriber, || {
@@ -321,7 +329,7 @@ mod tests {
     fn test_compile_span_records_strategy_when_given() {
         let fields = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let subscriber = RecordingSubscriber {
-            fields: fields.clone(),
+            fields: Arc::clone(&fields),
             span_names: Arc::new(Mutex::new(Vec::new())),
         };
         tracing::subscriber::with_default(subscriber, || {
@@ -337,7 +345,7 @@ mod tests {
     fn test_tool_call_span_truncates_args_to_1000_chars() {
         let fields = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let subscriber = RecordingSubscriber {
-            fields: fields.clone(),
+            fields: Arc::clone(&fields),
             span_names: Arc::new(Mutex::new(Vec::new())),
         };
         let long_args = "x".repeat(2000);
@@ -354,7 +362,7 @@ mod tests {
     fn test_handoff_span_records_source_and_target() {
         let fields = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let subscriber = RecordingSubscriber {
-            fields: fields.clone(),
+            fields: Arc::clone(&fields),
             span_names: Arc::new(Mutex::new(Vec::new())),
         };
         tracing::subscriber::with_default(subscriber, || {
@@ -369,7 +377,7 @@ mod tests {
     fn test_record_token_usage_only_records_nonzero_counts() {
         let fields = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let subscriber = RecordingSubscriber {
-            fields: fields.clone(),
+            fields: Arc::clone(&fields),
             span_names: Arc::new(Mutex::new(Vec::new())),
         };
         tracing::subscriber::with_default(subscriber, || {

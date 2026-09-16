@@ -12,7 +12,7 @@ use crate::metrics::MetricsSettings;
 
 use super::{TaskHandler, Worker};
 
-/// High-level worker host for running Conductor workers
+/// High-level worker host for running Conductor workers.
 ///
 /// # Example
 ///
@@ -42,12 +42,17 @@ pub struct WorkerHost {
 }
 
 impl WorkerHost {
-    /// Create a new worker host builder
+    /// Create a new worker host builder.
+    #[must_use]
     pub fn builder(config: Configuration) -> WorkerHostBuilder {
         WorkerHostBuilder::new(config)
     }
 
-    /// Wait for shutdown signal (Ctrl+C)
+    /// Wait for shutdown signal (Ctrl+C).
+    ///
+    /// # Errors
+    ///
+    /// Currently always returns `Ok(())`; see [`TaskHandler::stop`].
     pub async fn wait_for_shutdown(mut self) -> Result<()> {
         info!("Worker host running, press Ctrl+C to stop");
 
@@ -55,11 +60,11 @@ impl WorkerHost {
             _ = tokio::signal::ctrl_c() => {
                 info!("Received shutdown signal");
             }
-            _ = async {
+            () = async {
                 if let Some(rx) = self.shutdown_rx.take() {
                     let _ = rx.await;
                 } else {
-                    std::future::pending::<()>().await
+                    std::future::pending::<()>().await;
                 }
             } => {
                 info!("Received shutdown request");
@@ -69,23 +74,28 @@ impl WorkerHost {
         self.handler.stop().await
     }
 
-    /// Stop the worker host
+    /// Stop the worker host.
+    ///
+    /// # Errors
+    ///
+    /// Currently always returns `Ok(())`; see [`TaskHandler::stop`].
     pub async fn stop(mut self) -> Result<()> {
         self.handler.stop().await
     }
 
-    /// Get a reference to the underlying task handler
+    /// Get a reference to the underlying task handler.
+    #[must_use]
     pub fn handler(&self) -> &TaskHandler {
         &self.handler
     }
 
-    /// Get a mutable reference to the underlying task handler
+    /// Get a mutable reference to the underlying task handler.
     pub fn handler_mut(&mut self) -> &mut TaskHandler {
         &mut self.handler
     }
 }
 
-/// Builder for WorkerHost
+/// Builder for `WorkerHost`.
 pub struct WorkerHostBuilder {
     config: Configuration,
     workers: Vec<Arc<dyn Worker>>,
@@ -95,7 +105,7 @@ pub struct WorkerHostBuilder {
 }
 
 impl WorkerHostBuilder {
-    /// Create a new builder
+    /// Create a new builder.
     pub fn new(config: Configuration) -> Self {
         Self {
             config,
@@ -106,31 +116,31 @@ impl WorkerHostBuilder {
         }
     }
 
-    /// Add a worker
+    /// Add a worker.
     pub fn worker(mut self, worker: impl Worker + 'static) -> Self {
         self.workers.push(Arc::new(worker));
         self
     }
 
-    /// Add multiple workers
+    /// Add multiple workers.
     pub fn workers(mut self, workers: impl IntoIterator<Item = Arc<dyn Worker>>) -> Self {
         self.workers.extend(workers);
         self
     }
 
-    /// Add an event listener
+    /// Add an event listener.
     pub fn event_listener(mut self, listener: impl TaskRunnerEventsListener + 'static) -> Self {
         self.event_listeners.push(Arc::new(listener));
         self
     }
 
-    /// Enable metrics with the given settings
+    /// Enable metrics with the given settings.
     pub fn with_metrics(mut self, settings: MetricsSettings) -> Self {
         self.metrics_settings = Some(settings);
         self
     }
 
-    /// Set up programmatic shutdown
+    /// Set up programmatic shutdown.
     pub fn with_shutdown_channel(self) -> (Self, oneshot::Sender<()>) {
         let (tx, rx) = oneshot::channel();
         (
@@ -145,7 +155,7 @@ impl WorkerHostBuilder {
         )
     }
 
-    /// Start the worker host
+    /// Start the worker host.
     pub async fn start(self) -> Result<WorkerHost> {
         let mut handler = TaskHandler::new(self.config)?;
 

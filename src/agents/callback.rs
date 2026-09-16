@@ -76,22 +76,26 @@ pub struct CallbackContext {
 
 impl CallbackContext {
     /// An empty context.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Builder-style insert, matching this crate's `with_*` convention (see [`AgentDef`](super::def::AgentDef)).
+    #[must_use]
     pub fn with_field(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.fields.insert(key.into(), value.into());
         self
     }
 
     /// Look up a single field by name (e.g. `"messages"`, `"llm_result"`).
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.fields.get(key)
     }
 
     /// The full backing field map, for handlers that want to inspect everything at once.
+    #[must_use]
     pub fn as_map(&self) -> &Map<String, Value> {
         &self.fields
     }
@@ -190,7 +194,10 @@ mod tests {
         }
 
         fn calls(&self) -> Vec<&'static str> {
-            self.calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
+            self.calls
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
         }
     }
 
@@ -199,7 +206,7 @@ mod tests {
         async fn on_agent_start(&self, ctx: &CallbackContext) -> Option<Value> {
             self.calls
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .push("on_agent_start");
             ctx.get("input").cloned()
         }
@@ -207,15 +214,15 @@ mod tests {
         async fn on_agent_end(&self, _ctx: &CallbackContext) -> Option<Value> {
             self.calls
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .push("on_agent_end");
-            Some(Value::String("agent_end".to_string()))
+            Some(Value::String("agent_end".to_owned()))
         }
 
         async fn on_model_start(&self, ctx: &CallbackContext) -> Option<Value> {
             self.calls
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .push("on_model_start");
             ctx.get("messages").cloned()
         }
@@ -223,7 +230,7 @@ mod tests {
         async fn on_model_end(&self, ctx: &CallbackContext) -> Option<Value> {
             self.calls
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .push("on_model_end");
             ctx.get("llm_result").cloned()
         }
@@ -231,7 +238,7 @@ mod tests {
         async fn on_tool_start(&self, _ctx: &CallbackContext) -> Option<Value> {
             self.calls
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .push("on_tool_start");
             None
         }
@@ -239,9 +246,9 @@ mod tests {
         async fn on_tool_end(&self, _ctx: &CallbackContext) -> Option<Value> {
             self.calls
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .push("on_tool_end");
-            Some(Value::String("tool_end".to_string()))
+            Some(Value::String("tool_end".to_owned()))
         }
     }
 
@@ -257,11 +264,11 @@ mod tests {
 
         assert_eq!(
             handler.on_agent_start(&start_ctx).await,
-            Some(Value::String("hi".to_string()))
+            Some(Value::String("hi".to_owned()))
         );
         assert_eq!(
             handler.on_agent_end(&empty_ctx).await,
-            Some(Value::String("agent_end".to_string()))
+            Some(Value::String("agent_end".to_owned()))
         );
         assert_eq!(
             handler.on_model_start(&model_start_ctx).await,
@@ -269,12 +276,12 @@ mod tests {
         );
         assert_eq!(
             handler.on_model_end(&model_end_ctx).await,
-            Some(Value::String("hi back".to_string()))
+            Some(Value::String("hi back".to_owned()))
         );
         assert_eq!(handler.on_tool_start(&empty_ctx).await, None);
         assert_eq!(
             handler.on_tool_end(&empty_ctx).await,
-            Some(Value::String("tool_end".to_string()))
+            Some(Value::String("tool_end".to_owned()))
         );
 
         assert_eq!(
@@ -309,12 +316,12 @@ mod tests {
     #[test]
     fn test_callback_context_field_access() {
         let ctx = CallbackContext::new()
-            .with_field("tool_name", Value::String("lookup_weather".to_string()))
+            .with_field("tool_name", Value::String("lookup_weather".to_owned()))
             .with_field("arguments", serde_json::json!({"city": "Tokyo"}));
 
         assert_eq!(
             ctx.get("tool_name"),
-            Some(&Value::String("lookup_weather".to_string()))
+            Some(&Value::String("lookup_weather".to_owned()))
         );
         assert_eq!(
             ctx.get("arguments"),
@@ -327,7 +334,7 @@ mod tests {
     #[test]
     fn test_callback_context_from_map() {
         let mut map = Map::new();
-        map.insert("k".to_string(), Value::from(1));
+        map.insert("k".to_owned(), Value::from(1));
         let ctx = CallbackContext::from(map);
         assert_eq!(ctx.get("k"), Some(&Value::from(1)));
     }

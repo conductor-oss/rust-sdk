@@ -32,9 +32,9 @@
 //! itself never uses either mechanism for code execution.
 
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::sync::Arc;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
 
@@ -44,19 +44,21 @@ use super::code_executor::{CodeExecutor, LocalCodeExecutor};
 use super::tool::ToolDef;
 
 // Hardcoded, compile-time-valid patterns — the `unwrap()`s here can never actually fail.
-#[allow(clippy::unwrap_used)]
-static PYTHON_SUBPROCESS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"subprocess\.\w+\(\s*\[?\s*["'](\S+?)["']"#).unwrap());
-#[allow(clippy::unwrap_used)]
-static PYTHON_OS_SYSTEM_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"os\.(?:system|popen)\(\s*["'](\S+)"#).unwrap());
-#[allow(clippy::unwrap_used)]
-static PYTHON_BANG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\s*!(\S+)").unwrap());
-#[allow(clippy::unwrap_used)]
-static BASH_COMMAND_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)(?:^|[|;&]\s*|`|\$\(\s*)(\w[\w.+-]*)").unwrap());
-#[allow(clippy::unwrap_used)]
-static HEREDOC_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<<-?\s*'?(\w+)'?").unwrap());
+#[expect(clippy::unwrap_used)]
+static PYTHON_SUBPROCESS_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r#"subprocess\.\w+\(\s*\[?\s*["'](\S+?)["']"#).unwrap());
+#[expect(clippy::unwrap_used)]
+static PYTHON_OS_SYSTEM_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r#"os\.(?:system|popen)\(\s*["'](\S+)"#).unwrap());
+#[expect(clippy::unwrap_used)]
+static PYTHON_BANG_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s*!(\S+)").unwrap());
+#[expect(clippy::unwrap_used)]
+static BASH_COMMAND_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"(?m)(?:^|[|;&]\s*|`|\$\(\s*)(\w[\w.+-]*)").unwrap());
+#[expect(clippy::unwrap_used)]
+static HEREDOC_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"<<-?\s*'?(\w+)'?").unwrap());
 
 const BASH_BUILTINS: &[&str] = &[
     "if", "then", "else", "elif", "fi", "for", "while", "do", "done", "case", "esac", "in",
@@ -86,6 +88,7 @@ impl CommandValidator {
 
     /// Validate `code` against the allowed-command list. Returns `None` if the code passes, or
     /// an error message describing the violation.
+    #[must_use]
     pub fn validate(&self, code: &str, language: &str) -> Option<String> {
         if self.allowed_commands.is_empty() {
             return None;
@@ -128,7 +131,7 @@ impl CommandValidator {
     fn validate_bash(&self, code: &str) -> Option<String> {
         let heredoc_delimiters: HashSet<&str> = HEREDOC_RE
             .captures_iter(code)
-            .map(|c| c.get(1).map(|m| m.as_str()).unwrap_or(""))
+            .map(|c| c.get(1).map_or("", |m| m.as_str()))
             .collect();
 
         let mut cleaned_lines: Vec<String> = Vec::new();
@@ -140,7 +143,7 @@ impl CommandValidator {
                 Some(idx) => &line[..idx],
                 None => line,
             };
-            cleaned_lines.push(line.to_string());
+            cleaned_lines.push(line.to_owned());
         }
         let cleaned = cleaned_lines.join("\n");
 
@@ -207,7 +210,7 @@ impl Default for CodeExecutionConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            allowed_languages: vec!["python".to_string()],
+            allowed_languages: vec!["python".to_owned()],
             allowed_commands: Vec::new(),
             executor: ConfiguredExecutor::default(),
             timeout_seconds: 30,
@@ -216,10 +219,12 @@ impl Default for CodeExecutionConfig {
 }
 
 impl CodeExecutionConfig {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn with_allowed_languages(
         mut self,
         languages: impl IntoIterator<Item = impl Into<String>>,
@@ -228,6 +233,7 @@ impl CodeExecutionConfig {
         self
     }
 
+    #[must_use]
     pub fn with_allowed_commands(
         mut self,
         commands: impl IntoIterator<Item = impl Into<String>>,
@@ -238,6 +244,7 @@ impl CodeExecutionConfig {
 
     /// Use a fixed custom executor for every call, bypassing the default per-call
     /// [`LocalCodeExecutor`] rebuild — see [`ConfiguredExecutor`].
+    #[must_use]
     pub fn with_executor(mut self, executor: Arc<dyn CodeExecutor>) -> Self {
         self.executor = ConfiguredExecutor::Custom(executor);
         self
@@ -245,6 +252,7 @@ impl CodeExecutionConfig {
 
     /// Working directory for the default [`LocalCodeExecutor`] path. Ignored once
     /// [`CodeExecutionConfig::with_executor`] has been called.
+    #[must_use]
     pub fn with_working_dir(mut self, working_dir: impl Into<String>) -> Self {
         if let ConfiguredExecutor::Local { .. } = &self.executor {
             self.executor = ConfiguredExecutor::Local {
@@ -254,11 +262,13 @@ impl CodeExecutionConfig {
         self
     }
 
+    #[must_use]
     pub fn with_timeout_seconds(mut self, timeout_seconds: u64) -> Self {
         self.timeout_seconds = timeout_seconds;
         self
     }
 
+    #[must_use]
     pub fn with_enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -272,10 +282,11 @@ fn code_execution_description(config: &CodeExecutionConfig) -> String {
         config.timeout_seconds
     );
     if !config.allowed_commands.is_empty() {
-        desc.push_str(&format!(
+        let _ = write!(
+            desc,
             " Allowed shell commands: {}.",
             config.allowed_commands.join(", ")
-        ));
+        );
     }
     desc
 }
@@ -314,7 +325,7 @@ async fn run_code_execution(config: &CodeExecutionConfig, args: Value) -> Result
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .unwrap_or("python")
-        .to_string();
+        .to_owned();
 
     if !config.allowed_languages.iter().any(|l| l == &language) {
         return Err(ConductorError::agent(format!(
@@ -351,7 +362,7 @@ async fn run_code_execution(config: &CodeExecutionConfig, args: Value) -> Result
     } else {
         let mut stderr_parts = Vec::new();
         if !result.error.is_empty() {
-            stderr_parts.push(result.error.trim_end().to_string());
+            stderr_parts.push(result.error.trim_end().to_owned());
         }
         if result.timed_out {
             stderr_parts.push(format!("TIMED OUT after {}s", config.timeout_seconds));
@@ -371,9 +382,10 @@ pub(super) fn code_execution_tool(
     config: &CodeExecutionConfig,
     agent_name: Option<&str>,
 ) -> ToolDef {
-    let task_name = agent_name
-        .map(|n| format!("{n}_execute_code"))
-        .unwrap_or_else(|| "execute_code".to_string());
+    let task_name = agent_name.map_or_else(
+        || "execute_code".to_owned(),
+        |n| format!("{n}_execute_code"),
+    );
     let task_name = super::def::sanitize_for_task_name(&task_name);
 
     let input_schema = json!({
@@ -392,7 +404,7 @@ pub(super) fn code_execution_tool(
     let description = code_execution_description(config);
     let config = std::sync::Arc::new(config.clone());
     ToolDef::function::<Value, _, _>(task_name, description, input_schema, move |args: Value| {
-        let config = config.clone();
+        let config = std::sync::Arc::clone(&config);
         async move { run_code_execution(&config, args).await }
     })
 }
@@ -405,7 +417,7 @@ mod tests {
     fn test_code_execution_config_defaults() {
         let config = CodeExecutionConfig::new();
         assert!(config.enabled);
-        assert_eq!(config.allowed_languages, vec!["python".to_string()]);
+        assert_eq!(config.allowed_languages, vec!["python".to_owned()]);
         assert!(config.allowed_commands.is_empty());
         assert_eq!(config.timeout_seconds, 30);
         assert!(matches!(

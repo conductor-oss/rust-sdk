@@ -4,46 +4,46 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Integration with an external system
+/// Integration with an external system.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Integration {
-    /// Integration name
+    /// Integration name.
     pub name: String,
 
-    /// Integration type/category
+    /// Integration type/category.
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub integration_type: Option<String>,
 
-    /// Provider category
+    /// Provider category.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
 
-    /// Whether the integration is enabled
+    /// Whether the integration is enabled.
     #[serde(default)]
     pub enabled: bool,
 
-    /// Description
+    /// Description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Configuration
+    /// Configuration.
     #[serde(default)]
     pub configuration: HashMap<String, serde_json::Value>,
 
-    /// Create time
+    /// Create time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_time: Option<i64>,
 
-    /// Created by
+    /// Created by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
 
-    /// Update time
+    /// Update time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_time: Option<i64>,
 
-    /// Updated by
+    /// Updated by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
 }
@@ -52,79 +52,79 @@ pub struct Integration {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntegrationApi {
-    /// API name
+    /// API name.
     pub name: String,
 
-    /// Integration name this API belongs to
+    /// Integration name this API belongs to.
     pub integration_name: String,
 
-    /// API configuration
+    /// API configuration.
     #[serde(default)]
     pub configuration: HashMap<String, serde_json::Value>,
 
-    /// Whether the API is enabled
+    /// Whether the API is enabled.
     #[serde(default)]
     pub enabled: bool,
 
-    /// Description
+    /// Description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Create time
+    /// Create time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_time: Option<i64>,
 
-    /// Created by
+    /// Created by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
 
-    /// Update time
+    /// Update time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_time: Option<i64>,
 
-    /// Updated by
+    /// Updated by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
 }
 
-/// Request to update an integration
+/// Request to update an integration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntegrationUpdate {
-    /// Integration type/category
+    /// Integration type/category.
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub integration_type: Option<String>,
 
-    /// Category
+    /// Category.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
 
-    /// Whether enabled
+    /// Whether enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
 
-    /// Description
+    /// Description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Configuration
+    /// Configuration.
     #[serde(default)]
     pub configuration: HashMap<String, serde_json::Value>,
 }
 
-/// Request to update an integration API
+/// Request to update an integration API.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntegrationApiUpdate {
-    /// Configuration
+    /// Configuration.
     #[serde(default)]
     pub configuration: HashMap<String, serde_json::Value>,
 
-    /// Whether enabled
+    /// Whether enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
 
-    /// Description
+    /// Description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }

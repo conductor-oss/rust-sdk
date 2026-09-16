@@ -1,9 +1,5 @@
-//! Reproduces `llm-recordings/06_sequential_pipeline` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/06_sequential_pipeline.py`'s
-//! "Option 2" shape (`agents=[...], strategy=Strategy.SEQUENTIAL)`) — Rust has no `>>` operator
-//! equivalent to python's "Option 1", but both compile to the same wire shape.
-//!
-//! `cargo run --features agents --example sdk_playback_06_sequential_pipeline`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime, Strategy};
 use conductor::configuration::Configuration;

@@ -1,7 +1,5 @@
-//! One-off probe: exercises AgentRuntime::run() (start + join) end to end against a real local
-//! Conductor server, first in LLM record-mode (hitting a local llama.cpp server as the "real"
-//! provider) and then in mock/mockLLM replay-mode, to validate the RECORD_MOCKS.md-style
-//! record->replay flow actually works for the Rust SDK. Not part of the crate's example set.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime};
 use conductor::configuration::Configuration;
@@ -13,7 +11,7 @@ async fn main() -> Result<()> {
     println!("server_api_url = {}", config.server_api_url);
     let runtime = AgentRuntime::new(config)?;
 
-    let model = std::env::var("PROBE_MODEL").unwrap_or_else(|_| "mock/mockLLM".to_string());
+    let model = std::env::var("PROBE_MODEL").unwrap_or_else(|_| "mock/mockLLM".to_owned());
     println!("using model = {model}");
 
     let agent = AgentDef::new("audit-simple-agent")?

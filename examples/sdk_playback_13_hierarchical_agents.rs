@@ -1,7 +1,5 @@
-//! Reproduces `llm-recordings/13_hierarchical_agents` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/13_hierarchical_agents.py`.
-//!
-//! `cargo run --features agents --example sdk_playback_13_hierarchical_agents`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -76,12 +74,12 @@ async fn main() -> Result<()> {
         .with_sub_agent(engineering_lead)?
         .with_sub_agent(marketing_lead)?
         .with_swarm_transition(SwarmTransition::OnTextMention {
-            text: "engineering_lead".to_string(),
-            target: "engineering_lead".to_string(),
+            text: "engineering_lead".to_owned(),
+            target: "engineering_lead".to_owned(),
         })
         .with_swarm_transition(SwarmTransition::OnTextMention {
-            text: "marketing_lead".to_string(),
-            target: "marketing_lead".to_string(),
+            text: "marketing_lead".to_owned(),
+            target: "marketing_lead".to_owned(),
         })
         .with_strategy(Strategy::Swarm)?;
 

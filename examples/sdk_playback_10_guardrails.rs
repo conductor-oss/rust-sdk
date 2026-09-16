@@ -1,8 +1,5 @@
-//! Reproduces `llm-recordings/10_guardrails` (from conductor-oss/conductor PR #1614). Ported
-//! field-for-field from python-sdk's `examples/agents/10_guardrails.py`'s `@guardrail`-decorated
-//! custom function, using this crate's [`FunctionGuardrail`].
-//!
-//! `cargo run --features agents --example sdk_playback_10_guardrails`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;

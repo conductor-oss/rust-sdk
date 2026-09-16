@@ -1,9 +1,5 @@
-//! Reproduces `llm-recordings/02a_simple_tools` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/02a_simple_tools.py`, including
-//! `temperature=0.0` — the recorded requests carry it explicitly, so it must be set here too or
-//! the mock provider's exact-request match fails.
-//!
-//! `cargo run --features agents --example sdk_playback_02a_simple_tools`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;

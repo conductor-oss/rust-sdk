@@ -18,11 +18,12 @@
 //! - **Timeout/missing-executable/unexpected-IO failures are terminal
 //!   (`ConductorError::terminal_tool`, mapped to `FAILED_WITH_TERMINAL_ERROR`)**, matching
 //!   python's `TerminalToolError`; whitelist/shell-gate violations stay plain
-//!   [`ConductorError::agent`] (retryable), matching python's plain `ValueError` for those.
+//!   [`crate::error::ConductorError::agent`] (retryable), matching python's plain `ValueError` for those.
 //! - **Shell tokenization/quoting uses the [`shell_words`] crate** in place of python's `shlex`
 //!   module — same `split`/`quote` semantics, a well-tested crate rather than a hand-rolled
 //!   parser, since incorrect shell tokenization here is a direct command-injection risk.
 
+use std::fmt::Write as _;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -64,10 +65,12 @@ impl Default for CliConfig {
 }
 
 impl CliConfig {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn with_allowed_commands(
         mut self,
         commands: impl IntoIterator<Item = impl Into<String>>,
@@ -76,21 +79,25 @@ impl CliConfig {
         self
     }
 
+    #[must_use]
     pub fn with_timeout_seconds(mut self, timeout_seconds: u64) -> Self {
         self.timeout_seconds = timeout_seconds;
         self
     }
 
+    #[must_use]
     pub fn with_working_dir(mut self, working_dir: impl Into<String>) -> Self {
         self.working_dir = Some(working_dir.into());
         self
     }
 
+    #[must_use]
     pub fn with_allow_shell(mut self, allow_shell: bool) -> Self {
         self.allow_shell = allow_shell;
         self
     }
 
+    #[must_use]
     pub fn with_enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -110,10 +117,10 @@ fn executable_of(command: &str) -> String {
     tokens
         .into_iter()
         .next()
-        .unwrap_or_else(|| command.to_string())
+        .unwrap_or_else(|| command.to_owned())
 }
 
-/// Validate *command* against *allowed_commands*, matching python's `_validate_cli_command`:
+/// Validate *command* against *`allowed_commands`*, matching python's `_validate_cli_command`:
 /// keys off the executable (so `"git"` and `"git status -s"` validate identically), strips any
 /// path prefix (`/usr/bin/git` -> `git`) first, and permits everything when the whitelist is
 /// empty.
@@ -146,17 +153,17 @@ fn cli_tool_description(config: &CliConfig) -> String {
     if !config.allowed_commands.is_empty() {
         let mut sorted = config.allowed_commands.clone();
         sorted.sort();
-        desc.push_str(&format!(" Allowed commands: {}.", sorted.join(", ")));
+        let _ = write!(desc, " Allowed commands: {}.", sorted.join(", "));
     }
     if !config.allow_shell {
-        desc.push_str(" Shell mode is disabled — do not set shell=True.");
+        desc.push_str(" Shell mode is disabled \u{2014} do not set shell=True.");
     }
     desc
 }
 
-fn build_direct_command(executable: &str, argv: &[String], cwd: Option<&str>) -> Command {
+fn build_direct_command(executable: &str, command_args: &[String], cwd: Option<&str>) -> Command {
     let mut cmd = Command::new(executable);
-    cmd.args(argv).stdin(Stdio::null());
+    cmd.args(command_args).stdin(Stdio::null());
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
@@ -238,8 +245,8 @@ async fn run_cli_command(config: &CliConfig, args: Value, context: &ToolContext)
         Some(other) => vec![other.to_string()],
     };
 
-    let mut argv: Vec<String> = tokens[1..].to_vec();
-    argv.extend(extra_args);
+    let mut command_args: Vec<String> = tokens[1..].to_vec();
+    command_args.extend(extra_args);
 
     let cwd = args
         .get("cwd")
@@ -250,13 +257,13 @@ async fn run_cli_command(config: &CliConfig, args: Value, context: &ToolContext)
 
     let mut cmd = if shell {
         let cmd_str = std::iter::once(executable.as_str())
-            .chain(argv.iter().map(String::as_str))
+            .chain(command_args.iter().map(String::as_str))
             .map(shell_words::quote)
             .collect::<Vec<_>>()
             .join(" ");
         build_shell_command(&cmd_str, cwd.as_deref())
     } else {
-        build_direct_command(&executable, &argv, cwd.as_deref())
+        build_direct_command(&executable, &command_args, cwd.as_deref())
     };
 
     // Matches python's exec-time exception handling: `TimeoutExpired`/`FileNotFoundError`/any
@@ -286,10 +293,10 @@ async fn run_cli_command(config: &CliConfig, args: Value, context: &ToolContext)
             if !context_key.is_empty() {
                 let value = {
                     let trimmed_stdout = stdout.trim();
-                    if !trimmed_stdout.is_empty() {
-                        trimmed_stdout.to_string()
+                    if trimmed_stdout.is_empty() {
+                        stderr.trim().to_owned()
                     } else {
-                        stderr.trim().to_string()
+                        trimmed_stdout.to_owned()
                     }
                 };
                 if !value.is_empty() {
@@ -318,9 +325,8 @@ async fn run_cli_command(config: &CliConfig, args: Value, context: &ToolContext)
 /// [`super::def::sanitize_for_task_name`]) when an agent name is given, else bare
 /// `"run_command"`.
 pub(super) fn cli_command_tool(config: &CliConfig, agent_name: Option<&str>) -> ToolDef {
-    let task_name = agent_name
-        .map(|n| format!("{n}_run_command"))
-        .unwrap_or_else(|| "run_command".to_string());
+    let task_name =
+        agent_name.map_or_else(|| "run_command".to_owned(), |n| format!("{n}_run_command"));
     let task_name = super::def::sanitize_for_task_name(&task_name);
 
     let input_schema = json!({
@@ -356,7 +362,7 @@ pub(super) fn cli_command_tool(config: &CliConfig, agent_name: Option<&str>) -> 
         description,
         input_schema,
         move |args: Value, context: ToolContext| {
-            let config = config.clone();
+            let config = Arc::clone(&config);
             async move { run_cli_command(&config, args, &context).await }
         },
     )
@@ -387,7 +393,7 @@ mod tests {
         assert!(!config.enabled);
         assert_eq!(config.allowed_commands, vec!["git", "gh"]);
         assert_eq!(config.timeout_seconds, 60);
-        assert_eq!(config.working_dir, Some("/tmp".to_string()));
+        assert_eq!(config.working_dir, Some("/tmp".to_owned()));
         assert!(config.allow_shell);
     }
 
@@ -408,18 +414,18 @@ mod tests {
 
     #[test]
     fn test_validate_cli_command_empty_whitelist_permits_all() {
-        assert!(validate_cli_command("anything --flag", &[]).is_ok());
+        validate_cli_command("anything --flag", &[]).unwrap();
     }
 
     #[test]
     fn test_validate_cli_command_allows_whitelisted() {
-        let allowed = vec!["git".to_string(), "gh".to_string()];
-        assert!(validate_cli_command("git status -s", &allowed).is_ok());
+        let allowed = vec!["git".to_owned(), "gh".to_owned()];
+        validate_cli_command("git status -s", &allowed).unwrap();
     }
 
     #[test]
     fn test_validate_cli_command_rejects_non_whitelisted() {
-        let allowed = vec!["git".to_string()];
+        let allowed = vec!["git".to_owned()];
         let err = validate_cli_command("rm -rf /", &allowed).unwrap_err();
         assert!(err.to_string().contains("'rm' is not allowed"));
         assert!(err.to_string().contains("Allowed commands: git"));
@@ -427,8 +433,8 @@ mod tests {
 
     #[test]
     fn test_validate_cli_command_strips_path_prefix() {
-        let allowed = vec!["git".to_string()];
-        assert!(validate_cli_command("/usr/bin/git status", &allowed).is_ok());
+        let allowed = vec!["git".to_owned()];
+        validate_cli_command("/usr/bin/git status", &allowed).unwrap();
     }
 
     #[test]
@@ -627,7 +633,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             ctx.get_state("greeting"),
-            Some(Value::String("hello".to_string()))
+            Some(Value::String("hello".to_owned()))
         );
     }
 

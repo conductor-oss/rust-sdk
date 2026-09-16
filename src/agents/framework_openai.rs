@@ -10,7 +10,7 @@
 //! Assistants-API `AssistantObject`, is itself a moving target (the Assistants API is being
 //! phased out upstream in favor of the Responses API). What *is* stable across `async-openai`
 //! versions is its tool-calling shape (`ChatCompletionTool` / `FunctionObject`), which mirrors
-//! OpenAI's own function-calling JSON schema. [`OpenAiAgent`] is therefore a small, local
+//! `OpenAI`'s own function-calling JSON schema. [`OpenAiAgent`] is therefore a small, local
 //! bundling type — name / instructions / model, all in this crate's own shape, plus tools in
 //! `async-openai`'s native [`ChatCompletionTool`] shape — so this adapter's tool-definition
 //! mapping is real `async-openai` type mapping, without depending on a source "agent" object
@@ -46,16 +46,19 @@ impl OpenAiAgent {
         }
     }
 
+    #[must_use]
     pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = Some(instructions.into());
         self
     }
 
+    #[must_use]
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
+    #[must_use]
     pub fn with_tool(mut self, tool: ChatCompletionTool) -> Self {
         self.tools.push(tool);
         self
@@ -77,9 +80,9 @@ impl FrameworkAgent for OpenAiAgent {
 
     /// Maps each `ChatCompletionTool` (`{"type": "function", "function": {...}}`) into a
     /// [`ToolDef`]. `async-openai`'s `ChatCompletionToolType` currently has only the `Function`
-    /// variant, matching OpenAI's own API — there is nothing else to narrow away here, unlike
+    /// variant, matching `OpenAI`'s own API — there is nothing else to narrow away here, unlike
     /// the Assistants-API `AssistantTools` enum's `code_interpreter` / `file_search` variants
-    /// (server-run OpenAI built-ins with no `ToolDef` equivalent, since they're not Conductor
+    /// (server-run `OpenAI` built-ins with no `ToolDef` equivalent, since they're not Conductor
     /// worker/http/mcp/human/agent tools), which this adapter does not attempt to map.
     fn tools(&self) -> Vec<ToolDef> {
         self.tools
@@ -116,8 +119,8 @@ mod tests {
         ChatCompletionTool {
             r#type: ChatCompletionToolType::Function,
             function: FunctionObject {
-                name: "get_weather".to_string(),
-                description: Some("Get current weather for a city".to_string()),
+                name: "get_weather".to_owned(),
+                description: Some("Get current weather for a city".to_owned()),
                 parameters: Some(serde_json::json!({
                     "type": "object",
                     "properties": { "city": { "type": "string" } },

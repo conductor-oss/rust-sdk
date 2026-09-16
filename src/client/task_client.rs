@@ -8,19 +8,24 @@ use crate::error::{ConductorError, Result};
 use crate::http::{ApiClient, ApiPath};
 use crate::models::{Task, TaskResult};
 
-/// Client for task operations (polling and updates)
+/// Client for task operations (polling and updates).
 #[derive(Clone)]
 pub struct TaskClient {
     api: ApiClient,
 }
 
 impl TaskClient {
-    /// Create a new task client
+    /// Create a new task client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self { api }
     }
 
-    /// Poll for a single task
+    /// Poll for a single task.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn poll_task(
         &self,
         task_type: &str,
@@ -36,7 +41,7 @@ impl TaskClient {
             params.push(("domain", d));
         }
 
-        let path = format!("/tasks/poll/{}", task_type);
+        let path = format!("/tasks/poll/{task_type}");
         let result: Option<Task> = self
             .api
             .get_with_params(ApiPath::templated(&path, "/tasks/poll/{taskType}"), &params)
@@ -44,7 +49,11 @@ impl TaskClient {
         Ok(result)
     }
 
-    /// Batch poll for multiple tasks
+    /// Batch poll for multiple tasks.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn batch_poll(
         &self,
         task_type: &str,
@@ -68,7 +77,7 @@ impl TaskClient {
             params.push(("domain", d));
         }
 
-        let path = format!("/tasks/poll/batch/{}", task_type);
+        let path = format!("/tasks/poll/batch/{task_type}");
 
         debug!(
             task_type = task_type,
@@ -94,7 +103,11 @@ impl TaskClient {
         Ok(tasks)
     }
 
-    /// Update a task result
+    /// Update a task result.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn update_task(&self, result: &TaskResult) -> Result<String> {
         debug!(
             task_id = %result.task_id,
@@ -106,7 +119,11 @@ impl TaskClient {
         Ok(response)
     }
 
-    /// Update task with retry logic
+    /// Update task with retry logic.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn update_task_with_retry(
         &self,
         result: &TaskResult,
@@ -152,15 +169,23 @@ impl TaskClient {
         Err(last_error.unwrap_or_else(|| ConductorError::internal("Update failed with no error")))
     }
 
-    /// Get task by ID
+    /// Get task by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_task(&self, task_id: &str) -> Result<Task> {
-        let path = format!("/tasks/{}", task_id);
+        let path = format!("/tasks/{task_id}");
         self.api
             .get(ApiPath::templated(&path, "/tasks/{taskId}"))
             .await
     }
 
-    /// Get tasks in progress for a task type
+    /// Get tasks in progress for a task type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_tasks_in_progress(
         &self,
         task_type: &str,
@@ -178,7 +203,7 @@ impl TaskClient {
             params.push(("count", &count_str));
         }
 
-        let path = format!("/tasks/in_progress/{}", task_type);
+        let path = format!("/tasks/in_progress/{task_type}");
         self.api
             .get_with_params(
                 ApiPath::templated(&path, "/tasks/in_progress/{taskType}"),
@@ -187,9 +212,13 @@ impl TaskClient {
             .await
     }
 
-    /// Add a log to a task
+    /// Add a log to a task.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn add_task_log(&self, task_id: &str, log: &str) -> Result<()> {
-        let path = format!("/tasks/{}/log", task_id);
+        let path = format!("/tasks/{task_id}/log");
         let _: serde_json::Value = self
             .api
             .post(ApiPath::templated(&path, "/tasks/{taskId}/log"), &log)
@@ -197,18 +226,26 @@ impl TaskClient {
         Ok(())
     }
 
-    /// Get logs for a task
+    /// Get logs for a task.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_task_logs(
         &self,
         task_id: &str,
     ) -> Result<Vec<crate::models::task::TaskExecLog>> {
-        let path = format!("/tasks/{}/log", task_id);
+        let path = format!("/tasks/{task_id}/log");
         self.api
             .get(ApiPath::templated(&path, "/tasks/{taskId}/log"))
             .await
     }
 
-    /// Get task queue sizes
+    /// Get task queue sizes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn get_queue_sizes(
         &self,
         task_types: &[&str],
@@ -219,9 +256,13 @@ impl TaskClient {
             .await
     }
 
-    /// Remove task from queue
+    /// Remove task from queue.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn remove_task_from_queue(&self, task_type: &str, task_id: &str) -> Result<()> {
-        let path = format!("/tasks/queue/{}/{}", task_type, task_id);
+        let path = format!("/tasks/queue/{task_type}/{task_id}");
         self.api
             .delete_no_content(ApiPath::templated(
                 &path,
@@ -230,7 +271,11 @@ impl TaskClient {
             .await
     }
 
-    /// Update task by reference name
+    /// Update task by reference name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn update_task_by_ref_name(
         &self,
         workflow_id: &str,
@@ -243,7 +288,7 @@ impl TaskClient {
             "/tasks/{}/{}/{}",
             workflow_id,
             task_ref_name,
-            status_to_string(&status)
+            status_to_string(status)
         );
         let mut params = vec![];
         if let Some(wid) = worker_id {
@@ -259,7 +304,11 @@ impl TaskClient {
             .await
     }
 
-    /// Update task synchronously and return the updated workflow
+    /// Update task synchronously and return the updated workflow.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn update_task_sync(
         &self,
         workflow_id: &str,
@@ -272,11 +321,11 @@ impl TaskClient {
             "/tasks/{}/{}/{}/sync",
             workflow_id,
             task_ref_name,
-            status_to_string(&status)
+            status_to_string(status)
         );
         let mut params: Vec<(&str, String)> = vec![];
         if let Some(wid) = worker_id {
-            params.push(("workerid", wid.to_string()));
+            params.push(("workerid", wid.to_owned()));
         }
 
         let params_ref: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -289,15 +338,23 @@ impl TaskClient {
             .await
     }
 
-    /// Get queue size for a specific task type
+    /// Get queue size for a specific task type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_queue_size_for_task(&self, task_type: &str) -> Result<i64> {
         let sizes = self.get_queue_sizes(&[task_type]).await?;
         Ok(*sizes.get(task_type).unwrap_or(&0))
     }
 
-    /// Get poll data for a task type
+    /// Get poll data for a task type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_task_poll_data(&self, task_type: &str) -> Result<Vec<PollData>> {
-        let path = format!("/tasks/queue/polldata/{}", task_type);
+        let path = format!("/tasks/queue/polldata/{task_type}");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -306,17 +363,29 @@ impl TaskClient {
             .await
     }
 
-    /// Get all poll data
+    /// Get all poll data.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_all_poll_data(&self) -> Result<Vec<PollData>> {
         self.api.get("/tasks/queue/polldata/all").await
     }
 
-    /// Get poll data (alias for get_task_poll_data)
+    /// Get poll data (alias for `get_task_poll_data`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_poll_data(&self, task_type: &str) -> Result<Vec<PollData>> {
         self.get_task_poll_data(task_type).await
     }
 
-    /// Search for tasks
+    /// Search for tasks.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn search_tasks(
         &self,
         query: Option<&str>,
@@ -327,10 +396,10 @@ impl TaskClient {
         let mut params = vec![("start", start.to_string()), ("size", size.to_string())];
 
         if let Some(q) = query {
-            params.push(("query", q.to_string()));
+            params.push(("query", q.to_owned()));
         }
         if let Some(ft) = free_text {
-            params.push(("freeText", ft.to_string()));
+            params.push(("freeText", ft.to_owned()));
         }
 
         let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -338,7 +407,11 @@ impl TaskClient {
         self.api.get_with_params("/tasks/search", &params).await
     }
 
-    /// Search for tasks V2 (returns full task objects)
+    /// Search for tasks V2 (returns full task objects).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn search_tasks_v2(
         &self,
         query: Option<&str>,
@@ -349,10 +422,10 @@ impl TaskClient {
         let mut params = vec![("start", start.to_string()), ("size", size.to_string())];
 
         if let Some(q) = query {
-            params.push(("query", q.to_string()));
+            params.push(("query", q.to_owned()));
         }
         if let Some(ft) = free_text {
-            params.push(("freeText", ft.to_string()));
+            params.push(("freeText", ft.to_owned()));
         }
 
         let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -360,9 +433,13 @@ impl TaskClient {
         self.api.get_with_params("/tasks/search-v2", &params).await
     }
 
-    /// Requeue pending tasks
+    /// Requeue pending tasks.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn requeue_pending_tasks(&self, task_type: &str) -> Result<String> {
-        let path = format!("/tasks/queue/requeue/{}", task_type);
+        let path = format!("/tasks/queue/requeue/{task_type}");
         self.api
             .post_text(
                 ApiPath::templated(&path, "/tasks/queue/requeue/{taskType}"),
@@ -372,28 +449,28 @@ impl TaskClient {
     }
 }
 
-/// Poll data for a task queue
+/// Poll data for a task queue.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PollData {
-    /// Queue name / task type
+    /// Queue name / task type.
     #[serde(default)]
     pub queue_name: String,
 
-    /// Domain
+    /// Domain.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
 
-    /// Worker ID that last polled
+    /// Worker ID that last polled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worker_id: Option<String>,
 
-    /// Last poll time
+    /// Last poll time.
     #[serde(default)]
     pub last_poll_time: i64,
 }
 
-fn status_to_string(status: &crate::models::TaskResultStatus) -> &'static str {
+fn status_to_string(status: crate::models::TaskResultStatus) -> &'static str {
     match status {
         crate::models::TaskResultStatus::Completed => "COMPLETED",
         crate::models::TaskResultStatus::Failed => "FAILED",

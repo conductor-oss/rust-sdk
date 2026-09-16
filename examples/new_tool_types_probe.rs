@@ -1,5 +1,5 @@
-//! One-off probe: confirms the server accepts each of the 8 new tool-type wire shapes via
-//! /agent/compile. Not part of the crate's example set.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentDef, AgentRuntime, ToolDef};
 use conductor::configuration::Configuration;

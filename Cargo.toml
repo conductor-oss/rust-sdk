@@ -28,6 +28,205 @@ exclude = [
 unsafe_code = "forbid"
 
 [lints.clippy]
+# Broad groups -- individual lints below override these where we've made an explicit call.
+pedantic = { level = "warn", priority = -1 }
+restriction = { level = "warn", priority = -1 }
+
+# --- Disabled: fights idiomatic Rust as actually written in this crate ---
+# Its own machine-applicable fix is provably broken: rewrites async trait-impl methods into
+# `return async fn execute(...) { ... }`, which doesn't even parse. Confirmed via
+# `cargo clippy --fix`.
+implicit_return = "allow"
+# Blanket #[inline] on every public item hurts compile times/binary size without profiling
+# data; not how this crate or most Rust code is written.
+missing_inline_in_public_items = "allow"
+# Forces one canonical member order crate-wide for zero functional benefit and high
+# merge-conflict risk.
+arbitrary_source_item_ordering = "allow"
+# Flags use of `?` itself -- one of Rust's core idioms, used pervasively and correctly
+# throughout this crate.
+question_mark_used = "allow"
+# This crate deliberately re-exports common types at the crate root (an established,
+# intentional pattern -- see src/lib.rs).
+pub_use = "allow"
+# This is a `std` crate (tokio, reqwest, full std), not `no_std` -- inapplicable. Its
+# machine-applicable fix is provably broken: rewrites `std::` paths to `alloc::` without any
+# `alloc`-only setup, which fails to resolve. Confirmed via `cargo clippy --fix`.
+std_instead_of_core = "allow"
+std_instead_of_alloc = "allow"
+# Contradicts the `foo/mod.rs` layout already used throughout (src/agents/mod.rs, etc.).
+mod_module_files = "allow"
+# Fires on every `#[cfg(test)] mod tests { ... }` block -- this crate's universal
+# test-organization convention.
+inline_modules = "allow"
+# Wants every once-called private helper inlined into its caller; usually hurts readability
+# and contradicts the extract-a-well-named-helper style used throughout.
+single_call_fn = "allow"
+# Wants every trait method re-implemented even when the provided default is exactly what's
+# wanted.
+missing_trait_methods = "allow"
+# Variable shadowing (`let x = x.field()`) is idiomatic and used throughout.
+shadow_reuse = "allow"
+shadow_unrelated = "allow"
+# Very opinionated about deref patterns in `match`; low signal-to-noise here.
+pattern_type_mismatch = "allow"
+# Flags idiomatic short names (`i`, `e`, `k`, `v` in loops/closures/comprehensions).
+min_ident_chars = "allow"
+# A catch-all `_ =>` arm is sometimes deliberate (forward-compatibility with new variants),
+# not always an oversight -- case-by-case, not a blanket lint.
+wildcard_enum_match_arm = "allow"
+# Low-value stylistic opinions.
+ref_patterns = "allow"
+unused_self = "allow"
+field_scoped_visibility_modifiers = "allow"
+single_char_lifetime_names = "allow"
+# Flags any `/` or `%` on integers, unconditionally -- same category as `question_mark_used`
+# above: a completely normal, pervasive Rust operation, not a code smell.
+integer_division_remainder_used = "allow"
+# `restriction` bundles two genuinely mutually-exclusive lint pairs (each explicitly a
+# "pick at most one" style choice, not a bug on either side): `separated_literal_suffix` vs.
+# `unseparated_literal_suffix` (`1_u64` vs. `1u64`), and `semicolon_outside_block` vs.
+# `semicolon_inside_block`/`semicolon_if_nothing_returned` (2-vs-1, so we standardize on
+# semicolon-inside and disable the outlier). Keeping one side of each active and disabling the
+# other, rather than disabling both, so the crate still gets a consistent style enforced.
+separated_literal_suffix = "allow"
+semicolon_outside_block = "allow"
+# --- Disabled: test/example-code-only findings (`--tests --examples`), inapplicable there ---
+# `println!`/`eprintln!` in `examples/*.rs` demo programs *is* the point -- that's how an example
+# shows a user what the SDK does. Also fires on test-failure diagnostics in `tests/*.rs`.
+print_stdout = "allow"
+print_stderr = "allow"
+# `{:?}` formatting in a test assertion/failure message or an example's demo output is normal;
+# this lint is really aimed at debug-formatting leaking into production log/user-facing output.
+use_debug = "allow"
+# `.ok()` to discard a `Result`'s error in test teardown/cleanup code (e.g. "delete this
+# workflow if it exists, don't fail the test either way") is a deliberate, common pattern, not
+# an oversight.
+unused_result_ok = "allow"
+# Every `tests/*.rs` integration-test file is its own crate by Cargo convention, with top-level
+# `#[test]` fns -- there is no nested `#[cfg(test)] mod tests` to put them in (that convention
+# is for unit tests colocated in `src/`, and those already follow it).
+tests_outside_test_module = "allow"
+# Wants every `#[test] fn test_foo()` renamed to `fn foo()` (644 sites across the test suite).
+# Purely cosmetic, and mechanically renaming risks name collisions within a module; not worth
+# the blast radius for the benefit.
+redundant_test_prefix = "allow"
+# Same fix already applied to real doc comments in `src/` (see the `missing_errors_doc`/
+# `doc_markdown` work); doc comments on test helpers/example code don't carry the same
+# public-API-documentation motivation. Revisit if desired.
+doc_paragraphs_missing_punctuation = "allow"
+
+# --- Disabled for now: open questions, not yet decided -- see PR description ---
+# Wants by-value builder/setter params (e.g. `with_metadata(HashMap<...>)`) taken by reference
+# instead, since the body only serializes/moves them once. Fixing this changes public builder
+# signatures crate-wide for a micro-optimization; needs an explicit call on whether that
+# breaking change is worth it.
+needless_pass_by_value = "allow"
+# Fires on every deliberate `let _ = expr;` fire-and-forget discard (dropped `Result`s from
+# best-effort calls like `dotenvy::dotenv()`). "Fixing" means spelling out verbose types for no
+# clarity gain; needs a call on whether that's actually wanted here.
+let_underscore_untyped = "allow"
+# Wants a trailing no-op `else {}` on every `if`/`else if` chain, even ones that already handle
+# every case via side effects. Same "forced exhaustiveness for its own sake" category as
+# `wildcard_enum_match_arm` above, but not yet triaged as thoroughly.
+else_if_without_else = "allow"
+# Flags match arms with identical bodies (e.g. `Api {..} => Ok(false)` and
+# `Server { status: 404, .. } => Ok(false)`) as mergeable. Merging loses the documentation value
+# of naming each error variant explicitly; needs a call on whether that trade-off is acceptable.
+match_same_arms = "allow"
+# Wants every `#[expect(lint)]`/`#[allow(lint)]` to carry a `reason = "..."` string. Mechanical
+# to add, but needs a call on wording/verbosity convention before doing it crate-wide.
+allow_attributes_without_reason = "allow"
+# Wants every bare numeric literal type-suffixed or explicitly annotated (`1` -> `1_i32`).
+# Crate-wide, this would be a large, highly visible style change; needs an explicit call.
+default_numeric_fallback = "allow"
+# Wants `impl Trait` params rewritten as explicit generics (`fn f(x: impl Into<String>)` ->
+# `fn f<T: Into<String>>(x: T)`). Used pervasively and intentionally throughout this crate's
+# public builder APIs; rewriting is enormous, purely cosmetic churn.
+impl_trait_in_params = "allow"
+# Wants a doc comment on every private field/fn/struct/etc, crate-wide (357 sites). Worth doing
+# as a deliberate documentation pass, not as a side effect of enabling a lint group.
+missing_docs_in_private_items = "allow"
+# Wants long-path references (`crate::error::ConductorError::agent(...)`) rewritten to short,
+# `use`-imported names. Used throughout for clarity at error-construction call sites; not a
+# defect.
+absolute_paths = "allow"
+# Wants every public struct/enum marked `#[non_exhaustive]`. A real API-design decision for a
+# published SDK (affects whether callers can use struct-literal/exhaustive-match syntax against
+# us) -- needs an explicit call, not a blanket application.
+exhaustive_structs = "allow"
+exhaustive_enums = "allow"
+# Flags e.g. `mod tool { struct ToolDef }` naming overlap between a module and its contents --
+# an established, intentional naming convention throughout this crate (`agents::AgentDef` in
+# `agents/def.rs`, etc.).
+module_name_repetitions = "allow"
+# Flags intentionally-parallel names (`js_script`/`jq_script`, `handle`/`handler`) as "too
+# similar" -- that's the point of the parallel naming, not a mixup.
+similar_names = "allow"
+# Flags any `+`/`-`/`*` on integers as potentially overflowing/panicking, unconditionally.
+# Selectively fixing real overflow risk sites is worth doing deliberately, not as a side effect
+# of a blanket lint pass.
+arithmetic_side_effects = "allow"
+float_arithmetic = "allow"
+integer_division = "allow"
+modulo_arithmetic = "allow"
+# Flags every `as` cast unconditionally, including provably lossless ones. Selective review is
+# worth doing deliberately; see `cast_possible_truncation`/`cast_precision_loss` below for the
+# same reasoning applied to the numeric-cast-specific subset.
+as_conversions = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+# Flags `v[i]`/slicing that could panic on out-of-bounds access. Same "selective review, not
+# blanket" reasoning as `arithmetic_side_effects` above.
+indexing_slicing = "allow"
+# Flags byte-index string slicing (`&s[0..5]`), which can panic on a non-UTF8 boundary. Same
+# reasoning as `indexing_slicing` above.
+string_slice = "allow"
+# Flags `unreachable!()`/`panic!()` macro usage unconditionally. Each existing use documents a
+# genuine invariant (e.g. "framework_payload always returns an object"); reviewing whether each
+# one should instead return a `Result` is a deliberate exercise, not a blanket lint fix.
+unreachable = "allow"
+panic = "allow"
+# Function-length/complexity metrics -- flagging them is useful, but splitting up the flagged
+# functions is a refactor, not a lint fix; do that as its own deliberate pass.
+too_many_lines = "allow"
+cognitive_complexity = "allow"
+# Wants iteration order over `HashMap`/`HashSet` acknowledged/avoided everywhere (env vars,
+# HTTP headers, docker volume mounts, credential-placeholder checks) -- in every current case
+# order doesn't affect the result, but that's worth confirming lint-by-lint rather than
+# blanket-suppressing the signal.
+iter_over_hash_type = "allow"
+# Wants public generic functions/structs over `HashMap` generalized over the hasher type
+# (`fn f<S: BuildHasher>(m: &HashMap<K, V, S>)`). Real API-design question for a published SDK;
+# needs an explicit call, not a blanket application.
+implicit_hasher = "allow"
+# Wants every struct with a mix of `pub` and non-`pub` fields to be all-or-nothing. The mix is
+# intentional in every current case (public tunables alongside private invariant-preserving
+# state) -- same category as `field_scoped_visibility_modifiers` above.
+partial_pub_fields = "allow"
+# Wants `pub(super)`/`pub(crate)` shorthand spelled out as `pub(in super)`/`pub(in crate)`.
+# Fights the near-universal idiom for restricted visibility; same category as
+# `single_char_lifetime_names` above.
+pub_with_shorthand = "allow"
+# Wants a bool-heavy config struct (`WorkerConfig`) redesigned around enums/a state machine.
+# Real design question, and changing it breaks every existing struct-literal construction site;
+# needs an explicit call.
+struct_excessive_bools = "allow"
+# Wants a type split into a single `impl` block. Used intentionally here to group methods by
+# concern (e.g. public constructors vs. internal helpers, or by doc-comment topic); not a
+# defect.
+multiple_inherent_impl = "allow"
+# Clippy's own meta-lint warning that blanket-enabling `restriction` is generally discouraged.
+# Expected and already accounted for -- that's exactly what the rest of this section documents
+# doing deliberately, lint-by-lint.
+blanket_clippy_restriction_lints = "allow"
+# Fires on every deliberate `let _ = expr;` discard of a `#[must_use]` value (dropped `Result`s
+# from best-effort calls like `tx.send(...)` after the receiver may already be gone, or
+# `write!` to a `String`, which never fails). Same reasoning as `let_underscore_untyped` above.
+let_underscore_must_use = "allow"
+
 # Critical: Prevent panics in production
 unwrap_used = "warn"
 expect_used = "warn"

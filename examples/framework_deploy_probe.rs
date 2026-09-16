@@ -1,6 +1,5 @@
-//! One-off probe: exercises AgentRuntime::compile_framework/deploy_framework against a real
-//! local Conductor server, using a minimal rawConfig shaped for the server's OpenAINormalizer
-//! (confirmed by reading OpenAINormalizer.java directly). Not part of the crate's example set.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::AgentRuntime;
 use conductor::configuration::Configuration;
@@ -18,7 +17,10 @@ async fn main() -> Result<()> {
     });
 
     println!("=== Calling AgentRuntime::compile_framework(\"openai\", ...) ===");
-    match runtime.compile_framework("openai", raw_config.clone()).await {
+    match runtime
+        .compile_framework("openai", raw_config.clone())
+        .await
+    {
         Ok(v) => println!("OK: {}", serde_json::to_string_pretty(&v)?),
         Err(e) => println!("ERROR: {e}"),
     }

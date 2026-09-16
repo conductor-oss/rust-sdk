@@ -15,10 +15,7 @@ async fn audit_log(task: conductor::Task) -> conductor::Result<WorkerOutput> {
     let status = task.get_input_string("status").unwrap_or_default();
     let name = task.get_input_string("name").unwrap_or_default();
 
-    println!(
-        "AUDIT: Task '{}' is in '{}' status. Workflow input: {:?}",
-        name, status, workflow_input
-    );
+    println!("AUDIT: Task '{name}' is in '{status}' status. Workflow input: {workflow_input:?}");
 
     Ok(WorkerOutput::complete())
 }
@@ -119,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_input_value("c", 42);
 
     let workflow_id = workflow_client.start_workflow(&request).await?;
-    println!("Workflow started: {}", workflow_id);
+    println!("Workflow started: {workflow_id}");
 
     // Wait for workflow and audit tasks to complete
     println!("\nWaiting for workflow execution...\n");

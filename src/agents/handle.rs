@@ -52,11 +52,16 @@ impl AgentHandle {
     }
 
     /// The execution id this handle targets.
+    #[must_use]
     pub fn execution_id(&self) -> &str {
         &self.execution_id
     }
 
     /// Fetch the current status without blocking. Mirrors python's `AgentHandle.get_status`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn status(&self) -> Result<AgentStatus> {
         let value = self.client.get_status(&self.execution_id).await?;
         Ok(AgentStatus::from_response(
@@ -71,12 +76,20 @@ impl AgentHandle {
     /// that response's own `output` — mirrors python's `_poll_status_until_complete` +
     /// `AgentResult(output=status.output, ...)`; there is no separate `get_execution` fetch in
     /// the common path, because the terminal `/status` response already carries the output.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn join(&self) -> Result<AgentResult> {
         poll_until_terminal(POLL_INTERVAL, || self.status()).await
     }
 
     /// Open a live [`AgentStream`] of [`super::AgentEvent`]s for this execution, over the
     /// server's SSE endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn stream(&self) -> Result<AgentStream> {
         let response = self.client.stream(&self.execution_id).await?;
         Ok(AgentStream::new(response))
@@ -86,21 +99,37 @@ impl AgentHandle {
     /// [`AgentHandle::approve`]/[`AgentHandle::reject`] — use this when the pending step expects
     /// free-form input (e.g. a `ToolType::Human` question) rather than a binary approve/reject
     /// decision.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn respond(&self, body: &Value) -> Result<()> {
         self.client.respond(&self.execution_id, body).await
     }
 
     /// Approve a pending human-in-the-loop step.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn approve(&self) -> Result<()> {
         self.respond(&approve_payload()).await
     }
 
     /// Reject a pending human-in-the-loop step with a reason.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn reject(&self, reason: &str) -> Result<()> {
         self.respond(&reject_payload(reason)).await
     }
 
     /// Gracefully stop the running execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn stop(&self) -> Result<()> {
         self.client.stop(&self.execution_id).await
     }

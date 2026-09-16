@@ -1,12 +1,5 @@
-//! Reproduces `llm-recordings/103_plan_and_compile` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/103_plan_and_compile.py`, minus
-//! its post-run `PLAN_AND_COMPILE` task inspection (that just reads back what the server
-//! compiled; nothing to reproduce for playback purposes). Both recorded LLM calls are entirely
-//! server-driven (the planner call, and the `generate` op's structured-output call for
-//! `write_summary`'s `text` arg) — nothing about them needs client-side handling beyond
-//! `factorial`/`write_summary`/`check_summary` being real, locally-served tools.
-//!
-//! `cargo run --features agents --example sdk_playback_103_plan_and_compile`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -40,7 +33,7 @@ struct CheckSummaryArgs {
 // exactly reproduce python's `PLANNER_INSTRUCTIONS` string (a first attempt that leaned on
 // source indentation silently lost that whitespace and failed the mock provider's exact-request
 // match on the planner's first turn).
-const PLANNER_INSTRUCTIONS: &str = "You are a math-explainer planner. Plan a workflow that:\n\n1. Computes factorials of 1, 2, 3, 4, 5 in PARALLEL using ``factorial`` (static args).\n2. Writes a short prose summary about factorial growth using ``write_summary``\n   (use a ``generate`` block — the LLM produces the ``text`` arg at run time).\n3. Validates the summary is at least 30 characters via ``check_summary``,\n   with ``success_condition: \"$.passed === true\"``.\n";
+const PLANNER_INSTRUCTIONS: &str = "You are a math-explainer planner. Plan a workflow that:\n\n1. Computes factorials of 1, 2, 3, 4, 5 in PARALLEL using ``factorial`` (static args).\n2. Writes a short prose summary about factorial growth using ``write_summary``\n   (use a ``generate`` block \u{2014} the LLM produces the ``text`` arg at run time).\n3. Validates the summary is at least 30 characters via ``check_summary``,\n   with ``success_condition: \"$.passed === true\"``.\n";
 
 fn factorial(n: i64) -> String {
     if !(0..=20).contains(&n) {
@@ -103,11 +96,11 @@ async fn main() -> Result<()> {
         "plan_and_compile_demo",
         vec![factorial_tool, write_summary, check_summary],
         PlanExecuteOptions {
-            planner_instructions: PLANNER_INSTRUCTIONS.to_string(),
+            planner_instructions: PLANNER_INSTRUCTIONS.to_owned(),
             fallback_instructions: Some(
-                "The plan failed. Use the available tools to recover.".to_string(),
+                "The plan failed. Use the available tools to recover.".to_owned(),
             ),
-            model: Some("mock/mockLLM".to_string()),
+            model: Some("mock/mockLLM".to_owned()),
             fallback_max_turns: Some(4),
             planner_context: Vec::new(),
         },

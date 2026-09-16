@@ -7,7 +7,7 @@ use serde_json::Value;
 /// Composable rule that decides when an agent should stop.
 ///
 /// Ports python-sdk's `conductor.ai.agents.termination` module — see
-/// `rust-sdk/docs/agents/parity-plan.md` (search "TerminationCondition") for where this sits in
+/// `rust-sdk/docs/agents/parity-plan.md` (search "`TerminationCondition`") for where this sits in
 /// the overall `AgentDef` shape. Python models this as a small class hierarchy: an abstract
 /// `TerminationCondition` base with concrete `TextMentionTermination`, `StopMessageTermination`,
 /// `MaxMessageTermination`, `TokenUsageTermination` leaves, plus private `_AndTermination` /
@@ -106,12 +106,17 @@ impl TerminationCondition {
     }
 
     /// `stop_message("TERMINATE")` — matches python's `StopMessageTermination()` default.
+    #[must_use]
     pub fn stop_message_default() -> Self {
         Self::stop_message("TERMINATE")
     }
 
     /// Terminate after `max_messages` messages. Rejects `max_messages < 1`, matching python's
     /// `ValueError("max_messages must be >= 1")`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `max_messages` is 0.
     pub fn max_message(max_messages: u32) -> Result<Self> {
         if max_messages < 1 {
             return Err(ConductorError::agent("max_messages must be >= 1"));
@@ -123,6 +128,7 @@ impl TerminationCondition {
     /// common case from python's `TokenUsageTermination(max_total_tokens=...)` example.
     /// Infallible: a single `Some` limit always satisfies
     /// [`TerminationCondition::token_usage`]'s "at least one limit" requirement.
+    #[must_use]
     pub fn max_total_tokens(max_total_tokens: u32) -> Self {
         TerminationCondition::TokenUsage {
             max_total_tokens: Some(max_total_tokens),
@@ -134,6 +140,10 @@ impl TerminationCondition {
     /// Terminate once cumulative token usage crosses any of the given budgets. At least one of
     /// the three must be `Some` — matches the `ValueError` python's
     /// `TokenUsageTermination.__init__` raises when all three are `None`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `max_total_tokens`, `max_prompt_tokens`, and `max_completion_tokens` are all `None`.
     pub fn token_usage(
         max_total_tokens: Option<u32>,
         max_prompt_tokens: Option<u32>,
@@ -158,18 +168,21 @@ impl TerminationCondition {
     /// (see [`TerminationCondition`]'s docs) for the common two-condition case — this exists for
     /// building an `And` directly from a `Vec`, matching the `"0..*"` cardinality in the
     /// parity-plan's class diagram.
+    #[must_use]
     pub fn and(conditions: Vec<TerminationCondition>) -> Self {
         TerminationCondition::And { conditions }
     }
 
     /// Explicit OR combinator over an arbitrary number of conditions. See
     /// [`TerminationCondition::and`].
+    #[must_use]
     pub fn or(conditions: Vec<TerminationCondition>) -> Self {
         TerminationCondition::Or { conditions }
     }
 
     /// Wire-format discriminant, matching the `"type"` value python's
     /// `AgentConfigSerializer._serialize_termination` emits for each variant exactly.
+    #[must_use]
     pub fn type_str(&self) -> &'static str {
         match self {
             TerminationCondition::TextMention { .. } => "text_mention",
@@ -207,7 +220,7 @@ impl std::ops::BitOr for TerminationCondition {
     type Output = TerminationCondition;
 
     /// Combine with OR — either one triggers termination. Mirrors python's `__or__`, with the
-    /// same flattening behavior as [`TerminationCondition::bitand`].
+    /// same flattening behavior as `TerminationCondition`'s `BitAnd` impl.
     fn bitor(self, rhs: TerminationCondition) -> TerminationCondition {
         let mut conditions = match self {
             TerminationCondition::Or { conditions } => conditions,
@@ -265,7 +278,7 @@ impl TerminationCondition {
             } => {
                 let result = context.get("result").and_then(Value::as_str).unwrap_or("");
                 let (haystack, needle) = if *case_sensitive {
-                    (result.to_string(), text.clone())
+                    (result.to_owned(), text.clone())
                 } else {
                     (result.to_lowercase(), text.to_lowercase())
                 };
@@ -474,7 +487,7 @@ mod tests {
         assert_eq!(
             cond,
             TerminationCondition::TextMention {
-                text: "DONE".to_string(),
+                text: "DONE".to_owned(),
                 case_sensitive: false,
             }
         );
@@ -483,7 +496,7 @@ mod tests {
         assert_eq!(
             cond,
             TerminationCondition::TextMention {
-                text: "DONE".to_string(),
+                text: "DONE".to_owned(),
                 case_sensitive: true,
             }
         );
@@ -499,8 +512,8 @@ mod tests {
 
     #[test]
     fn test_max_message_validation() {
-        assert!(TerminationCondition::max_message(0).is_err());
-        assert!(TerminationCondition::max_message(1).is_ok());
+        TerminationCondition::max_message(0).unwrap_err();
+        TerminationCondition::max_message(1).unwrap();
         assert_eq!(
             TerminationCondition::max_message(20).unwrap(),
             TerminationCondition::MaxMessage { max_messages: 20 }
@@ -509,10 +522,10 @@ mod tests {
 
     #[test]
     fn test_token_usage_requires_at_least_one_limit() {
-        assert!(TerminationCondition::token_usage(None, None, None).is_err());
-        assert!(TerminationCondition::token_usage(Some(1000), None, None).is_ok());
-        assert!(TerminationCondition::token_usage(None, Some(500), None).is_ok());
-        assert!(TerminationCondition::token_usage(None, None, Some(500)).is_ok());
+        TerminationCondition::token_usage(None, None, None).unwrap_err();
+        TerminationCondition::token_usage(Some(1000), None, None).unwrap();
+        TerminationCondition::token_usage(None, Some(500), None).unwrap();
+        TerminationCondition::token_usage(None, None, Some(500)).unwrap();
     }
 
     #[test]
@@ -576,7 +589,7 @@ mod tests {
         );
     }
 
-    /// Nested And/Or composition: (TextMention OR StopMessage) AND MaxMessage — exercises the
+    /// Nested And/Or composition: (`TextMention` OR `StopMessage`) AND `MaxMessage` — exercises the
     /// recursive `TerminationCondition "1" o-- "0..*" TerminationCondition` shape from the
     /// parity-plan's class diagram directly (an `And` whose child is itself an `Or`), rather than
     /// relying on operator-flattening to build it.

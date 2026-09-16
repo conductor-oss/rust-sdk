@@ -13,7 +13,7 @@ use super::{
     PromptClient, SchedulerClient, SchemaClient, SecretClient, TaskClient, WorkflowClient,
 };
 
-/// Main Conductor client combining all API clients
+/// Main Conductor client combining all API clients.
 ///
 /// This is the primary entry point for interacting with the Conductor API.
 /// Also available as `OrkesClients` alias for Python SDK compatibility.
@@ -28,7 +28,12 @@ pub struct ConductorClient {
 }
 
 impl ConductorClient {
-    /// Create a new Conductor client with the given configuration
+    /// Create a new Conductor client with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the underlying `reqwest` client fails to build
+    /// (e.g. TLS backend initialization failure) -- this doesn't make any network request.
     pub fn new(config: Configuration) -> Result<Self> {
         let api = ApiClient::new(config)?;
         Ok(Self {
@@ -37,7 +42,8 @@ impl ConductorClient {
         })
     }
 
-    /// Create from an existing API client
+    /// Create from an existing API client.
+    #[must_use]
     pub fn from_api_client(api: ApiClient) -> Self {
         Self {
             api,
@@ -52,125 +58,149 @@ impl ConductorClient {
     /// dispatcher as [`TaskHandler`](crate::worker::TaskHandler), allowing a
     /// single `MetricsCollector` to observe both task- and workflow-level
     /// metrics.
+    #[must_use]
     pub fn with_event_dispatcher(mut self, events: EventDispatcher) -> Self {
         self.events = events;
         self
     }
 
     /// Access the shared event dispatcher.
+    #[must_use]
     pub fn event_dispatcher(&self) -> &EventDispatcher {
         &self.events
     }
 
-    /// Get the task client for polling and updating tasks
+    /// Get the task client for polling and updating tasks.
+    #[must_use]
     pub fn task_client(&self) -> TaskClient {
         TaskClient::new(self.api.clone())
     }
 
-    /// Alias for task_client() - matches Python SDK naming
+    /// Alias for `task_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_task_client(&self) -> TaskClient {
         self.task_client()
     }
 
-    /// Get the workflow client for workflow operations
+    /// Get the workflow client for workflow operations.
+    #[must_use]
     pub fn workflow_client(&self) -> WorkflowClient {
         WorkflowClient::new_with_events(self.api.clone(), self.events.clone())
     }
 
-    /// Alias for workflow_client() - matches Python SDK naming
+    /// Alias for `workflow_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_workflow_client(&self) -> WorkflowClient {
         self.workflow_client()
     }
 
-    /// Get the metadata client for managing definitions
+    /// Get the metadata client for managing definitions.
+    #[must_use]
     pub fn metadata_client(&self) -> MetadataClient {
         MetadataClient::new(self.api.clone())
     }
 
-    /// Alias for metadata_client() - matches Python SDK naming
+    /// Alias for `metadata_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_metadata_client(&self) -> MetadataClient {
         self.metadata_client()
     }
 
-    /// Get the Orkes metadata client with tagging APIs
+    /// Get the Orkes metadata client with tagging APIs.
     ///
-    /// This client extends MetadataClient with Orkes-specific features
+    /// This client extends `MetadataClient` with Orkes-specific features
     /// like workflow and task tagging. Access base methods via Deref.
+    #[must_use]
     pub fn orkes_metadata_client(&self) -> OrkesMetadataClient {
         OrkesMetadataClient::new(self.api.clone())
     }
 
-    /// Alias for orkes_metadata_client() - matches Python SDK naming
+    /// Alias for `orkes_metadata_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_orkes_metadata_client(&self) -> OrkesMetadataClient {
         self.orkes_metadata_client()
     }
 
-    /// Get the scheduler client for managing workflow schedules
+    /// Get the scheduler client for managing workflow schedules.
+    #[must_use]
     pub fn scheduler_client(&self) -> SchedulerClient {
         SchedulerClient::new(self.api.clone())
     }
 
-    /// Alias for scheduler_client() - matches Python SDK naming
+    /// Alias for `scheduler_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_scheduler_client(&self) -> SchedulerClient {
         self.scheduler_client()
     }
 
-    /// Get the secret client for managing secrets
+    /// Get the secret client for managing secrets.
+    #[must_use]
     pub fn secret_client(&self) -> SecretClient {
         SecretClient::new(self.api.clone())
     }
 
-    /// Alias for secret_client() - matches Python SDK naming
+    /// Alias for `secret_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_secret_client(&self) -> SecretClient {
         self.secret_client()
     }
 
-    /// Get the authorization client for users, groups, and permissions
+    /// Get the authorization client for users, groups, and permissions.
+    #[must_use]
     pub fn authorization_client(&self) -> AuthorizationClient {
         AuthorizationClient::new(self.api.clone())
     }
 
-    /// Alias for authorization_client() - matches Python SDK naming
+    /// Alias for `authorization_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_authorization_client(&self) -> AuthorizationClient {
         self.authorization_client()
     }
 
-    /// Get the integration client for external system integrations
+    /// Get the integration client for external system integrations.
+    #[must_use]
     pub fn integration_client(&self) -> IntegrationClient {
         IntegrationClient::new(self.api.clone())
     }
 
-    /// Alias for integration_client() - matches Python SDK naming
+    /// Alias for `integration_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_integration_client(&self) -> IntegrationClient {
         self.integration_client()
     }
 
-    /// Get the prompt client for AI prompt templates
+    /// Get the prompt client for AI prompt templates.
+    #[must_use]
     pub fn prompt_client(&self) -> PromptClient {
         PromptClient::new(self.api.clone())
     }
 
-    /// Alias for prompt_client() - matches Python SDK naming
+    /// Alias for `prompt_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_prompt_client(&self) -> PromptClient {
         self.prompt_client()
     }
 
-    /// Get the schema client for schema definitions
+    /// Get the schema client for schema definitions.
+    #[must_use]
     pub fn schema_client(&self) -> SchemaClient {
         SchemaClient::new(self.api.clone())
     }
 
-    /// Alias for schema_client() - matches Python SDK naming
+    /// Alias for `schema_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_schema_client(&self) -> SchemaClient {
         self.schema_client()
     }
 
-    /// Get the event client for event queue configurations
+    /// Get the event client for event queue configurations.
+    #[must_use]
     pub fn event_client(&self) -> EventClient {
         EventClient::new(self.api.clone())
     }
 
-    /// Alias for event_client() - matches Python SDK naming
+    /// Alias for `event_client()` - matches Python SDK naming.
+    #[must_use]
     pub fn get_event_client(&self) -> EventClient {
         self.event_client()
     }
@@ -179,17 +209,20 @@ impl ConductorClient {
     ///
     /// Requires the `agents` Cargo feature.
     #[cfg(feature = "agents")]
+    #[must_use]
     pub fn agent_client(&self) -> AgentClient {
         AgentClient::new(self.api.clone())
     }
 
-    /// Alias for agent_client() - matches Python SDK naming
+    /// Alias for `agent_client()` - matches Python SDK naming.
     #[cfg(feature = "agents")]
+    #[must_use]
     pub fn get_agent_client(&self) -> AgentClient {
         self.agent_client()
     }
 
-    /// Get the underlying API client
+    /// Get the underlying API client.
+    #[must_use]
     pub fn api_client(&self) -> &ApiClient {
         &self.api
     }
@@ -202,50 +235,59 @@ impl ConductorClient {
         self.api.is_oss().await
     }
 
-    /// Get configuration
+    /// Get configuration.
     pub async fn config(&self) -> Configuration {
         self.api.get_config().await
     }
 }
 
-/// Builder for ConductorClient
+/// Builder for `ConductorClient`.
 pub struct ConductorClientBuilder {
     config: Configuration,
 }
 
 impl ConductorClientBuilder {
-    /// Create a new builder with default configuration
+    /// Create a new builder with default configuration.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: Configuration::default(),
         }
     }
 
-    /// Create a builder from an existing configuration
+    /// Create a builder from an existing configuration.
+    #[must_use]
     pub fn from_config(config: Configuration) -> Self {
         Self { config }
     }
 
-    /// Set the server URL
+    /// Set the server URL.
+    #[must_use]
     pub fn server_url(mut self, url: impl Into<String>) -> Self {
         self.config.server_api_url = url.into();
         self
     }
 
-    /// Set authentication credentials
+    /// Set authentication credentials.
+    #[must_use]
     pub fn auth(mut self, key: impl Into<String>, secret: impl Into<String>) -> Self {
         self.config.auth_key = Some(key.into());
         self.config.auth_secret = Some(secret.into());
         self
     }
 
-    /// Enable debug mode
+    /// Enable debug mode.
+    #[must_use]
     pub fn debug(mut self, enabled: bool) -> Self {
         self.config.debug = enabled;
         self
     }
 
-    /// Build the client
+    /// Build the client.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub fn build(self) -> Result<ConductorClient> {
         ConductorClient::new(self.config)
     }
@@ -268,13 +310,13 @@ mod tests {
             .debug(true)
             .build();
 
-        assert!(client.is_ok());
+        client.unwrap();
     }
 
     #[test]
     fn test_client_creation() {
         let config = Configuration::new("http://localhost:8080/api");
         let client = ConductorClient::new(config);
-        assert!(client.is_ok());
+        client.unwrap();
     }
 }

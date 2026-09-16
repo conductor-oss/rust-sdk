@@ -39,16 +39,16 @@ async fn main() -> Result<()> {
     let route_worker = FnWorker::new("route", |task: Task| async move {
         let country = task
             .get_input_string("country")
-            .unwrap_or_else(|| "Unknown".to_string());
+            .unwrap_or_else(|| "Unknown".to_owned());
 
         info!("Routing packages to: {}", country);
 
         let mut output = HashMap::new();
         output.insert(
-            "result".to_string(),
+            "result".to_owned(),
             serde_json::json!(format!("Routing packages to {}", country)),
         );
-        output.insert("country".to_string(), serde_json::json!(country));
+        output.insert("country".to_owned(), serde_json::json!(country));
 
         Ok(WorkerOutput::Completed(output))
     });
@@ -57,13 +57,13 @@ async fn main() -> Result<()> {
     let greet_worker = FnWorker::new("greet", |task: Task| async move {
         let name = task
             .get_input_string("name")
-            .unwrap_or_else(|| "World".to_string());
+            .unwrap_or_else(|| "World".to_owned());
 
         info!("Greeting: {}", name);
 
         let mut output = HashMap::new();
         output.insert(
-            "greeting".to_string(),
+            "greeting".to_owned(),
             serde_json::json!(format!("Hello, {}!", name)),
         );
 
@@ -180,7 +180,7 @@ async fn register_workflow(client: &ConductorClient) -> Result<()> {
 
     let join_task = WorkflowTask::join(
         "join_parallel",
-        vec!["parallel_http".to_string(), "parallel_wait".to_string()],
+        vec!["parallel_http".to_owned(), "parallel_wait".to_owned()],
     );
 
     // Build the workflow

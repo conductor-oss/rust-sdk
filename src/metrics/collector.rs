@@ -5,7 +5,7 @@
 //!
 //! Metric names, label names, label values, and types here are intentionally
 //! identical to the Java, Go, and Python SDKs. See `sdk-metrics-harmonization.md`
-//! at <https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md>
+//! at <https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md>.
 
 use parking_lot::RwLock;
 use prometheus::{CounterVec, GaugeVec, HistogramOpts, HistogramVec, Opts, Registry};
@@ -161,7 +161,8 @@ fn make_gauge(
 }
 
 impl MetricsCollector {
-    /// Create a new metrics collector
+    /// Create a new metrics collector.
+    #[must_use]
     pub fn new(settings: MetricsSettings) -> Self {
         let registry = Registry::new();
         let ns = &settings.namespace;
@@ -335,14 +336,15 @@ impl MetricsCollector {
         }
     }
 
-    /// Get the Prometheus registry
+    /// Get the Prometheus registry.
+    #[must_use]
     pub fn registry(&self) -> &Registry {
         &self.registry
     }
 
-    /// Get metrics in Prometheus text format
+    /// Get metrics in Prometheus text format.
     pub fn gather(&self) -> String {
-        use prometheus::Encoder;
+        use prometheus::Encoder as _;
         let encoder = prometheus::TextEncoder::new();
         let metric_families = self.registry.gather();
         let mut buffer = Vec::new();
@@ -401,7 +403,11 @@ impl MetricsCollector {
             .inc();
     }
 
-    /// Start HTTP metrics server (if configured)
+    /// Start HTTP metrics server (if configured).
+    // `async` itself has no `.await` (the server loop is spawned onto its own task), but
+    // dropping it means rewriting this to return `impl Future` and wrapping the body in
+    // `std::future::ready` -- not worth the churn for a rarely-called setup method.
+    #[expect(clippy::unused_async, clippy::unused_async_trait_impl)]
     pub async fn start_http_server(&self) -> Option<tokio::task::JoinHandle<()>> {
         if let Some(port) = self.settings.http_port {
             let metrics_path = self.settings.metrics_path.clone();
@@ -429,7 +435,7 @@ impl MetricsCollector {
 
                             async move {
                                 let response = if req.uri().path() == metrics_path {
-                                    use prometheus::Encoder;
+                                    use prometheus::Encoder as _;
                                     let encoder = prometheus::TextEncoder::new();
                                     let metric_families = registry.gather();
                                     let mut buffer = Vec::new();

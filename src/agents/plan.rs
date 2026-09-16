@@ -59,6 +59,7 @@ impl Ref {
     }
 
     /// Wire form the server's PAC consumes: `{"$ref": "<step_id>"}`.
+    #[must_use]
     pub fn to_value(&self) -> Value {
         serde_json::json!({"$ref": self.step_id})
     }
@@ -95,7 +96,7 @@ impl Context {
             url: None,
             headers: std::collections::HashMap::new(),
             required: true,
-            max_bytes: 16384,
+            max_bytes: 0x4000,
         }
     }
 
@@ -107,7 +108,7 @@ impl Context {
             url: Some(url.into()),
             headers: std::collections::HashMap::new(),
             required: true,
-            max_bytes: 16384,
+            max_bytes: 0x4000,
         }
     }
 
@@ -115,6 +116,7 @@ impl Context {
     /// against the agent's credential store at request time — same auth pipeline as an HTTP
     /// tool's headers. Ignored for a `text` context (matches python: only serialized when `url`
     /// is set).
+    #[must_use]
     pub fn with_headers(mut self, headers: std::collections::HashMap<String, String>) -> Self {
         self.headers = headers;
         self
@@ -122,12 +124,14 @@ impl Context {
 
     /// When `false`, a fetch failure substitutes a `[doc unavailable]` marker instead of
     /// failing the workflow. Default `true`. Ignored for a `text` context.
+    #[must_use]
     pub fn with_required(mut self, required: bool) -> Self {
         self.required = required;
         self
     }
 
     /// Per-doc truncation cap. Default `16384`. Ignored for a `text` context.
+    #[must_use]
     pub fn with_max_bytes(mut self, max_bytes: u32) -> Self {
         self.max_bytes = max_bytes;
         self
@@ -136,26 +140,27 @@ impl Context {
     /// Wire form, matching python's `Context.to_dict` exactly (including that `headers`/
     /// `required`/`maxBytes` are only emitted for a `url` context, and `maxBytes` only when it
     /// differs from the default).
+    #[must_use]
     pub fn to_value(&self) -> Value {
         let mut map = Map::new();
         if let Some(text) = &self.text {
-            map.insert("text".to_string(), Value::String(text.clone()));
+            map.insert("text".to_owned(), Value::String(text.clone()));
         }
         if let Some(url) = &self.url {
-            map.insert("url".to_string(), Value::String(url.clone()));
+            map.insert("url".to_owned(), Value::String(url.clone()));
             if !self.headers.is_empty() {
                 let headers = self
                     .headers
                     .iter()
                     .map(|(k, v)| (k.clone(), Value::String(v.clone())))
                     .collect();
-                map.insert("headers".to_string(), Value::Object(headers));
+                map.insert("headers".to_owned(), Value::Object(headers));
             }
             if !self.required {
-                map.insert("required".to_string(), Value::Bool(false));
+                map.insert("required".to_owned(), Value::Bool(false));
             }
-            if self.max_bytes != 16384 {
-                map.insert("maxBytes".to_string(), Value::from(self.max_bytes));
+            if self.max_bytes != 0x4000 {
+                map.insert("maxBytes".to_owned(), Value::from(self.max_bytes));
             }
         }
         Value::Object(map)
@@ -188,11 +193,13 @@ impl Generate {
         }
     }
 
+    #[must_use]
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
+    #[must_use]
     pub fn with_context(mut self, context: impl Into<Value>) -> Self {
         self.context = Some(context.into());
         self
@@ -201,18 +208,18 @@ impl Generate {
     fn to_value(&self) -> Value {
         let mut map = Map::new();
         map.insert(
-            "instructions".to_string(),
+            "instructions".to_owned(),
             Value::String(self.instructions.clone()),
         );
         map.insert(
-            "output_schema".to_string(),
+            "output_schema".to_owned(),
             Value::String(self.output_schema.clone()),
         );
         if let Some(max_tokens) = self.max_tokens {
-            map.insert("max_tokens".to_string(), Value::from(max_tokens));
+            map.insert("max_tokens".to_owned(), Value::from(max_tokens));
         }
         if let Some(context) = &self.context {
-            map.insert("context".to_string(), context.clone());
+            map.insert("context".to_owned(), context.clone());
         }
         Value::Object(map)
     }
@@ -255,13 +262,13 @@ impl Op {
 
     fn to_value(&self) -> Value {
         let mut map = Map::new();
-        map.insert("tool".to_string(), Value::String(self.tool.clone()));
+        map.insert("tool".to_owned(), Value::String(self.tool.clone()));
         match &self.body {
             OpBody::Args(args) => {
-                map.insert("args".to_string(), args.clone());
+                map.insert("args".to_owned(), args.clone());
             }
             OpBody::Generate(generate) => {
-                map.insert("generate".to_string(), generate.to_value());
+                map.insert("generate".to_owned(), generate.to_value());
             }
         }
         Value::Object(map)
@@ -291,6 +298,7 @@ impl Step {
         }
     }
 
+    #[must_use]
     pub fn with_depends_on(
         mut self,
         depends_on: impl IntoIterator<Item = impl Into<String>>,
@@ -299,6 +307,7 @@ impl Step {
         self
     }
 
+    #[must_use]
     pub fn with_parallel(mut self, parallel: bool) -> Self {
         self.parallel = parallel;
         self
@@ -306,19 +315,19 @@ impl Step {
 
     fn to_value(&self) -> Value {
         let mut map = Map::new();
-        map.insert("id".to_string(), Value::String(self.id.clone()));
+        map.insert("id".to_owned(), Value::String(self.id.clone()));
         map.insert(
-            "operations".to_string(),
+            "operations".to_owned(),
             Value::Array(self.operations.iter().map(Op::to_value).collect()),
         );
         if !self.depends_on.is_empty() {
             map.insert(
-                "depends_on".to_string(),
+                "depends_on".to_owned(),
                 Value::Array(self.depends_on.iter().cloned().map(Value::String).collect()),
             );
         }
         if self.parallel {
-            map.insert("parallel".to_string(), Value::Bool(true));
+            map.insert("parallel".to_owned(), Value::Bool(true));
         }
         Value::Object(map)
     }
@@ -345,11 +354,13 @@ impl Validation {
         }
     }
 
+    #[must_use]
     pub fn with_args(mut self, args: Value) -> Self {
         self.args = Some(args);
         self
     }
 
+    #[must_use]
     pub fn with_success_condition(mut self, expr: impl Into<String>) -> Self {
         self.success_condition = Some(expr.into());
         self
@@ -357,12 +368,12 @@ impl Validation {
 
     fn to_value(&self) -> Value {
         let mut map = Map::new();
-        map.insert("tool".to_string(), Value::String(self.tool.clone()));
+        map.insert("tool".to_owned(), Value::String(self.tool.clone()));
         if let Some(args) = &self.args {
-            map.insert("args".to_string(), args.clone());
+            map.insert("args".to_owned(), args.clone());
         }
         if let Some(expr) = &self.success_condition {
-            map.insert("success_condition".to_string(), Value::String(expr.clone()));
+            map.insert("success_condition".to_owned(), Value::String(expr.clone()));
         }
         Value::Object(map)
     }
@@ -385,6 +396,7 @@ impl Action {
         }
     }
 
+    #[must_use]
     pub fn with_args(mut self, args: Value) -> Self {
         self.args = Some(args);
         self
@@ -392,9 +404,9 @@ impl Action {
 
     fn to_value(&self) -> Value {
         let mut map = Map::new();
-        map.insert("tool".to_string(), Value::String(self.tool.clone()));
+        map.insert("tool".to_owned(), Value::String(self.tool.clone()));
         if let Some(args) = &self.args {
-            map.insert("args".to_string(), args.clone());
+            map.insert("args".to_owned(), args.clone());
         }
         Value::Object(map)
     }
@@ -414,6 +426,7 @@ pub struct Plan {
 }
 
 impl Plan {
+    #[must_use]
     pub fn new(steps: Vec<Step>) -> Self {
         Self {
             steps,
@@ -423,16 +436,19 @@ impl Plan {
         }
     }
 
+    #[must_use]
     pub fn with_validation(mut self, validation: Vec<Validation>) -> Self {
         self.validation = validation;
         self
     }
 
+    #[must_use]
     pub fn with_on_success(mut self, on_success: Vec<Action>) -> Self {
         self.on_success = on_success;
         self
     }
 
+    #[must_use]
     pub fn with_on_failure(mut self, on_failure: Vec<Action>) -> Self {
         self.on_failure = on_failure;
         self
@@ -443,24 +459,24 @@ impl Plan {
     pub fn to_value(&self) -> Value {
         let mut map = Map::new();
         map.insert(
-            "steps".to_string(),
+            "steps".to_owned(),
             Value::Array(self.steps.iter().map(Step::to_value).collect()),
         );
         if !self.validation.is_empty() {
             map.insert(
-                "validation".to_string(),
+                "validation".to_owned(),
                 Value::Array(self.validation.iter().map(Validation::to_value).collect()),
             );
         }
         if !self.on_success.is_empty() {
             map.insert(
-                "on_success".to_string(),
+                "on_success".to_owned(),
                 Value::Array(self.on_success.iter().map(Action::to_value).collect()),
             );
         }
         if !self.on_failure.is_empty() {
             map.insert(
-                "on_failure".to_string(),
+                "on_failure".to_owned(),
                 Value::Array(self.on_failure.iter().map(Action::to_value).collect()),
             );
         }
@@ -493,6 +509,10 @@ pub struct PlanExecuteOptions {
 /// a planner sub-agent, an optional fallback sub-agent, and the parent coordinator. Matches
 /// python's `plan_execute()` function exactly, including its sub-agent naming convention
 /// (`{name}_planner`, `{name}_fallback`).
+///
+/// # Errors
+///
+/// Returns [`crate::error::ConductorError::Agent`] if `name` (or the derived `{name}_planner`/`{name}_fallback` names) is empty or invalid -- see [`AgentDef::new`].
 pub fn plan_execute(
     name: impl Into<String>,
     tools: Vec<ToolDef>,
@@ -581,7 +601,7 @@ mod tests {
     #[test]
     fn test_context_url_with_all_options() {
         let mut headers = std::collections::HashMap::new();
-        headers.insert("Authorization".to_string(), "${GH_TOKEN}".to_string());
+        headers.insert("Authorization".to_owned(), "${GH_TOKEN}".to_owned());
         let value = Context::url("https://example.com/rules")
             .with_headers(headers)
             .with_required(false)
@@ -731,7 +751,7 @@ mod tests {
             "research",
             vec![test_tool("search")],
             PlanExecuteOptions {
-                planner_instructions: "Plan a research report.".to_string(),
+                planner_instructions: "Plan a research report.".to_owned(),
                 ..Default::default()
             },
         )
@@ -750,7 +770,7 @@ mod tests {
             "research",
             vec![test_tool("search")],
             PlanExecuteOptions {
-                fallback_instructions: Some("Recover and retry.".to_string()),
+                fallback_instructions: Some("Recover and retry.".to_owned()),
                 fallback_max_turns: Some(5),
                 ..Default::default()
             },
@@ -769,21 +789,21 @@ mod tests {
             "research",
             vec![test_tool("search")],
             PlanExecuteOptions {
-                fallback_instructions: Some("Recover.".to_string()),
-                model: Some("openai/gpt-4o".to_string()),
+                fallback_instructions: Some("Recover.".to_owned()),
+                model: Some("openai/gpt-4o".to_owned()),
                 ..Default::default()
             },
         )
         .unwrap();
 
-        assert_eq!(agent.model, Some("openai/gpt-4o".to_string()));
+        assert_eq!(agent.model, Some("openai/gpt-4o".to_owned()));
         assert_eq!(
             agent.planner.as_ref().unwrap().model,
-            Some("openai/gpt-4o".to_string())
+            Some("openai/gpt-4o".to_owned())
         );
         assert_eq!(
             agent.fallback.as_ref().unwrap().model,
-            Some("openai/gpt-4o".to_string())
+            Some("openai/gpt-4o".to_owned())
         );
     }
 
@@ -792,6 +812,6 @@ mod tests {
         // Matches Strategy::PlanExecute's own tools-required check (AgentDef::with_strategy) --
         // plan_execute() doesn't bypass it.
         let result = plan_execute("research", vec![], PlanExecuteOptions::default());
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 }

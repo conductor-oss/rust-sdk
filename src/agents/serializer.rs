@@ -21,6 +21,7 @@ use super::tool::{ToolDef, ToolType};
 pub struct AgentConfigSerializer;
 
 impl AgentConfigSerializer {
+    #[must_use]
     pub fn serialize(agent: &AgentDef) -> Value {
         serialize_agent(agent)
     }
@@ -38,17 +39,16 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // regular `AgentConfig` shape the rest of this function builds.
     if let Some(framework) = &agent.framework {
         let mut map = Map::new();
-        map.insert("name".to_string(), Value::String(agent.name.clone()));
+        map.insert("name".to_owned(), Value::String(agent.name.clone()));
         map.insert(
-            "model".to_string(),
+            "model".to_owned(),
             agent
                 .model
                 .as_ref()
                 .filter(|m| !m.is_empty())
-                .map(|m| Value::String(m.clone()))
-                .unwrap_or(Value::Null),
+                .map_or(Value::Null, |m| Value::String(m.clone())),
         );
-        map.insert("_framework".to_string(), Value::String(framework.clone()));
+        map.insert("_framework".to_owned(), Value::String(framework.clone()));
         if let Some(Value::Object(raw_config)) = &agent.framework_config {
             map.extend(raw_config.clone());
         }
@@ -57,13 +57,13 @@ fn serialize_agent(agent: &AgentDef) -> Value {
 
     let mut map = Map::new();
 
-    map.insert("name".to_string(), Value::String(agent.name.clone()));
+    map.insert("name".to_owned(), Value::String(agent.name.clone()));
 
     if let Some(model) = &agent.model {
-        map.insert("model".to_string(), Value::String(model.clone()));
+        map.insert("model".to_owned(), Value::String(model.clone()));
     }
     if let Some(base_url) = &agent.base_url {
-        map.insert("baseUrl".to_string(), Value::String(base_url.clone()));
+        map.insert("baseUrl".to_owned(), Value::String(base_url.clone()));
     }
 
     // Mirrors python-sdk's `has_sub_agents = bool(agent.agents) or agent.planner is not None or
@@ -72,38 +72,38 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // `agents` alone would silently omit `strategy` and the server would default to HANDOFF.
     if !agent.agents.is_empty() || agent.planner.is_some() || agent.fallback.is_some() {
         map.insert(
-            "strategy".to_string(),
-            Value::String(agent.strategy.as_str().to_string()),
+            "strategy".to_owned(),
+            Value::String(agent.strategy.as_str().to_owned()),
         );
     }
 
-    map.insert("maxTurns".to_string(), Value::from(agent.max_turns));
+    map.insert("maxTurns".to_owned(), Value::from(agent.max_turns));
     map.insert(
-        "timeoutSeconds".to_string(),
+        "timeoutSeconds".to_owned(),
         Value::from(agent.timeout_seconds),
     );
     map.insert(
-        "external".to_string(),
+        "external".to_owned(),
         Value::Bool(agent.model.as_deref().unwrap_or("").is_empty()),
     );
 
     if let Some(instructions) = &agent.instructions {
         map.insert(
-            "instructions".to_string(),
+            "instructions".to_owned(),
             Value::String(instructions.clone()),
         );
     }
 
     if !agent.tools.is_empty() {
         map.insert(
-            "tools".to_string(),
+            "tools".to_owned(),
             Value::Array(agent.tools.iter().map(serialize_tool).collect()),
         );
     }
 
     if !agent.agents.is_empty() {
         map.insert(
-            "agents".to_string(),
+            "agents".to_owned(),
             Value::Array(agent.agents.iter().map(serialize_agent).collect()),
         );
     }
@@ -113,29 +113,26 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // python-sdk's `_serialize_router`'s `isinstance(router, Agent)` branch. There is no
     // callable-router `{"taskName": ...}` branch to reproduce here.
     if let Some(router) = &agent.router {
-        map.insert("router".to_string(), serialize_agent(router));
+        map.insert("router".to_owned(), serialize_agent(router));
     }
 
     if let Some(output_type) = &agent.output_type {
-        map.insert("outputType".to_string(), serialize_output_type(output_type));
+        map.insert("outputType".to_owned(), serialize_output_type(output_type));
     }
 
     if !agent.guardrails.is_empty() {
         map.insert(
-            "guardrails".to_string(),
+            "guardrails".to_owned(),
             Value::Array(agent.guardrails.iter().map(serialize_guardrail).collect()),
         );
     }
 
     if let Some(termination) = &agent.termination {
-        map.insert(
-            "termination".to_string(),
-            serialize_termination(termination),
-        );
+        map.insert("termination".to_owned(), serialize_termination(termination));
     }
 
     if let Some(memory) = &agent.memory {
-        map.insert("memory".to_string(), serialize_memory(memory));
+        map.insert("memory".to_owned(), serialize_memory(memory));
     }
 
     // Wire key stays "handoffs" for cross-SDK compatibility even though the Rust type is named
@@ -144,7 +141,7 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // `if agent.handoffs: config["handoffs"] = [self._serialize_handoff(h, agent.name) for h in agent.handoffs]`.
     if !agent.swarm_transitions.is_empty() {
         map.insert(
-            "handoffs".to_string(),
+            "handoffs".to_owned(),
             Value::Array(
                 agent
                     .swarm_transitions
@@ -162,7 +159,7 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // today, not its own `agent-schema.json`).
     if !agent.allowed_transitions.is_empty() {
         map.insert(
-            "allowedTransitions".to_string(),
+            "allowedTransitions".to_owned(),
             Value::Object(
                 agent
                     .allowed_transitions
@@ -183,13 +180,13 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // `serialize_agent` used for `agent.agents`/`ToolType::AgentTool` sub-agents — matches
     // python-sdk's `config["planner"] = self._serialize_agent(planner_agent)`.
     if let Some(planner) = &agent.planner {
-        map.insert("planner".to_string(), serialize_agent(planner));
+        map.insert("planner".to_owned(), serialize_agent(planner));
     }
     if let Some(fallback) = &agent.fallback {
-        map.insert("fallback".to_string(), serialize_agent(fallback));
+        map.insert("fallback".to_owned(), serialize_agent(fallback));
     }
     if let Some(turns) = agent.fallback_max_turns {
-        map.insert("fallbackMaxTurns".to_string(), Value::from(turns));
+        map.insert("fallbackMaxTurns".to_owned(), Value::from(turns));
     }
 
     // Planner context: bare strings normalise to python-sdk's `Context(text=...)` wire shape
@@ -197,14 +194,14 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // shape is modeled here.
     if !agent.planner_context.is_empty() {
         map.insert(
-            "plannerContext".to_string(),
+            "plannerContext".to_owned(),
             Value::Array(
                 agent
                     .planner_context
                     .iter()
                     .map(|text| {
                         let mut entry = Map::new();
-                        entry.insert("text".to_string(), Value::String(text.clone()));
+                        entry.insert("text".to_owned(), Value::String(text.clone()));
                         Value::Object(entry)
                     })
                     .collect(),
@@ -215,19 +212,19 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // Synthesize flag — default true; only emitted when explicitly disabled, matching
     // python-sdk's `if not agent.synthesize: config["synthesize"] = False`.
     if !agent.synthesize {
-        map.insert("synthesize".to_string(), Value::Bool(false));
+        map.insert("synthesize".to_owned(), Value::Bool(false));
     }
 
     if let Some(introduction) = &agent.introduction {
         map.insert(
-            "introduction".to_string(),
+            "introduction".to_owned(),
             Value::String(introduction.clone()),
         );
     }
 
     if let Some(include_contents) = &agent.include_contents {
         map.insert(
-            "includeContents".to_string(),
+            "includeContents".to_owned(),
             Value::String(include_contents.clone()),
         );
     }
@@ -236,15 +233,15 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // pt.arguments} for pt in agent.prefill_tools]`.
     if !agent.prefill_tools.is_empty() {
         map.insert(
-            "prefillTools".to_string(),
+            "prefillTools".to_owned(),
             Value::Array(
                 agent
                     .prefill_tools
                     .iter()
                     .map(|pt| {
                         let mut entry = Map::new();
-                        entry.insert("toolName".to_string(), Value::String(pt.tool_name.clone()));
-                        entry.insert("arguments".to_string(), pt.arguments.clone());
+                        entry.insert("toolName".to_owned(), Value::String(pt.tool_name.clone()));
+                        entry.insert("arguments".to_owned(), pt.arguments.clone());
                         Value::Object(entry)
                     })
                     .collect(),
@@ -260,13 +257,10 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         let gate_value = match gate {
             super::def::GateCondition::Text(text_gate) => {
                 let mut gate_map = Map::new();
+                gate_map.insert("type".to_owned(), Value::String("text_contains".to_owned()));
+                gate_map.insert("text".to_owned(), Value::String(text_gate.text.clone()));
                 gate_map.insert(
-                    "type".to_string(),
-                    Value::String("text_contains".to_string()),
-                );
-                gate_map.insert("text".to_string(), Value::String(text_gate.text.clone()));
-                gate_map.insert(
-                    "caseSensitive".to_string(),
+                    "caseSensitive".to_owned(),
                     Value::Bool(text_gate.case_sensitive),
                 );
                 Value::Object(gate_map)
@@ -274,13 +268,13 @@ fn serialize_agent(agent: &AgentDef) -> Value {
             super::def::GateCondition::Callable(_) => {
                 let mut gate_map = Map::new();
                 gate_map.insert(
-                    "taskName".to_string(),
+                    "taskName".to_owned(),
                     Value::String(format!("{}_gate", sanitize_for_task_name(&agent.name))),
                 );
                 Value::Object(gate_map)
             }
         };
-        map.insert("gate".to_string(), gate_value);
+        map.insert("gate".to_owned(), gate_value);
     }
 
     // Matches python-sdk's `if agent.stop_when is not None: config["stopWhen"] =
@@ -289,19 +283,19 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     if agent.stop_when.is_some() {
         let mut stop_when_map = Map::new();
         stop_when_map.insert(
-            "taskName".to_string(),
+            "taskName".to_owned(),
             Value::String(format!("{}_stop_when", sanitize_for_task_name(&agent.name))),
         );
-        map.insert("stopWhen".to_string(), Value::Object(stop_when_map));
+        map.insert("stopWhen".to_owned(), Value::Object(stop_when_map));
     }
 
     // Matches python-sdk's `config_serializer.py`'s CLI-command-execution branch: `working_dir`
     // is never sent, since it's only consulted by this crate's own local `run_command` handler.
     if let Some(cli_config) = &agent.cli_config {
         let mut cli_map = Map::new();
-        cli_map.insert("enabled".to_string(), Value::Bool(cli_config.enabled));
+        cli_map.insert("enabled".to_owned(), Value::Bool(cli_config.enabled));
         cli_map.insert(
-            "allowedCommands".to_string(),
+            "allowedCommands".to_owned(),
             Value::Array(
                 cli_config
                     .allowed_commands
@@ -312,14 +306,11 @@ fn serialize_agent(agent: &AgentDef) -> Value {
             ),
         );
         cli_map.insert(
-            "timeout".to_string(),
+            "timeout".to_owned(),
             Value::from(cli_config.timeout_seconds),
         );
-        cli_map.insert(
-            "allowShell".to_string(),
-            Value::Bool(cli_config.allow_shell),
-        );
-        map.insert("cliConfig".to_string(), Value::Object(cli_map));
+        cli_map.insert("allowShell".to_owned(), Value::Bool(cli_config.allow_shell));
+        map.insert("cliConfig".to_owned(), Value::Object(cli_map));
     }
 
     // Matches python-sdk's `config_serializer.py`'s code-execution branch: `executor`/
@@ -327,9 +318,9 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     // `execute_code` handler.
     if let Some(code_execution) = &agent.code_execution {
         let mut code_map = Map::new();
-        code_map.insert("enabled".to_string(), Value::Bool(code_execution.enabled));
+        code_map.insert("enabled".to_owned(), Value::Bool(code_execution.enabled));
         code_map.insert(
-            "allowedLanguages".to_string(),
+            "allowedLanguages".to_owned(),
             Value::Array(
                 code_execution
                     .allowed_languages
@@ -340,7 +331,7 @@ fn serialize_agent(agent: &AgentDef) -> Value {
             ),
         );
         code_map.insert(
-            "allowedCommands".to_string(),
+            "allowedCommands".to_owned(),
             Value::Array(
                 code_execution
                     .allowed_commands
@@ -351,30 +342,30 @@ fn serialize_agent(agent: &AgentDef) -> Value {
             ),
         );
         code_map.insert(
-            "timeout".to_string(),
+            "timeout".to_owned(),
             Value::from(code_execution.timeout_seconds),
         );
-        map.insert("codeExecution".to_string(), Value::Object(code_map));
+        map.insert("codeExecution".to_owned(), Value::Object(code_map));
     }
 
     if let Some(max_tokens) = agent.max_tokens {
-        map.insert("maxTokens".to_string(), Value::from(max_tokens));
+        map.insert("maxTokens".to_owned(), Value::from(max_tokens));
     }
     if let Some(budget) = agent.context_window_budget {
-        map.insert("contextWindowBudget".to_string(), Value::from(budget));
+        map.insert("contextWindowBudget".to_owned(), Value::from(budget));
     }
     if let Some(temperature) = agent.temperature {
-        if let Some(n) = serde_json::Number::from_f64(temperature as f64) {
-            map.insert("temperature".to_string(), Value::Number(n));
+        if let Some(n) = serde_json::Number::from_f64(f64::from(temperature)) {
+            map.insert("temperature".to_owned(), Value::Number(n));
         }
     }
     if let Some(effort) = &agent.reasoning_effort {
-        map.insert("reasoningEffort".to_string(), Value::String(effort.clone()));
+        map.insert("reasoningEffort".to_owned(), Value::String(effort.clone()));
     }
 
     if !agent.required_tools.is_empty() {
         map.insert(
-            "requiredTools".to_string(),
+            "requiredTools".to_owned(),
             Value::Array(
                 agent
                     .required_tools
@@ -388,14 +379,14 @@ fn serialize_agent(agent: &AgentDef) -> Value {
 
     if !agent.metadata.is_empty() {
         map.insert(
-            "metadata".to_string(),
+            "metadata".to_owned(),
             Value::Object(agent.metadata.clone().into_iter().collect()),
         );
     }
 
     if !agent.credentials.is_empty() {
         map.insert(
-            "credentials".to_string(),
+            "credentials".to_owned(),
             Value::Array(
                 agent
                     .credentials
@@ -427,9 +418,9 @@ fn serialize_agent(agent: &AgentDef) -> Value {
 /// `className` for server-side validation.
 fn serialize_output_type(output_type: &OutputType) -> Value {
     let mut map = Map::new();
-    map.insert("schema".to_string(), output_type.schema.clone());
+    map.insert("schema".to_owned(), output_type.schema.clone());
     map.insert(
-        "className".to_string(),
+        "className".to_owned(),
         Value::String(output_type.class_name.clone()),
     );
     Value::Object(map)
@@ -444,16 +435,16 @@ fn serialize_output_type(output_type: &OutputType) -> Value {
 fn serialize_guardrail(guardrail: &Guardrail) -> Value {
     let mut map = Map::new();
 
-    map.insert("name".to_string(), Value::String(guardrail.name.clone()));
+    map.insert("name".to_owned(), Value::String(guardrail.name.clone()));
     map.insert(
-        "position".to_string(),
-        Value::String(guardrail.position.as_str().to_string()),
+        "position".to_owned(),
+        Value::String(guardrail.position.as_str().to_owned()),
     );
     map.insert(
-        "onFail".to_string(),
-        Value::String(guardrail.on_fail.as_str().to_string()),
+        "onFail".to_owned(),
+        Value::String(guardrail.on_fail.as_str().to_owned()),
     );
-    map.insert("maxRetries".to_string(), Value::from(guardrail.max_retries));
+    map.insert("maxRetries".to_owned(), Value::from(guardrail.max_retries));
     map.extend(guardrail.guardrail_type_fields());
 
     Value::Object(map)
@@ -466,8 +457,8 @@ fn serialize_guardrail(guardrail: &Guardrail) -> Value {
 fn serialize_termination(condition: &TerminationCondition) -> Value {
     let mut map = Map::new();
     map.insert(
-        "type".to_string(),
-        Value::String(condition.type_str().to_string()),
+        "type".to_owned(),
+        Value::String(condition.type_str().to_owned()),
     );
 
     match condition {
@@ -475,17 +466,17 @@ fn serialize_termination(condition: &TerminationCondition) -> Value {
             text,
             case_sensitive,
         } => {
-            map.insert("text".to_string(), Value::String(text.clone()));
-            map.insert("caseSensitive".to_string(), Value::Bool(*case_sensitive));
+            map.insert("text".to_owned(), Value::String(text.clone()));
+            map.insert("caseSensitive".to_owned(), Value::Bool(*case_sensitive));
         }
         TerminationCondition::StopMessage { stop_message } => {
             map.insert(
-                "stopMessage".to_string(),
+                "stopMessage".to_owned(),
                 Value::String(stop_message.clone()),
             );
         }
         TerminationCondition::MaxMessage { max_messages } => {
-            map.insert("maxMessages".to_string(), Value::from(*max_messages));
+            map.insert("maxMessages".to_owned(), Value::from(*max_messages));
         }
         TerminationCondition::TokenUsage {
             max_total_tokens,
@@ -493,24 +484,24 @@ fn serialize_termination(condition: &TerminationCondition) -> Value {
             max_completion_tokens,
         } => {
             if let Some(max_total_tokens) = max_total_tokens {
-                map.insert("maxTotalTokens".to_string(), Value::from(*max_total_tokens));
+                map.insert("maxTotalTokens".to_owned(), Value::from(*max_total_tokens));
             }
             if let Some(max_prompt_tokens) = max_prompt_tokens {
                 map.insert(
-                    "maxPromptTokens".to_string(),
+                    "maxPromptTokens".to_owned(),
                     Value::from(*max_prompt_tokens),
                 );
             }
             if let Some(max_completion_tokens) = max_completion_tokens {
                 map.insert(
-                    "maxCompletionTokens".to_string(),
+                    "maxCompletionTokens".to_owned(),
                     Value::from(*max_completion_tokens),
                 );
             }
         }
         TerminationCondition::And { conditions } | TerminationCondition::Or { conditions } => {
             map.insert(
-                "conditions".to_string(),
+                "conditions".to_owned(),
                 Value::Array(conditions.iter().map(serialize_termination).collect()),
             );
         }
@@ -536,13 +527,13 @@ fn serialize_memory(memory: &ConversationMemory) -> Value {
 
     if !memory.messages.is_empty() {
         map.insert(
-            "messages".to_string(),
+            "messages".to_owned(),
             Value::Array(memory.messages.iter().map(serialize_message).collect()),
         );
     }
     if let Some(max_messages) = memory.max_messages {
         if max_messages != 0 {
-            map.insert("maxMessages".to_string(), Value::from(max_messages));
+            map.insert("maxMessages".to_owned(), Value::from(max_messages));
         }
     }
 
@@ -551,7 +542,7 @@ fn serialize_memory(memory: &ConversationMemory) -> Value {
 
 /// Serializes a [`Message`] to python-sdk's message dict shape (see
 /// `python-sdk/src/conductor/ai/agents/memory.py`'s `add_*` methods, which build these dicts
-/// directly — `message`/`tool_calls` stay snake_case while `toolCallId`/`taskReferenceName` are
+/// directly — `message`/`tool_calls` stay `snake_case` while `toolCallId`/`taskReferenceName` are
 /// already camelCase there, so this mirrors that mixed casing verbatim rather than normalizing
 /// it). `tool_calls` is only ever populated for `MessageRole::ToolCall`; `tool_call_id`/
 /// `task_reference_name` only for `MessageRole::Tool` — both omitted otherwise.
@@ -559,29 +550,23 @@ fn serialize_message(message: &Message) -> Value {
     let mut map = Map::new();
 
     map.insert(
-        "role".to_string(),
-        Value::String(message.role.as_str().to_string()),
+        "role".to_owned(),
+        Value::String(message.role.as_str().to_owned()),
     );
-    map.insert(
-        "message".to_string(),
-        Value::String(message.message.clone()),
-    );
+    map.insert("message".to_owned(), Value::String(message.message.clone()));
 
     if !message.tool_calls.is_empty() {
         map.insert(
-            "tool_calls".to_string(),
+            "tool_calls".to_owned(),
             Value::Array(message.tool_calls.iter().map(serialize_tool_call).collect()),
         );
     }
     if let Some(tool_call_id) = &message.tool_call_id {
-        map.insert(
-            "toolCallId".to_string(),
-            Value::String(tool_call_id.clone()),
-        );
+        map.insert("toolCallId".to_owned(), Value::String(tool_call_id.clone()));
     }
     if let Some(task_reference_name) = &message.task_reference_name {
         map.insert(
-            "taskReferenceName".to_string(),
+            "taskReferenceName".to_owned(),
             Value::String(task_reference_name.clone()),
         );
     }
@@ -594,12 +579,12 @@ fn serialize_message(message: &Message) -> Value {
 fn serialize_tool_call(tool_call: &ToolCall) -> Value {
     let mut map = Map::new();
 
-    map.insert("name".to_string(), Value::String(tool_call.name.clone()));
+    map.insert("name".to_owned(), Value::String(tool_call.name.clone()));
     map.insert(
-        "taskReferenceName".to_string(),
+        "taskReferenceName".to_owned(),
         Value::String(tool_call.task_reference_name.clone()),
     );
-    map.insert("input".to_string(), tool_call.input.clone());
+    map.insert("input".to_owned(), tool_call.input.clone());
 
     Value::Object(map)
 }
@@ -622,12 +607,12 @@ fn serialize_swarm_transition(transition: &SwarmTransition, agent_name: &str) ->
     let mut map = Map::new();
 
     map.insert(
-        "target".to_string(),
-        Value::String(transition.target().to_string()),
+        "target".to_owned(),
+        Value::String(transition.target().to_owned()),
     );
     map.insert(
-        "type".to_string(),
-        Value::String(transition.as_str().to_string()),
+        "type".to_owned(),
+        Value::String(transition.as_str().to_owned()),
     );
 
     match transition {
@@ -636,20 +621,20 @@ fn serialize_swarm_transition(transition: &SwarmTransition, agent_name: &str) ->
             result_contains,
             ..
         } => {
-            map.insert("toolName".to_string(), Value::String(tool_name.clone()));
+            map.insert("toolName".to_owned(), Value::String(tool_name.clone()));
             if let Some(result_contains) = result_contains {
                 map.insert(
-                    "resultContains".to_string(),
+                    "resultContains".to_owned(),
                     Value::String(result_contains.clone()),
                 );
             }
         }
         SwarmTransition::OnTextMention { text, .. } => {
-            map.insert("text".to_string(), Value::String(text.clone()));
+            map.insert("text".to_owned(), Value::String(text.clone()));
         }
         SwarmTransition::OnCondition { target, .. } => {
             map.insert(
-                "taskName".to_string(),
+                "taskName".to_owned(),
                 Value::String(format!("{agent_name}_handoff_{target}")),
             );
         }
@@ -661,35 +646,35 @@ fn serialize_swarm_transition(transition: &SwarmTransition, agent_name: &str) ->
 fn serialize_tool(tool: &ToolDef) -> Value {
     let mut map = Map::new();
 
-    map.insert("name".to_string(), Value::String(tool.name.clone()));
+    map.insert("name".to_owned(), Value::String(tool.name.clone()));
     map.insert(
-        "description".to_string(),
+        "description".to_owned(),
         Value::String(tool.description.clone()),
     );
-    map.insert("inputSchema".to_string(), tool.input_schema.clone());
+    map.insert("inputSchema".to_owned(), tool.input_schema.clone());
     map.insert(
-        "toolType".to_string(),
-        Value::String(tool.tool_type.as_str().to_string()),
+        "toolType".to_owned(),
+        Value::String(tool.tool_type.as_str().to_owned()),
     );
 
     if !tool.output_schema.is_null() {
-        map.insert("outputSchema".to_string(), tool.output_schema.clone());
+        map.insert("outputSchema".to_owned(), tool.output_schema.clone());
     }
     if tool.approval_required {
-        map.insert("approvalRequired".to_string(), Value::Bool(true));
+        map.insert("approvalRequired".to_owned(), Value::Bool(true));
     }
     if tool.stateful {
-        map.insert("stateful".to_string(), Value::Bool(true));
+        map.insert("stateful".to_owned(), Value::Bool(true));
     }
     if let Some(timeout_seconds) = tool.timeout_seconds {
-        map.insert("timeoutSeconds".to_string(), Value::from(timeout_seconds));
+        map.insert("timeoutSeconds".to_owned(), Value::from(timeout_seconds));
     }
     if let Some(max_calls) = tool.max_calls {
-        map.insert("maxCalls".to_string(), Value::from(max_calls));
+        map.insert("maxCalls".to_owned(), Value::from(max_calls));
     }
     if !tool.guardrails.is_empty() {
         map.insert(
-            "guardrails".to_string(),
+            "guardrails".to_owned(),
             Value::Array(tool.guardrails.iter().map(serialize_guardrail).collect()),
         );
     }
@@ -698,13 +683,13 @@ fn serialize_tool(tool: &ToolDef) -> Value {
 
     if tool.tool_type == ToolType::AgentTool {
         if let Some(sub_agent) = &tool.sub_agent {
-            config.insert("agentConfig".to_string(), serialize_agent(sub_agent));
+            config.insert("agentConfig".to_owned(), serialize_agent(sub_agent));
         }
     }
 
     if !tool.credentials.is_empty() {
         config.insert(
-            "credentials".to_string(),
+            "credentials".to_owned(),
             Value::Array(
                 tool.credentials
                     .iter()
@@ -716,7 +701,7 @@ fn serialize_tool(tool: &ToolDef) -> Value {
     }
 
     if !config.is_empty() {
-        map.insert("config".to_string(), Value::Object(config));
+        map.insert("config".to_owned(), Value::Object(config));
     }
 
     Value::Object(map)
@@ -774,9 +759,9 @@ mod tests {
             assert!(!obj.contains_key(key), "expected '{key}' to be omitted");
         }
 
-        assert_eq!(obj.get("name"), Some(&Value::String("bare".to_string())));
-        assert_eq!(obj.get("maxTurns"), Some(&Value::from(25u32)));
-        assert_eq!(obj.get("timeoutSeconds"), Some(&Value::from(0u64)));
+        assert_eq!(obj.get("name"), Some(&Value::String("bare".to_owned())));
+        assert_eq!(obj.get("maxTurns"), Some(&Value::from(25_u32)));
+        assert_eq!(obj.get("timeoutSeconds"), Some(&Value::from(0_u64)));
         assert_eq!(obj.get("external"), Some(&Value::Bool(true)));
     }
 
@@ -788,7 +773,7 @@ mod tests {
         let json = AgentConfigSerializer::serialize(&agent);
         assert_eq!(
             json.as_object().unwrap().get("introduction"),
-            Some(&Value::String("Hi, I'm the billing agent.".to_string()))
+            Some(&Value::String("Hi, I'm the billing agent.".to_owned()))
         );
     }
 
@@ -798,7 +783,7 @@ mod tests {
         let json = AgentConfigSerializer::serialize(&agent);
         assert_eq!(
             json.as_object().unwrap().get("includeContents"),
-            Some(&Value::String("none".to_string()))
+            Some(&Value::String("none".to_owned()))
         );
     }
 
@@ -990,7 +975,7 @@ mod tests {
         let parent_json = AgentConfigSerializer::serialize(&parent);
         assert_eq!(
             parent_json.as_object().unwrap().get("strategy"),
-            Some(&Value::String("sequential".to_string()))
+            Some(&Value::String("sequential".to_owned()))
         );
     }
 
@@ -1021,7 +1006,7 @@ mod tests {
         let json = AgentConfigSerializer::serialize(&coordinator);
         assert_eq!(
             json.as_object().unwrap().get("strategy"),
-            Some(&Value::String("plan_execute".to_string()))
+            Some(&Value::String("plan_execute".to_owned()))
         );
     }
 
@@ -1050,10 +1035,9 @@ mod tests {
     fn test_tool_credentials_nest_under_config_agent_credentials_stay_top_level() {
         let agent = AgentDef::new("a")
             .unwrap()
-            .with_credentials(vec!["AGENT_CRED".to_string()])
+            .with_credentials(vec!["AGENT_CRED".to_owned()])
             .with_tool(
-                ToolDef::human("ask", "ask a human")
-                    .with_credentials(vec!["TOOL_CRED".to_string()]),
+                ToolDef::human("ask", "ask a human").with_credentials(vec!["TOOL_CRED".to_owned()]),
             );
 
         let json = AgentConfigSerializer::serialize(&agent);
@@ -1061,7 +1045,7 @@ mod tests {
 
         assert_eq!(
             obj.get("credentials"),
-            Some(&Value::Array(vec![Value::String("AGENT_CRED".to_string())]))
+            Some(&Value::Array(vec![Value::String("AGENT_CRED".to_owned())]))
         );
 
         let tool_json = &obj.get("tools").unwrap().as_array().unwrap()[0];
@@ -1074,7 +1058,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             tool_config.get("credentials"),
-            Some(&Value::Array(vec![Value::String("TOOL_CRED".to_string())]))
+            Some(&Value::Array(vec![Value::String("TOOL_CRED".to_owned())]))
         );
     }
 
@@ -1103,7 +1087,7 @@ mod tests {
         let nested_agent_config = config.get("agentConfig").unwrap().as_object().unwrap();
         assert_eq!(
             nested_agent_config.get("name"),
-            Some(&Value::String("sub".to_string()))
+            Some(&Value::String("sub".to_owned()))
         );
         assert_eq!(
             nested_agent_config.get("external"),
@@ -1137,24 +1121,24 @@ mod tests {
         assert_eq!(guardrails.len(), 1);
         let g = guardrails[0].as_object().unwrap();
 
-        assert_eq!(g.get("name"), Some(&Value::String("no_pii".to_string())));
-        assert_eq!(g.get("position"), Some(&Value::String("input".to_string())));
-        assert_eq!(g.get("onFail"), Some(&Value::String("retry".to_string())));
-        assert_eq!(g.get("maxRetries"), Some(&Value::from(5u32)));
+        assert_eq!(g.get("name"), Some(&Value::String("no_pii".to_owned())));
+        assert_eq!(g.get("position"), Some(&Value::String("input".to_owned())));
+        assert_eq!(g.get("onFail"), Some(&Value::String("retry".to_owned())));
+        assert_eq!(g.get("maxRetries"), Some(&Value::from(5_u32)));
         assert_eq!(
             g.get("guardrailType"),
-            Some(&Value::String("regex".to_string()))
+            Some(&Value::String("regex".to_owned()))
         );
         assert_eq!(
             g.get("patterns"),
             Some(&Value::Array(vec![Value::String(
-                "[\\w.+-]+@[\\w-]+\\.[\\w.-]+".to_string()
+                "[\\w.+-]+@[\\w-]+\\.[\\w.-]+".to_owned()
             )]))
         );
-        assert_eq!(g.get("mode"), Some(&Value::String("allow".to_string())));
+        assert_eq!(g.get("mode"), Some(&Value::String("allow".to_owned())));
         assert_eq!(
             g.get("message"),
-            Some(&Value::String("must look like an email".to_string()))
+            Some(&Value::String("must look like an email".to_owned()))
         );
     }
 
@@ -1182,7 +1166,7 @@ mod tests {
         assert_eq!(guardrails.len(), 1);
         assert_eq!(
             guardrails[0].as_object().unwrap().get("name"),
-            Some(&Value::String("no_pii".to_string()))
+            Some(&Value::String("no_pii".to_owned()))
         );
     }
 
@@ -1202,7 +1186,7 @@ mod tests {
             .unwrap();
         let g = guardrails[0].as_object().unwrap();
         assert!(!g.contains_key("message"));
-        assert_eq!(g.get("mode"), Some(&Value::String("block".to_string())));
+        assert_eq!(g.get("mode"), Some(&Value::String("block".to_owned())));
     }
 
     #[test]
@@ -1223,26 +1207,23 @@ mod tests {
         assert_eq!(guardrails.len(), 1);
         let g = guardrails[0].as_object().unwrap();
 
-        assert_eq!(g.get("name"), Some(&Value::String("safety".to_string())));
-        assert_eq!(
-            g.get("position"),
-            Some(&Value::String("output".to_string()))
-        );
-        assert_eq!(g.get("onFail"), Some(&Value::String("raise".to_string())));
-        assert_eq!(g.get("maxRetries"), Some(&Value::from(3u32)));
+        assert_eq!(g.get("name"), Some(&Value::String("safety".to_owned())));
+        assert_eq!(g.get("position"), Some(&Value::String("output".to_owned())));
+        assert_eq!(g.get("onFail"), Some(&Value::String("raise".to_owned())));
+        assert_eq!(g.get("maxRetries"), Some(&Value::from(3_u32)));
         assert_eq!(
             g.get("guardrailType"),
-            Some(&Value::String("llm".to_string()))
+            Some(&Value::String("llm".to_owned()))
         );
         assert_eq!(
             g.get("model"),
-            Some(&Value::String("anthropic/claude-sonnet-4-6".to_string()))
+            Some(&Value::String("anthropic/claude-sonnet-4-6".to_owned()))
         );
         assert_eq!(
             g.get("policy"),
-            Some(&Value::String("no harmful content".to_string()))
+            Some(&Value::String("no harmful content".to_owned()))
         );
-        assert_eq!(g.get("maxTokens"), Some(&Value::from(64u32)));
+        assert_eq!(g.get("maxTokens"), Some(&Value::from(64_u32)));
     }
 
     #[test]
@@ -1267,12 +1248,9 @@ mod tests {
         let g = guardrails[0].as_object().unwrap();
         assert_eq!(
             g.get("guardrailType"),
-            Some(&Value::String("custom".to_string()))
+            Some(&Value::String("custom".to_owned()))
         );
-        assert_eq!(
-            g.get("taskName"),
-            Some(&Value::String("no_pii".to_string()))
-        );
+        assert_eq!(g.get("taskName"), Some(&Value::String("no_pii".to_owned())));
     }
 
     #[test]
@@ -1488,11 +1466,11 @@ mod tests {
 
         assert_eq!(
             router_json.get("name"),
-            Some(&Value::String("router_agent".to_string()))
+            Some(&Value::String("router_agent".to_owned()))
         );
         assert_eq!(
             router_json.get("model"),
-            Some(&Value::String("gpt-4".to_string()))
+            Some(&Value::String("gpt-4".to_owned()))
         );
         assert_eq!(router_json.get("external"), Some(&Value::Bool(false)));
     }
@@ -1547,18 +1525,18 @@ mod tests {
         assert_eq!(handoffs.len(), 1);
         let h = handoffs[0].as_object().unwrap();
 
-        assert_eq!(h.get("target"), Some(&Value::String("refund".to_string())));
+        assert_eq!(h.get("target"), Some(&Value::String("refund".to_owned())));
         assert_eq!(
             h.get("type"),
-            Some(&Value::String("on_tool_result".to_string()))
+            Some(&Value::String("on_tool_result".to_owned()))
         );
         assert_eq!(
             h.get("toolName"),
-            Some(&Value::String("check_order".to_string()))
+            Some(&Value::String("check_order".to_owned()))
         );
         assert_eq!(
             h.get("resultContains"),
-            Some(&Value::String("eligible".to_string()))
+            Some(&Value::String("eligible".to_owned()))
         );
     }
 
@@ -1605,15 +1583,12 @@ mod tests {
         assert_eq!(handoffs.len(), 1);
         let h = handoffs[0].as_object().unwrap();
 
-        assert_eq!(h.get("target"), Some(&Value::String("filer".to_string())));
+        assert_eq!(h.get("target"), Some(&Value::String("filer".to_owned())));
         assert_eq!(
             h.get("type"),
-            Some(&Value::String("on_text_mention".to_string()))
+            Some(&Value::String("on_text_mention".to_owned()))
         );
-        assert_eq!(
-            h.get("text"),
-            Some(&Value::String("ACTIONABLE".to_string()))
-        );
+        assert_eq!(h.get("text"), Some(&Value::String("ACTIONABLE".to_owned())));
         assert!(!h.contains_key("toolName"));
         assert!(!h.contains_key("resultContains"));
     }
@@ -1648,15 +1623,15 @@ mod tests {
 
         assert_eq!(
             h.get("target"),
-            Some(&Value::String("summarizer".to_string()))
+            Some(&Value::String("summarizer".to_owned()))
         );
         assert_eq!(
             h.get("type"),
-            Some(&Value::String("on_condition".to_string()))
+            Some(&Value::String("on_condition".to_owned()))
         );
         assert_eq!(
             h.get("taskName"),
-            Some(&Value::String("triage_handoff_summarizer".to_string()))
+            Some(&Value::String("triage_handoff_summarizer".to_owned()))
         );
     }
 
@@ -1690,11 +1665,11 @@ mod tests {
             .unwrap();
         assert_eq!(
             handoffs[0].as_object().unwrap().get("target"),
-            Some(&Value::String("b".to_string()))
+            Some(&Value::String("b".to_owned()))
         );
         assert_eq!(
             handoffs[1].as_object().unwrap().get("target"),
-            Some(&Value::String("c".to_string()))
+            Some(&Value::String("c".to_owned()))
         );
     }
 
@@ -1803,27 +1778,27 @@ mod tests {
         let planner_json = obj.get("planner").unwrap().as_object().unwrap();
         assert_eq!(
             planner_json.get("name"),
-            Some(&Value::String("planner".to_string()))
+            Some(&Value::String("planner".to_owned()))
         );
         assert_eq!(planner_json.get("external"), Some(&Value::Bool(false)));
 
         let fallback_json = obj.get("fallback").unwrap().as_object().unwrap();
         assert_eq!(
             fallback_json.get("name"),
-            Some(&Value::String("fallback_agent".to_string()))
+            Some(&Value::String("fallback_agent".to_owned()))
         );
 
-        assert_eq!(obj.get("fallbackMaxTurns"), Some(&Value::from(3u32)));
+        assert_eq!(obj.get("fallbackMaxTurns"), Some(&Value::from(3_u32)));
 
         let planner_context = obj.get("plannerContext").unwrap().as_array().unwrap();
         assert_eq!(planner_context.len(), 2);
         assert_eq!(
             planner_context[0].as_object().unwrap().get("text"),
-            Some(&Value::String("rule one".to_string()))
+            Some(&Value::String("rule one".to_owned()))
         );
         assert_eq!(
             planner_context[1].as_object().unwrap().get("text"),
-            Some(&Value::String("rule two".to_string()))
+            Some(&Value::String("rule two".to_owned()))
         );
 
         // Explicitly disabling synthesize must emit `"synthesize": false`.

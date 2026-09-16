@@ -81,13 +81,12 @@ impl TestStats {
         if let Some(existing) = results.get(task_id) {
             if existing != unique_value {
                 eprintln!(
-                    "CONCURRENCY ERROR: Task {} processed with different values: {} vs {}",
-                    task_id, existing, unique_value
+                    "CONCURRENCY ERROR: Task {task_id} processed with different values: {existing} vs {unique_value}"
                 );
                 self.concurrency_errors.fetch_add(1, Ordering::SeqCst);
             }
         } else {
-            results.insert(task_id.to_string(), unique_value.to_string());
+            results.insert(task_id.to_owned(), unique_value.to_owned());
         }
     }
 
@@ -101,51 +100,32 @@ impl TestStats {
 
         let avg_us = total_us.checked_div(executed as u64).unwrap_or(0);
 
-        println!("\n╔══════════════════════════════════════════════════════════════╗");
-        println!("║                    PERFORMANCE TEST RESULTS                   ║");
-        println!("╠══════════════════════════════════════════════════════════════╣");
-        println!(
-            "║ Tasks Executed:     {:>8}                                 ║",
-            executed
-        );
-        println!(
-            "║ Tasks Failed:       {:>8}                                 ║",
-            failed
-        );
-        println!(
-            "║ Concurrency Errors: {:>8}                                 ║",
-            concurrency_errors
-        );
-        println!("╠══════════════════════════════════════════════════════════════╣");
-        println!("║ Execution Time (per task):                                   ║");
-        println!(
-            "║   Min:              {:>8} µs                              ║",
-            min_us
-        );
-        println!(
-            "║   Max:              {:>8} µs                              ║",
-            max_us
-        );
-        println!(
-            "║   Avg:              {:>8} µs                              ║",
-            avg_us
-        );
-        println!("╠══════════════════════════════════════════════════════════════╣");
+        println!("\n\u{2554}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2557}");
+        println!("\u{2551}                    PERFORMANCE TEST RESULTS                   \u{2551}");
+        println!("\u{2560}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2563}");
+        println!("║ Tasks Executed:     {executed:>8}                                 ║");
+        println!("║ Tasks Failed:       {failed:>8}                                 ║");
+        println!("║ Concurrency Errors: {concurrency_errors:>8}                                 ║");
+        println!("\u{2560}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2563}");
+        println!("\u{2551} Execution Time (per task):                                   \u{2551}");
+        println!("║   Min:              {min_us:>8} µs                              ║");
+        println!("║   Max:              {max_us:>8} µs                              ║");
+        println!("║   Avg:              {avg_us:>8} µs                              ║");
+        println!("\u{2560}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2563}");
         if concurrency_errors == 0 {
-            println!("║ ✅ NO CONCURRENCY ISSUES DETECTED                            ║");
+            println!("\u{2551} \u{2705} NO CONCURRENCY ISSUES DETECTED                            \u{2551}");
         } else {
             println!(
-                "║ ❌ CONCURRENCY ISSUES FOUND: {}                              ║",
-                concurrency_errors
+                "║ ❌ CONCURRENCY ISSUES FOUND: {concurrency_errors}                              ║"
             );
         }
-        println!("╚══════════════════════════════════════════════════════════════╝\n");
+        println!("\u{255a}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{255d}\n");
     }
 }
 
 /// Create a worker that validates its input and tracks execution
 fn create_test_worker(task_name: &str, stats: Arc<TestStats>) -> FnWorker {
-    let task_name = task_name.to_string();
+    let task_name = task_name.to_owned();
     FnWorker::new(task_name.clone(), move |task: Task| {
         let stats = Arc::clone(&stats);
         let task_name = task_name.clone();
@@ -157,7 +137,7 @@ fn create_test_worker(task_name: &str, stats: Arc<TestStats>) -> FnWorker {
             let task_id = task.task_id.clone();
             let unique_value: String = task
                 .get_input("unique_value")
-                .unwrap_or_else(|| format!("missing-{}", task_id));
+                .unwrap_or_else(|| format!("missing-{task_id}"));
             let sequence: i32 = task.get_input("sequence").unwrap_or(0);
 
             // Record this task's processing for concurrency validation
@@ -195,10 +175,10 @@ async fn test_performance_and_concurrency() {
         return;
     }
 
-    println!("\n🚀 Starting Performance and Concurrency Test");
-    println!("   Workflows: {}", WORKFLOW_COUNT);
-    println!("   Tasks per workflow: {}", TASKS_PER_WORKFLOW);
-    println!("   Worker concurrency: {}", WORKER_THREAD_COUNT);
+    println!("\n\u{1f680} Starting Performance and Concurrency Test");
+    println!("   Workflows: {WORKFLOW_COUNT}");
+    println!("   Tasks per workflow: {TASKS_PER_WORKFLOW}");
+    println!("   Worker concurrency: {WORKER_THREAD_COUNT}");
 
     let config = Configuration::default();
     let client = ConductorClient::new(config.clone()).expect("Failed to create client");
@@ -210,16 +190,16 @@ async fn test_performance_and_concurrency() {
 
     // Create unique workflow and task names for this test run
     let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-    let workflow_name = format!("perf_test_workflow_{}", test_id);
+    let workflow_name = format!("perf_test_workflow_{test_id}");
     let task_names: Vec<String> = (0..TASKS_PER_WORKFLOW)
-        .map(|i| format!("perf_test_task_{}_{}", test_id, i))
+        .map(|i| format!("perf_test_task_{test_id}_{i}"))
         .collect();
 
-    println!("   Workflow: {}", workflow_name);
-    println!("   Tasks: {:?}", task_names);
+    println!("   Workflow: {workflow_name}");
+    println!("   Tasks: {task_names:?}");
 
     // Register task definitions
-    println!("\n📝 Registering task definitions...");
+    println!("\n\u{1f4dd} Registering task definitions...");
     for task_name in &task_names {
         let task_def = TaskDef::new(task_name)
             .with_retry(0, conductor::models::RetryLogic::Fixed, 0)
@@ -227,20 +207,20 @@ async fn test_performance_and_concurrency() {
             .with_response_timeout(30);
 
         if let Err(e) = metadata_client.register_task_def(&task_def).await {
-            println!("   Warning: Failed to register {}: {}", task_name, e);
+            println!("   Warning: Failed to register {task_name}: {e}");
         }
     }
 
     // Register workflow definition with sequential tasks
-    println!("📝 Registering workflow definition...");
+    println!("\u{1f4dd} Registering workflow definition...");
     let mut workflow_def =
         WorkflowDef::new(&workflow_name).with_description("Performance test workflow");
 
     for (i, task_name) in task_names.iter().enumerate() {
-        let task = WorkflowTask::simple(task_name, format!("task_{}", i))
+        let task = WorkflowTask::simple(task_name, format!("task_{i}"))
             .with_input_param(
                 "unique_value",
-                format!("${{workflow.input.unique_value_{}}}", i),
+                format!("${{workflow.input.unique_value_{i}}}"),
             )
             .with_input_param("sequence", serde_json::json!(i));
         workflow_def = workflow_def.with_task(task);
@@ -250,12 +230,12 @@ async fn test_performance_and_concurrency() {
         .register_or_update_workflow_def(&workflow_def, true)
         .await
     {
-        println!("   Failed to register workflow: {}", e);
+        println!("   Failed to register workflow: {e}");
         return;
     }
 
     // Create and start workers
-    println!("\n👷 Starting workers...");
+    println!("\n\u{1f477} Starting workers...");
     let mut handler = TaskHandler::new(config.clone()).expect("Failed to create handler");
 
     for task_name in &task_names {
@@ -263,16 +243,13 @@ async fn test_performance_and_concurrency() {
     }
 
     handler.start().await.expect("Failed to start handler");
-    println!(
-        "   Workers started with {} threads each",
-        WORKER_THREAD_COUNT
-    );
+    println!("   Workers started with {WORKER_THREAD_COUNT} threads each");
 
     // Give workers time to start polling
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Start workflows concurrently
-    println!("\n🏃 Starting {} workflows...", WORKFLOW_COUNT);
+    println!("\n🏃 Starting {WORKFLOW_COUNT} workflows...");
     let start_time = Instant::now();
 
     let mut workflow_ids = Vec::with_capacity(WORKFLOW_COUNT);
@@ -291,9 +268,9 @@ async fn test_performance_and_concurrency() {
             let mut input = serde_json::Map::new();
             let wf_uuid = uuid::Uuid::new_v4().to_string();
             for j in 0..TASKS_PER_WORKFLOW {
-                let unique_value = format!("PLACEHOLDER-{}-{}", j, wf_uuid);
+                let unique_value = format!("PLACEHOLDER-{j}-{wf_uuid}");
                 input.insert(
-                    format!("unique_value_{}", j),
+                    format!("unique_value_{j}"),
                     serde_json::Value::String(unique_value),
                 );
             }
@@ -307,7 +284,7 @@ async fn test_performance_and_concurrency() {
                     Some((i, wf_id))
                 }
                 Err(e) => {
-                    eprintln!("Failed to start workflow {}: {}", i, e);
+                    eprintln!("Failed to start workflow {i}: {e}");
                     None
                 }
             }
@@ -330,13 +307,13 @@ async fn test_performance_and_concurrency() {
     );
 
     if started_count == 0 {
-        println!("❌ No workflows started successfully");
+        println!("\u{274c} No workflows started successfully");
         handler.stop().await.ok();
         return;
     }
 
     // Wait for all workflows to complete
-    println!("\n⏳ Waiting for workflows to complete...");
+    println!("\n\u{23f3} Waiting for workflows to complete...");
     let completion_start = Instant::now();
     let timeout = Duration::from_secs(MAX_WORKFLOW_DURATION_SECS);
     let check_interval = Duration::from_millis(500);
@@ -344,7 +321,7 @@ async fn test_performance_and_concurrency() {
 
     loop {
         if completion_start.elapsed() > timeout {
-            println!("   ⚠️ Timeout reached, some workflows may still be running");
+            println!("   \u{26a0}\u{fe0f} Timeout reached, some workflows may still be running");
             break;
         }
 
@@ -377,8 +354,7 @@ async fn test_performance_and_concurrency() {
         if completion_start.elapsed().as_secs().is_multiple_of(5) {
             let executed = stats.tasks_executed.load(Ordering::SeqCst);
             println!(
-                "   Progress: {} tasks executed, {} workflows still running",
-                executed, still_running
+                "   Progress: {executed} tasks executed, {still_running} workflows still running"
             );
         }
     }
@@ -397,13 +373,13 @@ async fn test_performance_and_concurrency() {
 
     let total_duration = start_time.elapsed();
 
-    println!("\n📊 Workflow Results:");
-    println!("   Completed: {}", final_completed);
-    println!("   Failed: {}", final_failed);
-    println!("   Total time: {:?}", total_duration);
+    println!("\n\u{1f4ca} Workflow Results:");
+    println!("   Completed: {final_completed}");
+    println!("   Failed: {final_failed}");
+    println!("   Total time: {total_duration:?}");
 
     // Stop workers
-    println!("\n🛑 Stopping workers...");
+    println!("\n\u{1f6d1} Stopping workers...");
     handler.stop().await.expect("Failed to stop handler");
 
     // Print statistics
@@ -413,11 +389,11 @@ async fn test_performance_and_concurrency() {
     let tasks_executed = stats.tasks_executed.load(Ordering::SeqCst);
     if tasks_executed > 0 && total_duration.as_secs() > 0 {
         let throughput = tasks_executed as f64 / total_duration.as_secs_f64();
-        println!("📈 Throughput: {:.2} tasks/second", throughput);
+        println!("📈 Throughput: {throughput:.2} tasks/second");
     }
 
     // Cleanup - delete workflows
-    println!("\n🧹 Cleaning up...");
+    println!("\n\u{1f9f9} Cleaning up...");
     for wf_id in &workflow_ids {
         workflow_client.delete_workflow(wf_id, false).await.ok();
     }
@@ -438,12 +414,10 @@ async fn test_performance_and_concurrency() {
     let expected_tasks = final_completed * TASKS_PER_WORKFLOW;
     assert!(
         tasks_executed >= expected_tasks,
-        "Expected at least {} tasks executed, got {}",
-        expected_tasks,
-        tasks_executed
+        "Expected at least {expected_tasks} tasks executed, got {tasks_executed}"
     );
 
-    println!("✅ Performance test completed successfully!");
+    println!("\u{2705} Performance test completed successfully!");
 }
 
 /// Test to verify worker shutdown doesn't lose tasks
@@ -454,7 +428,7 @@ async fn test_graceful_shutdown() {
         return;
     }
 
-    println!("\n🔄 Testing Graceful Shutdown...");
+    println!("\n\u{1f504} Testing Graceful Shutdown...");
 
     let config = Configuration::default();
     let client = ConductorClient::new(config.clone()).expect("Failed to create client");
@@ -462,8 +436,8 @@ async fn test_graceful_shutdown() {
     let workflow_client = client.workflow_client();
 
     let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-    let task_name = format!("shutdown_test_task_{}", test_id);
-    let workflow_name = format!("shutdown_test_workflow_{}", test_id);
+    let task_name = format!("shutdown_test_task_{test_id}");
+    let workflow_name = format!("shutdown_test_workflow_{test_id}");
 
     // Register task that takes some time
     let task_def = TaskDef::new(&task_name)
@@ -472,7 +446,7 @@ async fn test_graceful_shutdown() {
 
     // If we can't register the task, there's likely no server running
     if let Err(e) = metadata_client.register_task_def(&task_def).await {
-        println!("   Skipping test: Cannot reach Conductor server: {}", e);
+        println!("   Skipping test: Cannot reach Conductor server: {e}");
         return;
     }
 
@@ -533,10 +507,7 @@ async fn test_graceful_shutdown() {
     let stop_duration = stop_start.elapsed();
 
     let completed = completed_count.load(Ordering::SeqCst);
-    println!(
-        "   Completed {} tasks before shutdown in {:?}",
-        completed, stop_duration
-    );
+    println!("   Completed {completed} tasks before shutdown in {stop_duration:?}");
 
     // Cleanup
     for wf_id in &workflow_ids {
@@ -556,13 +527,10 @@ async fn test_graceful_shutdown() {
     // Note: In CI without a real server, we may get 0 completions, which is acceptable
     // The main purpose is to ensure graceful shutdown doesn't panic
     if completed > 0 {
-        println!(
-            "✅ Graceful shutdown test passed! ({} tasks completed)",
-            completed
-        );
+        println!("✅ Graceful shutdown test passed! ({completed} tasks completed)");
     } else {
         println!(
-            "⚠️ Graceful shutdown test completed (no tasks executed - check server connectivity)"
+            "\u{26a0}\u{fe0f} Graceful shutdown test completed (no tasks executed - check server connectivity)"
         );
     }
 }
@@ -575,7 +543,7 @@ async fn test_high_concurrency_stress() {
         return;
     }
 
-    println!("\n💪 Running High Concurrency Stress Test...");
+    println!("\n\u{1f4aa} Running High Concurrency Stress Test...");
 
     let config = Configuration::default();
     let client = ConductorClient::new(config.clone()).expect("Failed to create client");
@@ -583,8 +551,8 @@ async fn test_high_concurrency_stress() {
     let workflow_client = client.workflow_client();
 
     let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-    let task_name = format!("stress_test_task_{}", test_id);
-    let workflow_name = format!("stress_test_workflow_{}", test_id);
+    let task_name = format!("stress_test_task_{test_id}");
+    let workflow_name = format!("stress_test_workflow_{test_id}");
 
     // Register task
     let task_def = TaskDef::new(&task_name);
@@ -613,7 +581,7 @@ async fn test_high_concurrency_stress() {
             // Record this value
             let mut set = processed.lock();
             if set.contains(&value) {
-                return Ok(WorkerOutput::failed(format!("Duplicate value: {}", value)));
+                return Ok(WorkerOutput::failed(format!("Duplicate value: {value}")));
             }
             set.insert(value);
             drop(set);
@@ -642,7 +610,7 @@ async fn test_high_concurrency_stress() {
 
         let handle = tokio::spawn(async move {
             let request =
-                StartWorkflowRequest::new(&workflow_name).with_input_value("value", i as i64);
+                StartWorkflowRequest::new(&workflow_name).with_input_value("value", i64::from(i));
             workflow_client.start_workflow(&request).await
         });
         handles.push(handle);
@@ -683,10 +651,7 @@ async fn test_high_concurrency_stress() {
     let total_duration = start.elapsed();
     let processed = processed_values.lock().len();
 
-    println!(
-        "   Processed {} unique values in {:?}",
-        processed, total_duration
-    );
+    println!("   Processed {processed} unique values in {total_duration:?}");
     println!(
         "   Throughput: {:.2} workflows/second",
         processed as f64 / total_duration.as_secs_f64()
@@ -712,5 +677,5 @@ async fn test_high_concurrency_stress() {
         workflow_ids.len()
     );
 
-    println!("✅ High concurrency stress test passed!");
+    println!("\u{2705} High concurrency stress test passed!");
 }

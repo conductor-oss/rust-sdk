@@ -29,7 +29,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use once_cell::sync::Lazy;
 use serde_json::Value;
 
 use crate::client::WorkflowClient;
@@ -47,8 +46,8 @@ pub struct DiscoveredMcpTool {
     pub input_schema: Value,
 }
 
-static DISCOVERY_CACHE: Lazy<Mutex<HashMap<String, Vec<DiscoveredMcpTool>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static DISCOVERY_CACHE: std::sync::LazyLock<Mutex<HashMap<String, Vec<DiscoveredMcpTool>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 async fn fetch_mcp_tools(
     workflow_client: &WorkflowClient,
@@ -59,14 +58,14 @@ async fn fetch_mcp_tools(
 
     let mut output_parameters = HashMap::new();
     output_parameters.insert(
-        "tools".to_string(),
-        Value::String("${list_tools.output.tools}".to_string()),
+        "tools".to_owned(),
+        Value::String("${list_tools.output.tools}".to_owned()),
     );
 
     let workflow_def = WorkflowDef {
-        name: "__mcp_discovery__".to_string(),
+        name: "__mcp_discovery__".to_owned(),
         version: 1,
-        description: Some("MCP tool discovery (ephemeral)".to_string()),
+        description: Some("MCP tool discovery (ephemeral)".to_owned()),
         tasks: vec![task],
         output_parameters,
         ..Default::default()
@@ -84,7 +83,7 @@ async fn fetch_mcp_tools(
         return Err(ConductorError::agent(format!(
             "MCP discovery workflow failed for {server_url}: {}",
             run.reason_for_incompletion
-                .unwrap_or_else(|| "unknown".to_string())
+                .unwrap_or_else(|| "unknown".to_owned())
         )));
     }
 
@@ -98,18 +97,18 @@ async fn fetch_mcp_tools(
     Ok(tools
         .into_iter()
         .filter_map(|t| {
-            let name = t.get("name").and_then(Value::as_str)?.to_string();
+            let name = t.get("name").and_then(Value::as_str)?.to_owned();
             Some(DiscoveredMcpTool {
                 name,
                 description: t
                     .get("description")
                     .and_then(Value::as_str)
                     .unwrap_or("")
-                    .to_string(),
+                    .to_owned(),
                 input_schema: t
                     .get("inputSchema")
                     .cloned()
-                    .unwrap_or_else(|| Value::Object(Default::default())),
+                    .unwrap_or_else(|| Value::Object(serde_json::Map::default())),
             })
         })
         .collect())
@@ -128,7 +127,7 @@ pub async fn discover_mcp_tools(
 ) -> Vec<DiscoveredMcpTool> {
     if let Some(cached) = DISCOVERY_CACHE
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(server_url)
     {
         return cached.clone();
@@ -140,8 +139,8 @@ pub async fn discover_mcp_tools(
 
     DISCOVERY_CACHE
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .insert(server_url.to_string(), discovered.clone());
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(server_url.to_owned(), discovered.clone());
     discovered
 }
 
@@ -150,7 +149,7 @@ pub async fn discover_mcp_tools(
 pub fn clear_mcp_discovery_cache() {
     DISCOVERY_CACHE
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clear();
 }
 
@@ -160,6 +159,7 @@ pub fn clear_mcp_discovery_cache() {
 /// a `tool_names` whitelist if the original tool's config set one. Falls back to `[mcp_td]`
 /// unchanged if nothing was discovered or everything was filtered out — same graceful-fallback
 /// contract as python.
+#[must_use]
 pub fn expand_mcp_tool_def(mcp_td: &ToolDef, discovered: &[DiscoveredMcpTool]) -> Vec<ToolDef> {
     if discovered.is_empty() {
         return vec![mcp_td.clone()];
@@ -198,10 +198,10 @@ pub fn expand_mcp_tool_def(mcp_td: &ToolDef, discovered: &[DiscoveredMcpTool]) -
         .into_iter()
         .map(|tool_info| {
             let mut config = HashMap::new();
-            config.insert("server_url".to_string(), server_url.clone());
-            config.insert("max_tools".to_string(), max_tools.clone());
+            config.insert("server_url".to_owned(), server_url.clone());
+            config.insert("max_tools".to_owned(), max_tools.clone());
             if let Some(headers) = &headers {
-                config.insert("headers".to_string(), headers.clone());
+                config.insert("headers".to_owned(), headers.clone());
             }
             ToolDef {
                 name: tool_info.name.clone(),
@@ -229,8 +229,8 @@ mod tests {
 
     fn mcp_tool_def(config: HashMap<String, Value>) -> ToolDef {
         ToolDef {
-            name: "mcp_tools".to_string(),
-            description: "MCP tools".to_string(),
+            name: "mcp_tools".to_owned(),
+            description: "MCP tools".to_owned(),
             input_schema: Value::Null,
             output_schema: Value::Null,
             tool_type: ToolType::Mcp,
@@ -248,7 +248,7 @@ mod tests {
 
     fn discovered(name: &str) -> DiscoveredMcpTool {
         DiscoveredMcpTool {
-            name: name.to_string(),
+            name: name.to_owned(),
             description: format!("{name} description"),
             input_schema: serde_json::json!({"type": "object"}),
         }
@@ -266,10 +266,10 @@ mod tests {
     fn test_expand_mcp_tool_def_builds_one_tool_per_discovered() {
         let mut config = HashMap::new();
         config.insert(
-            "server_url".to_string(),
-            Value::String("http://mcp".to_string()),
+            "server_url".to_owned(),
+            Value::String("http://mcp".to_owned()),
         );
-        config.insert("max_tools".to_string(), Value::from(32));
+        config.insert("max_tools".to_owned(), Value::from(32));
         let original = mcp_tool_def(config);
 
         let discovered_tools = vec![discovered("search"), discovered("fetch")];
@@ -280,7 +280,7 @@ mod tests {
         assert_eq!(expanded[0].tool_type, ToolType::Mcp);
         assert_eq!(
             expanded[0].config.get("server_url"),
-            Some(&Value::String("http://mcp".to_string()))
+            Some(&Value::String("http://mcp".to_owned()))
         );
         assert_eq!(expanded[0].config.get("max_tools"), Some(&Value::from(32)));
         assert_eq!(expanded[1].name, "fetch");
@@ -290,11 +290,11 @@ mod tests {
     fn test_expand_mcp_tool_def_inherits_headers_when_present() {
         let mut config = HashMap::new();
         config.insert(
-            "server_url".to_string(),
-            Value::String("http://mcp".to_string()),
+            "server_url".to_owned(),
+            Value::String("http://mcp".to_owned()),
         );
         config.insert(
-            "headers".to_string(),
+            "headers".to_owned(),
             serde_json::json!({"Authorization": "Bearer ${TOKEN}"}),
         );
         let original = mcp_tool_def(config);
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn test_expand_mcp_tool_def_applies_tool_names_whitelist() {
         let mut config = HashMap::new();
-        config.insert("tool_names".to_string(), serde_json::json!(["search"]));
+        config.insert("tool_names".to_owned(), serde_json::json!(["search"]));
         let original = mcp_tool_def(config);
 
         let discovered_tools = vec![discovered("search"), discovered("fetch")];
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_expand_mcp_tool_def_whitelist_matching_nothing_returns_original() {
         let mut config = HashMap::new();
-        config.insert("tool_names".to_string(), serde_json::json!(["nonexistent"]));
+        config.insert("tool_names".to_owned(), serde_json::json!(["nonexistent"]));
         let original = mcp_tool_def(config);
 
         let discovered_tools = vec![discovered("search")];

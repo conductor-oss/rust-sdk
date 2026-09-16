@@ -1,7 +1,5 @@
-//! Reproduces `llm-recordings/64_swarm_with_tools` (from conductor-oss/conductor PR #1614).
-//! Ported field-for-field from python-sdk's `examples/agents/64_swarm_with_tools.py`.
-//!
-//! `cargo run --features agents --example sdk_playback_64_swarm_with_tools`
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -76,12 +74,12 @@ fn build_support_agent() -> Result<AgentDef> {
         .with_sub_agent(billing_specialist)?
         .with_sub_agent(order_specialist)?
         .with_swarm_transition(SwarmTransition::OnTextMention {
-            text: "billing".to_string(),
-            target: "billing_specialist".to_string(),
+            text: "billing".to_owned(),
+            target: "billing_specialist".to_owned(),
         })
         .with_swarm_transition(SwarmTransition::OnTextMention {
-            text: "order".to_string(),
-            target: "order_specialist".to_string(),
+            text: "order".to_owned(),
+            target: "order_specialist".to_owned(),
         })
         .with_max_turns(3)?
         .with_strategy(Strategy::Swarm)

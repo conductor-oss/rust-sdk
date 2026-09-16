@@ -1,8 +1,5 @@
-//! One-off probe (not part of the crate's normal example set): empirically checks whether
-//! `AgentRuntime::compile`/`deploy` send the HTTP body shape the real Conductor server
-//! (`/api/agent/compile`) actually expects, and whether a `Strategy::PlanExecute` agent
-//! round-trips its `strategy` field. Run against a local server via `cargo run --example
-//! mockllm_audit_probe`. Deleted after the audit; not meant to be kept.
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use conductor::agents::{AgentConfigSerializer, AgentDef, AgentRuntime, Strategy, ToolDef};
 use conductor::configuration::Configuration;
@@ -54,7 +51,7 @@ async fn main() -> Result<()> {
     }
 
     println!("\n=== Control: manually wrapping the SAME payload as {{\"agentConfig\": ...}} and POSTing directly ===");
-    let wrapped: Value = serde_json::json!({ "agentConfig": payload });
+    let wrapped = serde_json::json!({ "agentConfig": payload });
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/agent/compile", config.server_api_url))

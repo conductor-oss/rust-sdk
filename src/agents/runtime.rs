@@ -116,7 +116,7 @@ impl Worker for ToolWorker {
         let state_updates = context.state_snapshot();
         if !state_updates.is_empty() {
             result_map.insert(
-                "_state_updates".to_string(),
+                "_state_updates".to_owned(),
                 serde_json::to_value(state_updates)?,
             );
         }
@@ -188,7 +188,7 @@ impl Worker for StopWhenWorker {
         };
 
         let mut output = std::collections::HashMap::new();
-        output.insert("should_continue".to_string(), Value::Bool(should_continue));
+        output.insert("should_continue".to_owned(), Value::Bool(should_continue));
         Ok(WorkerOutput::completed(output))
     }
 }
@@ -228,7 +228,7 @@ impl Worker for GateWorker {
         };
 
         let mut output = std::collections::HashMap::new();
-        output.insert("decision".to_string(), Value::String(decision.to_string()));
+        output.insert("decision".to_owned(), Value::String(decision.to_owned()));
         Ok(WorkerOutput::completed(output))
     }
 }
@@ -274,10 +274,10 @@ impl Worker for TerminationWorker {
 
         let mut output = std::collections::HashMap::new();
         output.insert(
-            "should_continue".to_string(),
+            "should_continue".to_owned(),
             Value::Bool(!outcome.should_terminate),
         );
-        output.insert("reason".to_string(), Value::String(outcome.reason));
+        output.insert("reason".to_owned(), Value::String(outcome.reason));
         Ok(WorkerOutput::completed(output))
     }
 }
@@ -307,7 +307,7 @@ impl CallbackPosition {
     ];
 
     /// Wire/task-name spelling, matching python's `POSITION_TO_METHOD` keys exactly.
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             CallbackPosition::BeforeAgent => "before_agent",
             CallbackPosition::AfterAgent => "after_agent",
@@ -349,11 +349,11 @@ async fn dispatch_callback_position(
 ) -> Value {
     for handler in handlers {
         match position.dispatch(handler.as_ref(), ctx).await {
-            None | Some(Value::Null) => continue,
+            None | Some(Value::Null) => {}
             Some(Value::Object(map)) => return Value::Object(map),
             Some(other) => {
                 let mut wrapped = Map::new();
-                wrapped.insert("result".to_string(), other);
+                wrapped.insert("result".to_owned(), other);
                 return Value::Object(wrapped);
             }
         }
@@ -382,10 +382,10 @@ impl Worker for CallbackWorker {
     async fn execute(&self, task: &Task) -> Result<WorkerOutput> {
         let mut fields = Map::new();
         if let Some(messages) = task.input_data.get("messages") {
-            fields.insert("messages".to_string(), messages.clone());
+            fields.insert("messages".to_owned(), messages.clone());
         }
         if let Some(llm_result) = task.input_data.get("llm_result") {
-            fields.insert("llm_result".to_string(), llm_result.clone());
+            fields.insert("llm_result".to_owned(), llm_result.clone());
         }
         let ctx = CallbackContext::from(fields);
 
@@ -415,7 +415,7 @@ fn stringify_content(content: Option<&Value>) -> String {
 /// [`super::guardrail::GuardrailCheck`] impl already declares its own kind.
 fn is_custom_function_guardrail(guardrail: &Guardrail) -> bool {
     guardrail.guardrail_type_fields().get("guardrailType")
-        == Some(&Value::String("custom".to_string()))
+        == Some(&Value::String("custom".to_owned()))
 }
 
 /// Bridges a custom-function [`Guardrail`] (backed by
@@ -578,7 +578,7 @@ impl Worker for TransferNoopWorker {
             .unwrap_or("");
         let mut output = std::collections::HashMap::new();
         if !message.is_empty() {
-            output.insert("message".to_string(), Value::String(message.to_string()));
+            output.insert("message".to_owned(), Value::String(message.to_owned()));
         }
         Ok(WorkerOutput::completed(output))
     }
@@ -628,14 +628,10 @@ fn is_allowed_transition(
     if allowed.is_empty() {
         return true;
     }
-    let source_name = idx_to_name
-        .get(source_idx)
-        .map(String::as_str)
-        .unwrap_or("");
+    let source_name = idx_to_name.get(source_idx).map_or("", String::as_str);
     allowed
         .get(source_name)
-        .map(|targets| targets.iter().any(|t| t == target_name))
-        .unwrap_or(false)
+        .is_some_and(|targets| targets.iter().any(|t| t == target_name))
 }
 
 /// Swarm handoff decision, matching python's `HandoffCheckEntry.__call__` return shape.
@@ -651,8 +647,8 @@ const HANDOFF_MAX_BLOCKED_RETRIES: u32 = 3;
 /// Decide the next `active_agent` for a swarm turn, matching python's
 /// `HandoffCheckEntry.__call__`: priority 1 is a detected transfer-tool call (with retry-then-
 /// give-up handling when `allowed_transitions` blocks it); priority 2 (fallback) is
-/// condition-based [`SwarmTransition`] evaluation.
-#[allow(clippy::too_many_arguments)]
+/// condition-based [`super::SwarmTransition`] evaluation.
+#[expect(clippy::too_many_arguments)]
 fn evaluate_handoff_check(
     transitions: &[super::swarm::SwarmTransition],
     name_to_idx: &std::collections::HashMap<String, String>,
@@ -670,7 +666,7 @@ fn evaluate_handoff_check(
             let target_idx = name_to_idx
                 .get(transfer_to)
                 .cloned()
-                .unwrap_or_else(|| active_agent.to_string());
+                .unwrap_or_else(|| active_agent.to_owned());
             if target_idx != active_agent {
                 return HandoffDecision {
                     active_agent: target_idx,
@@ -679,24 +675,24 @@ fn evaluate_handoff_check(
             }
             // Self-transfer no-op — fall through to the condition-based check below.
         } else if !allowed.is_empty() {
-            let count = blocked_counts.entry(active_agent.to_string()).or_insert(0);
+            let count = blocked_counts.entry(active_agent.to_owned()).or_insert(0);
             *count += 1;
             if *count <= HANDOFF_MAX_BLOCKED_RETRIES {
                 return HandoffDecision {
-                    active_agent: active_agent.to_string(),
+                    active_agent: active_agent.to_owned(),
                     handoff: true,
                 };
             }
             blocked_counts.remove(active_agent);
             return HandoffDecision {
-                active_agent: active_agent.to_string(),
+                active_agent: active_agent.to_owned(),
                 handoff: false,
             };
         }
     }
 
     let ctx = super::swarm::SwarmContext {
-        result: Some(result.to_string()),
+        result: Some(result.to_owned()),
         tool_name: None,
         tool_result: None,
     };
@@ -707,7 +703,7 @@ fn evaluate_handoff_check(
             let target_idx = name_to_idx
                 .get(transition.target())
                 .cloned()
-                .unwrap_or_else(|| active_agent.to_string());
+                .unwrap_or_else(|| active_agent.to_owned());
             if target_idx != active_agent {
                 return HandoffDecision {
                     active_agent: target_idx,
@@ -718,7 +714,7 @@ fn evaluate_handoff_check(
     }
 
     HandoffDecision {
-        active_agent: active_agent.to_string(),
+        active_agent: active_agent.to_owned(),
         handoff: false,
     }
 }
@@ -767,7 +763,7 @@ impl Worker for HandoffCheckWorker {
         let mut blocked_counts = self
             .blocked_counts
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let decision = evaluate_handoff_check(
             &self.transitions,
             &self.name_to_idx,
@@ -783,10 +779,10 @@ impl Worker for HandoffCheckWorker {
 
         let mut output = std::collections::HashMap::new();
         output.insert(
-            "active_agent".to_string(),
+            "active_agent".to_owned(),
             Value::String(decision.active_agent),
         );
-        output.insert("handoff".to_string(), Value::Bool(decision.handoff));
+        output.insert("handoff".to_owned(), Value::Bool(decision.handoff));
         Ok(WorkerOutput::completed(output))
     }
 }
@@ -807,12 +803,12 @@ fn evaluate_manual_selection(
     human_output: Option<&Value>,
 ) -> String {
     let selected_value = match human_output {
-        None | Some(Value::Null) => return "0".to_string(),
+        None | Some(Value::Null) => return "0".to_owned(),
         Some(Value::Object(map)) => map
             .get("selected")
             .or_else(|| map.get("agent"))
             .cloned()
-            .unwrap_or_else(|| Value::String("0".to_string())),
+            .unwrap_or_else(|| Value::String("0".to_owned())),
         Some(other) => return display_value(other),
     };
     if let Value::String(s) = &selected_value {
@@ -841,7 +837,7 @@ impl Worker for ManualSelectionWorker {
         let selected =
             evaluate_manual_selection(&self.name_to_idx, task.input_data.get("human_output"));
         let mut output = std::collections::HashMap::new();
-        output.insert("selected".to_string(), Value::String(selected));
+        output.insert("selected".to_owned(), Value::String(selected));
         Ok(WorkerOutput::completed(output))
     }
 }
@@ -857,7 +853,7 @@ fn extract_execution_id(response: &Value) -> Result<String> {
         .get("executionId")
         .or_else(|| response.get("execution_id"))
         .and_then(Value::as_str)
-        .map(str::to_string)
+        .map(str::to_owned)
         .ok_or_else(|| {
             ConductorError::agent(format!(
                 "start_agent response has no executionId: {response}"
@@ -880,13 +876,13 @@ fn merge_start_input(payload: &mut Map<String, Value>, input: Value) {
 
     match input {
         Value::String(prompt) => {
-            payload.insert("prompt".to_string(), Value::String(prompt));
+            payload.insert("prompt".to_owned(), Value::String(prompt));
         }
         Value::Object(mut fields) => {
             // Normalize `session_id` to the wire name `sessionId` before splitting recognized
             // keys from overflow, so either spelling reaches the server correctly.
             if let Some(session_id) = fields.remove("session_id") {
-                fields.entry("sessionId".to_string()).or_insert(session_id);
+                fields.entry("sessionId".to_owned()).or_insert(session_id);
             }
 
             let mut overflow = Map::new();
@@ -902,15 +898,15 @@ fn merge_start_input(payload: &mut Map<String, Value>, input: Value) {
                 match payload.get_mut("context") {
                     Some(Value::Object(context)) => context.extend(overflow),
                     _ => {
-                        payload.insert("context".to_string(), Value::Object(overflow));
+                        payload.insert("context".to_owned(), Value::Object(overflow));
                     }
                 }
             }
         }
         other => {
             let mut context = Map::new();
-            context.insert("value".to_string(), other);
-            payload.insert("context".to_string(), Value::Object(context));
+            context.insert("value".to_owned(), other);
+            payload.insert("context".to_owned(), Value::Object(context));
         }
     }
 }
@@ -930,6 +926,10 @@ pub struct AgentRuntime {
 impl AgentRuntime {
     /// Build a runtime from a [`Configuration`]: one [`AgentClient`] and one owned [`TaskHandler`]
     /// for local tool workers, both pointed at the same server.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the underlying `reqwest` client fails to build (see [`ApiClient::new`]).
     pub fn new(config: Configuration) -> Result<Self> {
         let api_client = ApiClient::new(config.clone())?;
         let agent_client = AgentClient::new(api_client);
@@ -946,6 +946,10 @@ impl AgentRuntime {
     /// Serializes `agent` via [`AgentConfigSerializer::serialize`] and wraps it in the
     /// `{"agentConfig": ...}` envelope the server's `AgentStartRequest` DTO requires (matching
     /// python-sdk's `_compile_via_server`), then POSTs it via [`AgentClient::compile_agent`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn compile(&self, agent: &AgentDef) -> Result<Value> {
         let payload = serde_json::json!({
             "agentConfig": AgentConfigSerializer::serialize(agent),
@@ -956,6 +960,10 @@ impl AgentRuntime {
     /// Compile and register an [`AgentDef`] as a Conductor workflow.
     ///
     /// See [`AgentRuntime::compile`] for the envelope shape.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`AgentRuntime::compile`].
     pub async fn deploy(&self, agent: &AgentDef) -> Result<Value> {
         let payload = serde_json::json!({
             "agentConfig": AgentConfigSerializer::serialize(agent),
@@ -976,10 +984,14 @@ impl AgentRuntime {
     ///   passed through as-is; any other keys in the object are folded into `context` (merged
     ///   with an explicit `context` key if both are present) rather than silently dropped;
     /// - anything else, wrapped as `{"context": {"value": input}}`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`AgentRuntime::compile`] if the start request fails, or [`crate::error::ConductorError::Agent`] if the response has no `executionId`.
     pub async fn start(&self, agent: &AgentDef, input: Value) -> Result<AgentHandle> {
         let mut payload = Map::new();
         payload.insert(
-            "agentConfig".to_string(),
+            "agentConfig".to_owned(),
             AgentConfigSerializer::serialize(agent),
         );
         merge_start_input(&mut payload, input);
@@ -995,13 +1007,17 @@ impl AgentRuntime {
     /// Start an agent execution and block until it reaches a terminal status.
     ///
     /// Equivalent to `self.start(agent, input).await?.join().await`.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`AgentRuntime::start`], plus any error [`AgentHandle::join`] returns while polling for a terminal status.
     pub async fn run(&self, agent: &AgentDef, input: Value) -> Result<AgentResult> {
         self.start(agent, input).await?.join().await
     }
 
     /// Compile a foreign-framework agent, given its already-serialized `raw_config` (e.g. the
     /// output of a framework-specific serializer) — the `{"framework": ..., "rawConfig": ...}`
-    /// shape [`AgentStartRequest`] accepts as an alternative to `agentConfig`, matching python's
+    /// shape `AgentStartRequest` accepts as an alternative to `agentConfig`, matching python's
     /// `_deploy_via_server(agent, framework=framework)`'s framework branch (same shape, shared
     /// across compile/deploy/start there too).
     ///
@@ -1011,11 +1027,15 @@ impl AgentRuntime {
     /// **This crate has no serializer that produces a *correct* `raw_config` for any of them
     /// yet** — [`super::graph::GraphAgentDef`] in particular does **not** produce the shape
     /// `"langgraph"`'s normalizer expects (confirmed by reading `LangGraphNormalizer.java`: it
-    /// needs a nested `_graph` key with snake_case `nodes`/`edges`/`conditional_edges` and
+    /// needs a nested `_graph` key with `snake_case` `nodes`/`edges`/`conditional_edges` and
     /// `_worker_ref`/`_llm_node`/`_human_node`-style per-node markers, not `GraphAgentDef`'s
     /// current `{name, nodes, edges, conditionalEdges}` shape). Callers must build `raw_config`
     /// themselves, matching whatever normalizer they're targeting, until a real serializer for
     /// one exists.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`AgentRuntime::compile`].
     pub async fn compile_framework(
         &self,
         framework: impl Into<String>,
@@ -1027,6 +1047,10 @@ impl AgentRuntime {
 
     /// Deploy a foreign-framework agent. See [`AgentRuntime::compile_framework`] for the
     /// `raw_config` contract and its current limits.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`AgentRuntime::compile_framework`].
     pub async fn deploy_framework(
         &self,
         framework: impl Into<String>,
@@ -1039,15 +1063,18 @@ impl AgentRuntime {
     /// Start a foreign-framework agent execution without blocking for completion. See
     /// [`AgentRuntime::compile_framework`] for the `raw_config` contract and its current limits,
     /// and [`AgentRuntime::start`] for the `input` merge rules (identical here).
+    ///
+    /// # Errors
+    ///
+    /// Same as [`AgentRuntime::start`].
     pub async fn start_framework(
         &self,
         framework: impl Into<String>,
         raw_config: Value,
         input: Value,
     ) -> Result<AgentHandle> {
-        let mut payload = match framework_payload(framework, raw_config) {
-            Value::Object(map) => map,
-            _ => unreachable!("framework_payload always returns an object"),
+        let Value::Object(mut payload) = framework_payload(framework, raw_config) else {
+            unreachable!("framework_payload always returns an object")
         };
         merge_start_input(&mut payload, input);
         let response = self
@@ -1061,6 +1088,10 @@ impl AgentRuntime {
 
     /// Start a foreign-framework agent execution and block until it reaches a terminal status.
     /// Equivalent to `self.start_framework(framework, raw_config, input).await?.join().await`.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`AgentRuntime::start_framework`], plus any error [`AgentHandle::join`] returns while polling for a terminal status.
     pub async fn run_framework(
         &self,
         framework: impl Into<String>,
@@ -1077,7 +1108,7 @@ impl AgentRuntime {
     /// `Some`) as a worker on this runtime's [`TaskHandler`], plus:
     /// - a `{name}_stop_when` worker if [`AgentDef::stop_when`] is set;
     /// - a `{name}_termination` worker if [`AgentDef::termination`] is set;
-    /// - a `{name}_{position}` worker for each of the six [`CallbackPosition`]s, if
+    /// - a `{name}_{position}` worker for each of the six `CallbackPosition`s, if
     ///   [`AgentDef::callbacks`] is non-empty;
     /// - one worker per custom-function [`Guardrail`] in [`AgentDef::guardrails`] *or* any
     ///   [`ToolDef::guardrails`] on `agent.tools` (i.e. every guardrail whose wire
@@ -1127,6 +1158,10 @@ impl AgentRuntime {
     ///
     /// Blocks for as long as the underlying [`TaskHandler::start`] keeps its runners alive; call
     /// [`AgentRuntime::shutdown`] (from another task) to stop them.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Worker`] if `agent` (and its sub-agent tree) registers no workers -- see [`TaskHandler::start`].
     pub async fn serve(&mut self, agent: &AgentDef) -> Result<()> {
         self.register_agent_workers(agent);
         self.task_handler.start().await
@@ -1157,7 +1192,7 @@ impl AgentRuntime {
         if let Some(handler) = &agent.stop_when {
             self.task_handler.add_worker(StopWhenWorker {
                 task_name: format!("{sanitized_name}_stop_when"),
-                handler: handler.clone(),
+                handler: std::sync::Arc::clone(handler),
             });
         }
         if let Some(condition) = &agent.termination {
@@ -1186,7 +1221,7 @@ impl AgentRuntime {
         if let Some(super::def::GateCondition::Callable(handler)) = &agent.gate {
             self.task_handler.add_worker(GateWorker {
                 task_name: format!("{sanitized_name}_gate"),
-                handler: handler.clone(),
+                handler: std::sync::Arc::clone(handler),
             });
         }
         // Hybrid handoff: an agent with both its own tools and sub-agents gets a check_transfer
@@ -1212,7 +1247,7 @@ impl AgentRuntime {
             || (agent.strategy == super::def::Strategy::Swarm && !agent.agents.is_empty())
         {
             let mut name_to_idx = std::collections::HashMap::new();
-            name_to_idx.insert(agent.name.clone(), "0".to_string());
+            name_to_idx.insert(agent.name.clone(), "0".to_owned());
             for (i, sub) in agent.agents.iter().enumerate() {
                 name_to_idx.insert(sub.name.clone(), (i + 1).to_string());
             }
@@ -1297,11 +1332,15 @@ impl AgentRuntime {
     /// Register every locally-invoked tool in `tools` (i.e. every [`ToolDef`] whose `handler` is
     /// `Some`) as a worker, then start polling — the same tool-registration half of
     /// [`AgentRuntime::serve`], exposed standalone for agent shapes that don't have an
-    /// [`AgentDef`] to walk. [`super::skill`]'s framework-marker skill agents are the motivating
+    /// [`AgentDef`] to walk. `super::skill`'s framework-marker skill agents are the motivating
     /// case: their tools are locally-built worker functions (`ScriptRunner`/`SkillFileReader`
     /// equivalents), not an `AgentDef.tools` list, since the agent itself compiles via
     /// [`AgentRuntime::compile_framework`]/[`AgentRuntime::deploy_framework`] rather than the
     /// normal `AgentDef` tree.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Worker`] if `tools` registers no workers -- see [`TaskHandler::start`].
     pub async fn serve_tools(&mut self, tools: &[ToolDef]) -> Result<()> {
         for tool in tools {
             if let Some(worker) = ToolWorker::from_tool_def(tool) {
@@ -1313,6 +1352,10 @@ impl AgentRuntime {
 
     /// Gracefully stop every worker [`AgentRuntime::serve`]/[`AgentRuntime::serve_tools`]
     /// registered.
+    ///
+    /// # Errors
+    ///
+    /// Currently always returns `Ok(())`; see [`TaskHandler::stop`].
     pub async fn shutdown(&mut self) -> Result<()> {
         self.task_handler.stop().await
     }
@@ -1328,7 +1371,7 @@ mod tests {
     fn test_agent_runtime_new_from_configuration() {
         let config = Configuration::new("http://localhost:8080/api");
         let runtime = AgentRuntime::new(config);
-        assert!(runtime.is_ok());
+        runtime.unwrap();
     }
 
     /// `compile()`/`deploy()`/`start()` all build their outgoing payload around
@@ -1347,11 +1390,11 @@ mod tests {
 
         assert_eq!(
             obj.get("name"),
-            Some(&Value::String("compiler_test".to_string()))
+            Some(&Value::String("compiler_test".to_owned()))
         );
         assert_eq!(
             obj.get("model"),
-            Some(&Value::String("openai/gpt-4o".to_string()))
+            Some(&Value::String("openai/gpt-4o".to_owned()))
         );
         assert_eq!(obj.get("external"), Some(&Value::Bool(false)));
     }
@@ -1368,7 +1411,7 @@ mod tests {
             .with_model("openai/gpt-4o");
         let inner = AgentConfigSerializer::serialize(&agent);
 
-        let wrapped = serde_json::json!({ "agentConfig": inner.clone() });
+        let wrapped = serde_json::json!({ "agentConfig": inner });
         let obj = wrapped.as_object().unwrap();
 
         assert_eq!(obj.len(), 1, "payload must have exactly one top-level key");
@@ -1398,20 +1441,20 @@ mod tests {
 
     #[test]
     fn test_extract_execution_id_errors_when_absent() {
-        assert!(extract_execution_id(&serde_json::json!({})).is_err());
+        extract_execution_id(&serde_json::json!({})).unwrap_err();
     }
 
     fn empty_start_payload() -> Map<String, Value> {
         let mut payload = Map::new();
-        payload.insert("agentConfig".to_string(), serde_json::json!({}));
+        payload.insert("agentConfig".to_owned(), serde_json::json!({}));
         payload
     }
 
     #[test]
     fn test_merge_start_input_treats_plain_string_as_prompt() {
         let mut payload = empty_start_payload();
-        merge_start_input(&mut payload, Value::String("hello".to_string()));
-        assert_eq!(payload["prompt"], Value::String("hello".to_string()));
+        merge_start_input(&mut payload, Value::String("hello".to_owned()));
+        assert_eq!(payload["prompt"], Value::String("hello".to_owned()));
     }
 
     #[test]
@@ -1427,13 +1470,13 @@ mod tests {
                 "static_plan": {"steps": []},
             }),
         );
-        assert_eq!(payload["prompt"], Value::String("hi".to_string()));
+        assert_eq!(payload["prompt"], Value::String("hi".to_owned()));
         assert_eq!(
             payload["media"],
             serde_json::json!(["https://example.com/a.png"])
         );
         assert_eq!(payload["context"], serde_json::json!({"a": 1}));
-        assert_eq!(payload["sessionId"], Value::String("sess-1".to_string()));
+        assert_eq!(payload["sessionId"], Value::String("sess-1".to_owned()));
         assert_eq!(payload["static_plan"], serde_json::json!({"steps": []}));
     }
 
@@ -1441,7 +1484,7 @@ mod tests {
     fn test_merge_start_input_normalizes_snake_case_session_id() {
         let mut payload = empty_start_payload();
         merge_start_input(&mut payload, serde_json::json!({"session_id": "sess-2"}));
-        assert_eq!(payload["sessionId"], Value::String("sess-2".to_string()));
+        assert_eq!(payload["sessionId"], Value::String("sess-2".to_owned()));
     }
 
     #[test]
@@ -1451,7 +1494,7 @@ mod tests {
             &mut payload,
             serde_json::json!({"prompt": "hi", "user_id": "u-1"}),
         );
-        assert_eq!(payload["prompt"], Value::String("hi".to_string()));
+        assert_eq!(payload["prompt"], Value::String("hi".to_owned()));
         assert_eq!(payload["context"], serde_json::json!({"user_id": "u-1"}));
     }
 
@@ -1488,21 +1531,21 @@ mod tests {
             "doubles a number, using a token",
             serde_json::json!({"type": "object"}),
             |args: Args, creds: &Credentials| {
-                let token = creds.get("API_KEY").unwrap().to_string();
+                let token = creds.get("API_KEY").unwrap().to_owned();
                 async move { Ok(Value::from(format!("{token}:{}", args.n * 2))) }
             },
         )
-        .with_credentials(vec!["API_KEY".to_string()]);
+        .with_credentials(vec!["API_KEY".to_owned()]);
 
         let worker = ToolWorker::from_tool_def(&tool).expect("tool has a local handler");
         assert_eq!(worker.task_definition_name(), "double_with_token");
-        assert_eq!(worker.declared_credentials(), vec!["API_KEY".to_string()]);
+        assert_eq!(worker.declared_credentials(), vec!["API_KEY".to_owned()]);
 
         let mut task = Task {
-            runtime_metadata: HashMap::from([("API_KEY".to_string(), "secret".to_string())]),
+            runtime_metadata: HashMap::from([("API_KEY".to_owned(), "secret".to_owned())]),
             ..Default::default()
         };
-        task.input_data.insert("n".to_string(), Value::from(21));
+        task.input_data.insert("n".to_owned(), Value::from(21));
 
         let output = worker.execute(&task).await.unwrap();
         match output {
@@ -1533,7 +1576,7 @@ mod tests {
             serde_json::json!({"type": "object"}),
             |args: Args, ctx: ToolContext| async move {
                 let previous = ctx.get_state("total").and_then(|v| v.as_i64()).unwrap_or(0);
-                let total = previous + args.n as i64;
+                let total = previous + i64::from(args.n);
                 ctx.set_state("total", Value::from(total));
                 Ok(Value::from(total))
             },
@@ -1541,12 +1584,12 @@ mod tests {
         let worker = ToolWorker::from_tool_def(&tool).expect("tool has a local handler");
 
         let mut task = Task {
-            workflow_instance_id: "wf-123".to_string(),
+            workflow_instance_id: "wf-123".to_owned(),
             ..Default::default()
         };
-        task.input_data.insert("n".to_string(), Value::from(5));
+        task.input_data.insert("n".to_owned(), Value::from(5));
         task.input_data
-            .insert("_agent_state".to_string(), serde_json::json!({"total": 10}));
+            .insert("_agent_state".to_owned(), serde_json::json!({"total": 10}));
 
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
@@ -1587,9 +1630,9 @@ mod tests {
         let worker = ToolWorker::from_tool_def(&tool).expect("tool has a local handler");
 
         let mut task = Task::default();
-        task.input_data.insert("n".to_string(), Value::from(1));
+        task.input_data.insert("n".to_owned(), Value::from(1));
         task.input_data
-            .insert("_agent_state".to_string(), serde_json::json!({"total": 10}));
+            .insert("_agent_state".to_owned(), serde_json::json!({"total": 10}));
 
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
@@ -1642,7 +1685,7 @@ mod tests {
 
     fn stop_when_worker(handler: super::super::def::StopWhenHandler) -> StopWhenWorker {
         StopWhenWorker {
-            task_name: "agent_stop_when".to_string(),
+            task_name: "agent_stop_when".to_owned(),
             handler,
         }
     }
@@ -1657,7 +1700,7 @@ mod tests {
 
         let mut task = Task::default();
         task.input_data
-            .insert("result".to_string(), Value::from("done"));
+            .insert("result".to_owned(), Value::from("done"));
 
         let output = worker.execute(&task).await.unwrap();
         match output {
@@ -1735,7 +1778,7 @@ mod tests {
         if let Some(handler) = &agent.stop_when {
             runtime.task_handler.add_worker(StopWhenWorker {
                 task_name: format!("{}_stop_when", agent.name),
-                handler: handler.clone(),
+                handler: std::sync::Arc::clone(handler),
             });
         }
 
@@ -1745,7 +1788,7 @@ mod tests {
     #[tokio::test]
     async fn test_gate_worker_continue_when_predicate_true() {
         let worker = GateWorker {
-            task_name: "agent_gate".to_string(),
+            task_name: "agent_gate".to_owned(),
             handler: std::sync::Arc::new(|context: Value| {
                 Box::pin(async move { Ok(context["result"] == "DONE") })
             }),
@@ -1754,13 +1797,13 @@ mod tests {
 
         let mut task = Task::default();
         task.input_data
-            .insert("result".to_string(), Value::from("DONE"));
+            .insert("result".to_owned(), Value::from("DONE"));
         let output = worker.execute(&task).await.unwrap();
         match output {
             WorkerOutput::Completed(map) => {
                 assert_eq!(
                     map.get("decision"),
-                    Some(&Value::String("continue".to_string()))
+                    Some(&Value::String("continue".to_owned()))
                 );
             }
             other => panic!("expected Completed, got {other:?}"),
@@ -1770,7 +1813,7 @@ mod tests {
     #[tokio::test]
     async fn test_gate_worker_stop_when_predicate_false() {
         let worker = GateWorker {
-            task_name: "agent_gate".to_string(),
+            task_name: "agent_gate".to_owned(),
             handler: std::sync::Arc::new(|context: Value| {
                 Box::pin(async move { Ok(context["result"] == "DONE") })
             }),
@@ -1778,14 +1821,11 @@ mod tests {
 
         let mut task = Task::default();
         task.input_data
-            .insert("result".to_string(), Value::from("nope"));
+            .insert("result".to_owned(), Value::from("nope"));
         let output = worker.execute(&task).await.unwrap();
         match output {
             WorkerOutput::Completed(map) => {
-                assert_eq!(
-                    map.get("decision"),
-                    Some(&Value::String("stop".to_string()))
-                );
+                assert_eq!(map.get("decision"), Some(&Value::String("stop".to_owned())));
             }
             other => panic!("expected Completed, got {other:?}"),
         }
@@ -1794,7 +1834,7 @@ mod tests {
     #[tokio::test]
     async fn test_gate_worker_fails_open_on_predicate_error() {
         let worker = GateWorker {
-            task_name: "agent_gate".to_string(),
+            task_name: "agent_gate".to_owned(),
             handler: std::sync::Arc::new(|_context: Value| {
                 Box::pin(async move { Err(ConductorError::agent("boom")) })
             }),
@@ -1805,7 +1845,7 @@ mod tests {
             WorkerOutput::Completed(map) => {
                 assert_eq!(
                     map.get("decision"),
-                    Some(&Value::String("continue".to_string()))
+                    Some(&Value::String("continue".to_owned()))
                 );
             }
             other => panic!("expected Completed, got {other:?}"),
@@ -1823,7 +1863,7 @@ mod tests {
         if let Some(super::super::def::GateCondition::Callable(handler)) = &text_gate_agent.gate {
             runtime.task_handler.add_worker(GateWorker {
                 task_name: format!("{}_gate", text_gate_agent.name),
-                handler: handler.clone(),
+                handler: std::sync::Arc::clone(handler),
             });
         }
         assert_eq!(runtime.task_handler.worker_count(), 0);
@@ -1835,7 +1875,7 @@ mod tests {
         {
             runtime.task_handler.add_worker(GateWorker {
                 task_name: format!("{}_gate", callable_gate_agent.name),
-                handler: handler.clone(),
+                handler: std::sync::Arc::clone(handler),
             });
         }
         assert_eq!(runtime.task_handler.worker_count(), 1);
@@ -1902,25 +1942,20 @@ mod tests {
     #[tokio::test]
     async fn test_termination_worker_execute_matches_condition() {
         let worker = TerminationWorker {
-            task_name: "agent_termination".to_string(),
+            task_name: "agent_termination".to_owned(),
             condition: TerminationCondition::stop_message_default(),
         };
         assert_eq!(worker.task_definition_name(), "agent_termination");
 
         let mut task = Task::default();
         task.input_data
-            .insert("result".to_string(), Value::from("TERMINATE"));
+            .insert("result".to_owned(), Value::from("TERMINATE"));
 
         let output = worker.execute(&task).await.unwrap();
         match output {
             WorkerOutput::Completed(map) => {
                 assert_eq!(map.get("should_continue"), Some(&Value::Bool(false)));
-                assert!(map
-                    .get("reason")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .contains("TERMINATE"));
+                assert!(map["reason"].as_str().unwrap().contains("TERMINATE"));
             }
             other => panic!("expected Completed, got {other:?}"),
         }
@@ -1929,12 +1964,12 @@ mod tests {
     #[tokio::test]
     async fn test_termination_worker_continues_when_condition_not_met() {
         let worker = TerminationWorker {
-            task_name: "agent_termination".to_string(),
+            task_name: "agent_termination".to_owned(),
             condition: TerminationCondition::stop_message_default(),
         };
         let mut task = Task::default();
         task.input_data
-            .insert("result".to_string(), Value::from("still working"));
+            .insert("result".to_owned(), Value::from("still working"));
 
         let output = worker.execute(&task).await.unwrap();
         match output {
@@ -1996,7 +2031,7 @@ mod tests {
     #[tokio::test]
     async fn test_callback_worker_execute_builds_context_from_task_input() {
         let worker = CallbackWorker {
-            task_name: "agent_before_agent".to_string(),
+            task_name: "agent_before_agent".to_owned(),
             position: CallbackPosition::BeforeAgent,
             handlers: vec![std::sync::Arc::new(TestCallbackHandler {
                 respond_at: Some(CallbackPosition::BeforeAgent),
@@ -2009,7 +2044,7 @@ mod tests {
             WorkerOutput::Completed(map) => {
                 assert_eq!(
                     map.get("seen"),
-                    Some(&Value::String("before_agent".to_string()))
+                    Some(&Value::String("before_agent".to_owned()))
                 );
             }
             other => panic!("expected Completed, got {other:?}"),
@@ -2074,14 +2109,14 @@ mod tests {
         use super::super::guardrail::OnFail;
 
         let worker = GuardrailWorker {
-            task_name: "no_bad_words".to_string(),
+            task_name: "no_bad_words".to_owned(),
             guardrail: function_guardrail("no_bad_words", OnFail::Raise),
         };
         assert_eq!(worker.task_definition_name(), "no_bad_words");
 
         let mut task = Task::default();
         task.input_data
-            .insert("content".to_string(), Value::from("all good here"));
+            .insert("content".to_owned(), Value::from("all good here"));
 
         let output = worker.execute(&task).await.unwrap();
         match output {
@@ -2098,25 +2133,22 @@ mod tests {
         use super::super::guardrail::OnFail;
 
         let worker = GuardrailWorker {
-            task_name: "no_bad_words".to_string(),
+            task_name: "no_bad_words".to_owned(),
             guardrail: function_guardrail("no_bad_words", OnFail::Raise),
         };
 
         let mut task = Task::default();
         task.input_data
-            .insert("content".to_string(), Value::from("this is bad"));
+            .insert("content".to_owned(), Value::from("this is bad"));
 
         let output = worker.execute(&task).await.unwrap();
         match output {
             WorkerOutput::Completed(map) => {
                 assert_eq!(map.get("passed"), Some(&Value::Bool(false)));
-                assert_eq!(
-                    map.get("on_fail"),
-                    Some(&Value::String("raise".to_string()))
-                );
+                assert_eq!(map.get("on_fail"), Some(&Value::String("raise".to_owned())));
                 assert_eq!(
                     map.get("guardrail_name"),
-                    Some(&Value::String("no_bad_words".to_string()))
+                    Some(&Value::String("no_bad_words".to_owned()))
                 );
                 assert_eq!(map.get("should_continue"), Some(&Value::Bool(false)));
             }
@@ -2129,7 +2161,7 @@ mod tests {
         use super::super::guardrail::OnFail;
 
         let worker = GuardrailWorker {
-            task_name: "no_bad_words".to_string(),
+            task_name: "no_bad_words".to_owned(),
             guardrail: function_guardrail("no_bad_words", OnFail::Retry)
                 .with_max_retries(2)
                 .unwrap(),
@@ -2137,29 +2169,23 @@ mod tests {
 
         let mut task = Task::default();
         task.input_data
-            .insert("content".to_string(), Value::from("this is bad"));
+            .insert("content".to_owned(), Value::from("this is bad"));
         task.input_data
-            .insert("iteration".to_string(), Value::from(0));
+            .insert("iteration".to_owned(), Value::from(0));
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
-        assert_eq!(
-            map.get("on_fail"),
-            Some(&Value::String("retry".to_string()))
-        );
+        assert_eq!(map.get("on_fail"), Some(&Value::String("retry".to_owned())));
         assert_eq!(map.get("should_continue"), Some(&Value::Bool(true)));
 
         task.input_data
-            .insert("iteration".to_string(), Value::from(2));
+            .insert("iteration".to_owned(), Value::from(2));
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
-        assert_eq!(
-            map.get("on_fail"),
-            Some(&Value::String("raise".to_string()))
-        );
+        assert_eq!(map.get("on_fail"), Some(&Value::String("raise".to_owned())));
         assert_eq!(map.get("should_continue"), Some(&Value::Bool(false)));
     }
 
@@ -2168,7 +2194,7 @@ mod tests {
         use super::super::guardrail::{FunctionGuardrail, GuardrailResult, OnFail};
 
         let worker = GuardrailWorker {
-            task_name: "no_bad_words".to_string(),
+            task_name: "no_bad_words".to_owned(),
             guardrail: Guardrail::new(
                 "no_bad_words",
                 FunctionGuardrail::new(|_: &str| GuardrailResult::fail("nope")),
@@ -2179,16 +2205,13 @@ mod tests {
 
         let mut task = Task::default();
         task.input_data
-            .insert("content".to_string(), Value::from("this is bad"));
+            .insert("content".to_owned(), Value::from("this is bad"));
 
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
-        assert_eq!(
-            map.get("on_fail"),
-            Some(&Value::String("raise".to_string()))
-        );
+        assert_eq!(map.get("on_fail"), Some(&Value::String("raise".to_owned())));
     }
 
     #[tokio::test]
@@ -2196,13 +2219,13 @@ mod tests {
         use super::super::guardrail::OnFail;
 
         let worker = GuardrailWorker {
-            task_name: "no_bad_words".to_string(),
+            task_name: "no_bad_words".to_owned(),
             guardrail: function_guardrail("no_bad_words", OnFail::Raise),
         };
 
         let mut task = Task::default();
         task.input_data
-            .insert("content".to_string(), serde_json::json!({"text": "ok"}));
+            .insert("content".to_owned(), serde_json::json!({"text": "ok"}));
 
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
@@ -2317,46 +2340,43 @@ mod tests {
     #[tokio::test]
     async fn test_check_transfer_worker_execute() {
         let worker = CheckTransferWorker {
-            task_name: "agent_check_transfer".to_string(),
+            task_name: "agent_check_transfer".to_owned(),
         };
         assert_eq!(worker.task_definition_name(), "agent_check_transfer");
         let mut task = Task::default();
         task.input_data.insert(
-            "tool_calls".to_string(),
+            "tool_calls".to_owned(),
             serde_json::json!([{"name": "a_transfer_to_b", "inputParameters": {}}]),
         );
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
-        assert_eq!(
-            map.get("transfer_to"),
-            Some(&Value::String("b".to_string()))
-        );
+        assert_eq!(map.get("transfer_to"), Some(&Value::String("b".to_owned())));
     }
 
     #[tokio::test]
     async fn test_transfer_noop_worker_echoes_message_when_present() {
         let worker = TransferNoopWorker {
-            task_name: "a_transfer_to_b".to_string(),
+            task_name: "a_transfer_to_b".to_owned(),
         };
         let mut task = Task::default();
         task.input_data
-            .insert("message".to_string(), Value::from("hello there"));
+            .insert("message".to_owned(), Value::from("hello there"));
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
         assert_eq!(
             map.get("message"),
-            Some(&Value::String("hello there".to_string()))
+            Some(&Value::String("hello there".to_owned()))
         );
     }
 
     #[tokio::test]
     async fn test_transfer_noop_worker_empty_output_when_no_message() {
         let worker = TransferNoopWorker {
-            task_name: "a_transfer_to_b".to_string(),
+            task_name: "a_transfer_to_b".to_owned(),
         };
         let output = worker.execute(&Task::default()).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
@@ -2368,15 +2388,13 @@ mod tests {
     #[tokio::test]
     async fn test_transfer_unreachable_worker_returns_fixed_error() {
         let worker = TransferUnreachableWorker {
-            task_name: "a_transfer_to_b".to_string(),
+            task_name: "a_transfer_to_b".to_owned(),
         };
         let output = worker.execute(&Task::default()).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
-        assert!(map
-            .get("result")
-            .unwrap()
+        assert!(map["result"]
             .as_str()
             .unwrap()
             .contains("a_transfer_to_b is not available"));
@@ -2389,9 +2407,9 @@ mod tests {
         std::collections::HashMap<String, String>,
     ) {
         let mut name_to_idx = std::collections::HashMap::new();
-        name_to_idx.insert("parent".to_string(), "0".to_string());
-        name_to_idx.insert("billing".to_string(), "1".to_string());
-        name_to_idx.insert("refunds".to_string(), "2".to_string());
+        name_to_idx.insert("parent".to_owned(), "0".to_owned());
+        name_to_idx.insert("billing".to_owned(), "1".to_owned());
+        name_to_idx.insert("refunds".to_owned(), "2".to_owned());
         let idx_to_name = name_to_idx
             .iter()
             .map(|(k, v)| (v.clone(), k.clone()))
@@ -2423,7 +2441,7 @@ mod tests {
     fn test_evaluate_handoff_check_blocked_transfer_retries_then_gives_up() {
         let (name_to_idx, idx_to_name) = handoff_maps();
         let mut allowed = std::collections::HashMap::new();
-        allowed.insert("parent".to_string(), vec!["refunds".to_string()]);
+        allowed.insert("parent".to_owned(), vec!["refunds".to_owned()]);
         let mut blocked = std::collections::HashMap::new();
 
         for expected_count in 1..=3 {
@@ -2468,8 +2486,8 @@ mod tests {
         let allowed = std::collections::HashMap::new();
         let mut blocked = std::collections::HashMap::new();
         let transitions = vec![super::super::swarm::SwarmTransition::OnTextMention {
-            target: "refunds".to_string(),
-            text: "REFUND".to_string(),
+            target: "refunds".to_owned(),
+            text: "REFUND".to_owned(),
         }];
         let decision = evaluate_handoff_check(
             &transitions,
@@ -2510,7 +2528,7 @@ mod tests {
     async fn test_handoff_check_worker_execute() {
         let (name_to_idx, idx_to_name) = handoff_maps();
         let worker = HandoffCheckWorker {
-            task_name: "agent_handoff_check".to_string(),
+            task_name: "agent_handoff_check".to_owned(),
             transitions: Vec::new(),
             name_to_idx,
             idx_to_name,
@@ -2519,18 +2537,18 @@ mod tests {
         };
         let mut task = Task::default();
         task.input_data
-            .insert("active_agent".to_string(), Value::from("0"));
+            .insert("active_agent".to_owned(), Value::from("0"));
         task.input_data
-            .insert("is_transfer".to_string(), Value::from(true));
+            .insert("is_transfer".to_owned(), Value::from(true));
         task.input_data
-            .insert("transfer_to".to_string(), Value::from("billing"));
+            .insert("transfer_to".to_owned(), Value::from("billing"));
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
         assert_eq!(
             map.get("active_agent"),
-            Some(&Value::String("1".to_string()))
+            Some(&Value::String("1".to_owned()))
         );
         assert_eq!(map.get("handoff"), Some(&Value::Bool(true)));
     }
@@ -2555,7 +2573,7 @@ mod tests {
                 transitions: agent.swarm_transitions.clone(),
                 name_to_idx: std::collections::HashMap::new(),
                 idx_to_name: std::collections::HashMap::new(),
-                allowed: agent.allowed_transitions.clone(),
+                allowed: agent.allowed_transitions,
                 blocked_counts: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
         }
@@ -2566,8 +2584,8 @@ mod tests {
 
     fn manual_name_to_idx() -> std::collections::HashMap<String, String> {
         let mut map = std::collections::HashMap::new();
-        map.insert("alice".to_string(), "0".to_string());
-        map.insert("bob".to_string(), "1".to_string());
+        map.insert("alice".to_owned(), "0".to_owned());
+        map.insert("bob".to_owned(), "1".to_owned());
         map
     }
 
@@ -2615,19 +2633,19 @@ mod tests {
     #[tokio::test]
     async fn test_manual_selection_worker_execute() {
         let worker = ManualSelectionWorker {
-            task_name: "agent_process_selection".to_string(),
+            task_name: "agent_process_selection".to_owned(),
             name_to_idx: manual_name_to_idx(),
         };
         let mut task = Task::default();
         task.input_data.insert(
-            "human_output".to_string(),
+            "human_output".to_owned(),
             serde_json::json!({"selected": "bob"}),
         );
         let output = worker.execute(&task).await.unwrap();
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
-        assert_eq!(map.get("selected"), Some(&Value::String("1".to_string())));
+        assert_eq!(map.get("selected"), Some(&Value::String("1".to_owned())));
     }
 
     #[test]

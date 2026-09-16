@@ -15,7 +15,7 @@
 //! at <https://html.spec.whatwg.org/multipage/server-sent-events.html>; only the `data:` payload
 //! (parsed as this crate's own `AgentEvent` JSON shape) is meaningful here.
 
-use futures::{StreamExt, TryStreamExt};
+use futures::{StreamExt as _, TryStreamExt as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -68,6 +68,7 @@ pub enum AgentEvent {
 
 impl AgentEvent {
     /// The execution id carried by every variant.
+    #[must_use]
     pub fn execution_id(&self) -> &str {
         match self {
             AgentEvent::Message { execution_id, .. }
@@ -109,12 +110,10 @@ impl SseDecoder {
     fn next_data(&mut self) -> Option<String> {
         loop {
             let boundary = Self::find_boundary(&self.buffer).or_else(|| {
-                if self.finished && !self.buffer.is_empty() {
+                (self.finished && !self.buffer.is_empty()).then(|| {
                     let len = self.buffer.len();
-                    Some((len, len))
-                } else {
-                    None
-                }
+                    (len, len)
+                })
             })?;
             let (frame_end, consumed) = boundary;
             let raw_frame = self.buffer[..frame_end].to_string();
@@ -241,8 +240,8 @@ mod tests {
         assert_eq!(
             event,
             AgentEvent::Waiting {
-                execution_id: "exec-1".to_string(),
-                tool_name: "issue_refund".to_string(),
+                execution_id: "exec-1".to_owned(),
+                tool_name: "issue_refund".to_owned(),
                 args: serde_json::json!({"amount": 42.0}),
             }
         );
@@ -278,8 +277,8 @@ mod tests {
         assert_eq!(
             event,
             AgentEvent::Message {
-                execution_id: "exec-3".to_string(),
-                content: Value::String("hi".to_string()),
+                execution_id: "exec-3".to_owned(),
+                content: Value::String("hi".to_owned()),
             }
         );
     }
@@ -344,8 +343,8 @@ mod tests {
         assert_eq!(
             event,
             AgentEvent::Error {
-                execution_id: "exec-7".to_string(),
-                error: "tool timed out".to_string(),
+                execution_id: "exec-7".to_owned(),
+                error: "tool timed out".to_owned(),
             }
         );
     }
@@ -362,8 +361,8 @@ mod tests {
         assert_eq!(
             event,
             AgentEvent::Progress {
-                execution_id: "exec-8".to_string(),
-                message: "calling model".to_string(),
+                execution_id: "exec-8".to_owned(),
+                message: "calling model".to_owned(),
             }
         );
     }
@@ -371,7 +370,7 @@ mod tests {
     #[test]
     fn test_parse_event_rejects_malformed_json() {
         let result = parse_event("not json");
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     #[tokio::test]
@@ -384,8 +383,8 @@ mod tests {
         // Simulate the body arriving as several chunks, with one frame split across two chunks.
         let split = frame1.len() - 3;
         let chunks: Vec<reqwest::Result<bytes::Bytes>> = vec![
-            Ok(bytes::Bytes::copy_from_slice(frame1[..split].as_bytes())),
-            Ok(bytes::Bytes::copy_from_slice(frame1[split..].as_bytes())),
+            Ok(bytes::Bytes::copy_from_slice(&frame1.as_bytes()[..split])),
+            Ok(bytes::Bytes::copy_from_slice(&frame1.as_bytes()[split..])),
             Ok(bytes::Bytes::copy_from_slice(frame2.as_bytes())),
         ];
         let body = futures::stream::iter(chunks).boxed();

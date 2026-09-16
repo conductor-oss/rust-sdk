@@ -5,9 +5,9 @@
 //! [agentskills.io](https://agentskills.io) skill directory (a `SKILL.md` file plus optional
 //! `*-agent.md`/`scripts/`/`references/`/`examples/`/`assets/` entries) as a runnable agent.
 //!
-//! ## Wire mechanism — a "framework" marker, not an ordinary [`AgentDef`]
+//! ## Wire mechanism — a "framework" marker, not an ordinary [`super::AgentDef`]
 //!
-//! A loaded skill is **not** an [`AgentDef`] tree. Confirmed by reading `frameworks/serializer.py`
+//! A loaded skill is **not** an [`super::AgentDef`] tree. Confirmed by reading `frameworks/serializer.py`
 //! (`_serialize_skill`) and `runtime/runtime.py`'s `_deploy_via_server`: python's `skill()`
 //! returns an `Agent` instance with `_framework = "skill"` and `_framework_config` set to the
 //! exact dict this module calls `raw_config`; `runtime.compile()`/`deploy()`/`start()` detect
@@ -21,9 +21,9 @@
 //! Python also lets a skill `Agent` be nested as a *sub-agent* of an ordinary native agent
 //! (`config_serializer.py`'s `_serialize_agent` special-cases `_framework == "skill"` inline
 //! while recursing a tree, so `Agent(agents=[skill_agent, ...])` or `agent_tool(skill_agent)`
-//! both work). [`SkillAgent::into_agent_def`] ports this: it builds an [`AgentDef`] carrying
-//! the same `framework`/`framework_config` marker (see [`AgentDef::with_framework`]), so a
-//! loaded skill can be passed to [`AgentDef::with_sub_agent`]/[`super::ToolDef::agent`] like
+//! both work). [`SkillAgent::into_agent_def`] ports this: it builds an [`super::AgentDef`] carrying
+//! the same `framework`/`framework_config` marker (see [`super::AgentDef::with_framework`]), so a
+//! loaded skill can be passed to [`super::AgentDef::with_sub_agent`]/[`super::ToolDef::agent`] like
 //! any other sub-agent.
 //!
 //! ## Worker registration
@@ -48,7 +48,6 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
 use tokio::process::Command;
@@ -59,13 +58,14 @@ use crate::error::{ConductorError, Result};
 use super::tool::ToolDef;
 
 // Hardcoded, compile-time-valid patterns — the `unwrap()`s here can never actually fail.
-#[allow(clippy::unwrap_used)]
-static FRONTMATTER_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?s)^---\s*\n(.*?)\n---\s*\n").unwrap());
-#[allow(clippy::unwrap_used)]
-static BODY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?s)^---\s*\n.*?\n---\s*\n(.*)").unwrap());
-#[allow(clippy::unwrap_used)]
-static CROSS_SKILL_RE: Lazy<Regex> = Lazy::new(|| {
+#[expect(clippy::unwrap_used)]
+static FRONTMATTER_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"(?s)^---\s*\n(.*?)\n---\s*\n").unwrap());
+#[expect(clippy::unwrap_used)]
+static BODY_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"(?s)^---\s*\n.*?\n---\s*\n(.*)").unwrap());
+#[expect(clippy::unwrap_used)]
+static CROSS_SKILL_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r"(?i)(?:invoke|use|call)\s+(?:the\s+)?([a-z][a-z0-9-]*)\s+skill").unwrap()
 });
 
@@ -102,7 +102,7 @@ fn parse_frontmatter(content: &str) -> Result<Frontmatter> {
         .ok_or_else(|| {
             ConductorError::agent("SKILL.md missing required 'name' field in frontmatter")
         })?
-        .to_string();
+        .to_owned();
 
     let mut default_params = Vec::new();
     if let Some(params_value) = mapping.get("params") {
@@ -113,7 +113,7 @@ fn parse_frontmatter(content: &str) -> Result<Frontmatter> {
                     Some(default) => yaml_to_json(default)?,
                     None => yaml_to_json(v)?,
                 };
-                default_params.push((pname.to_string(), default_value));
+                default_params.push((pname.to_owned(), default_value));
             }
         }
     }
@@ -132,8 +132,8 @@ fn yaml_to_json(value: &serde_yaml_ng::Value) -> Result<Value> {
 /// Extract the markdown body after frontmatter, matching python's `extract_body`.
 fn extract_body(content: &str) -> String {
     match BODY_RE.captures(content) {
-        Some(caps) => caps[1].trim().to_string(),
-        None => content.to_string(),
+        Some(caps) => caps[1].trim().to_owned(),
+        None => content.to_owned(),
     }
 }
 
@@ -158,7 +158,7 @@ fn slugify(text: &str) -> String {
             last_was_dash = false;
         }
     }
-    slug.trim_matches('-').to_string()
+    slug.trim_matches('-').to_owned()
 }
 
 /// Split a `SKILL.md` body into sections by `##` headings, matching python's
@@ -175,10 +175,10 @@ fn split_into_sections(body: &str) -> Vec<(String, String)> {
             if let Some(heading) = current_heading.take() {
                 let slug = slugify(&heading);
                 if !slug.is_empty() {
-                    result.push((slug, current_lines.join("\n").trim().to_string()));
+                    result.push((slug, current_lines.join("\n").trim().to_owned()));
                 }
             }
-            current_heading = line.strip_prefix("## ").map(|s| s.trim().to_string());
+            current_heading = line.strip_prefix("## ").map(|s| s.trim().to_owned());
             current_lines = vec![line];
         } else if current_heading.is_some() {
             current_lines.push(line);
@@ -187,7 +187,7 @@ fn split_into_sections(body: &str) -> Vec<(String, String)> {
     if let Some(heading) = current_heading.take() {
         let slug = slugify(&heading);
         if !slug.is_empty() {
-            result.push((slug, current_lines.join("\n").trim().to_string()));
+            result.push((slug, current_lines.join("\n").trim().to_owned()));
         }
     }
     result
@@ -210,7 +210,7 @@ fn detect_language(path: &Path) -> String {
         .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
         .unwrap_or_default();
     if let Some(lang) = extension_language(&ext) {
-        return lang.to_string();
+        return lang.to_owned();
     }
     if let Ok(content) = std::fs::read_to_string(path) {
         if let Some(first_line) = content.split('\n').next() {
@@ -224,13 +224,13 @@ fn detect_language(path: &Path) -> String {
                     ("ruby", "ruby"),
                 ] {
                     if first_line.contains(key) {
-                        return lang.to_string();
+                        return lang.to_owned();
                     }
                 }
             }
         }
     }
-    "bash".to_string()
+    "bash".to_owned()
 }
 
 /// Format skill parameters as a prompt prefix, matching python's `format_skill_params`.
@@ -253,10 +253,11 @@ fn display_param_value(value: &Value) -> String {
 }
 
 /// Prepend skill parameters to the user prompt, matching python's `format_prompt_with_params`.
+#[must_use]
 pub fn format_prompt_with_params(prompt: &str, params: &[(String, Value)]) -> String {
     let prefix = format_skill_params(params);
     if prefix.is_empty() {
-        return prompt.to_string();
+        return prompt.to_owned();
     }
     format!("{prefix}\n\n[User Request]\n{prompt}")
 }
@@ -318,13 +319,17 @@ pub struct SkillAgent {
 }
 
 impl SkillAgent {
-    /// Convert this loaded skill into an [`AgentDef`] carrying the `"skill"` framework marker
-    /// (see [`AgentDef::with_framework`]) — the piece that lets a skill be nested as a
+    /// Convert this loaded skill into an [`super::AgentDef`] carrying the `"skill"` framework marker
+    /// (see [`super::AgentDef::with_framework`]) — the piece that lets a skill be nested as a
     /// sub-agent of an ordinary native agent tree (`agents=[...]`/[`super::ToolDef::agent`]),
     /// matching python's `config_serializer.py::_serialize_agent`'s inline `_framework == "skill"`
     /// recursion case. For the standalone (top-level) case, use [`SkillAgent::raw_config`]
     /// directly with `compile_framework`/`deploy_framework`/`start_framework`/`run_framework`
     /// instead — nesting isn't required for that path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Agent`] if `self.name` is empty or invalid -- see [`super::AgentDef::new`].
     pub fn into_agent_def(self) -> Result<super::def::AgentDef> {
         let mut agent =
             super::def::AgentDef::new(self.name)?.with_framework("skill", self.raw_config);
@@ -364,7 +369,7 @@ async fn run_skill_script(interpreter: &str, script_path: &Path, args: &Value) -
     let output = match timeout(Duration::from_secs(300), cmd.output()).await {
         Ok(Ok(output)) => output,
         Ok(Err(e)) => return Value::String(format!("ERROR: {e}")),
-        Err(_) => return Value::String("ERROR: Script execution timed out (300s)".to_string()),
+        Err(_) => return Value::String("ERROR: Script execution timed out (300s)".to_owned()),
     };
 
     if !output.status.success() {
@@ -436,13 +441,14 @@ fn skill_worker_input_schema() -> Value {
 /// (+ `frameworks/serializer.py`'s `_serialize_skill`, which is what actually turns them into
 /// registrable workers on the python side). Register the result with
 /// [`super::AgentRuntime::serve_tools`].
+#[must_use]
 pub fn create_skill_workers(agent: &SkillAgent) -> Vec<ToolDef> {
     let mut workers = Vec::new();
 
     for (tool_name, script) in &agent.scripts {
         let worker_name = format!("{}__{}", agent.name, tool_name);
         let description = format!("Run {tool_name} script from {} skill", agent.name);
-        let interpreter = interpreter_for_language(&script.language).to_string();
+        let interpreter = interpreter_for_language(&script.language).to_owned();
         let script_path = script.path.clone();
         workers.push(ToolDef::function::<Value, _, _>(
             worker_name,
@@ -508,8 +514,8 @@ fn read_agent_files(dir: &Path) -> Result<Vec<(String, String)>> {
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("")
-            .to_string();
-        let agent_name = stem.strip_suffix("-agent").unwrap_or(&stem).to_string();
+            .to_owned();
+        let agent_name = stem.strip_suffix("-agent").unwrap_or(&stem).to_owned();
         let content = std::fs::read_to_string(&path).map_err(|e| {
             ConductorError::agent(format!("failed to read {}: {e}", path.display()))
         })?;
@@ -543,12 +549,12 @@ fn discover_scripts(dir: &Path) -> Result<Vec<(String, ScriptInfo)>> {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("")
-                .to_string();
+                .to_owned();
             let filename = path
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("")
-                .to_string();
+                .to_owned();
             let language = detect_language(&path);
             (
                 stem,
@@ -592,7 +598,7 @@ fn discover_resource_files(dir: &Path) -> Vec<String> {
                 && name != "skill.yaml"
                 && name != "skill.toml"
             {
-                root_files.push(name.to_string());
+                root_files.push(name.to_owned());
             }
         }
     }
@@ -745,6 +751,10 @@ fn expand_and_resolve(p: &str) -> PathBuf {
 /// Load an Agent Skills directory as a [`SkillAgent`], matching python's `skill()`. See the
 /// module doc for the wire mechanism (a "framework" marker, not an [`super::AgentDef`]) and what
 /// is and isn't ported.
+///
+/// # Errors
+///
+/// Returns [`crate::error::ConductorError::Agent`] if `path` has no `SKILL.md`, if `SKILL.md` or any referenced agent/resource file can't be read, or if the frontmatter is malformed.
 pub fn load_skill(path: impl AsRef<Path>, options: SkillOptions) -> Result<SkillAgent> {
     let path = expand_and_resolve(&path.as_ref().to_string_lossy());
 
@@ -815,6 +825,10 @@ pub fn load_skill(path: impl AsRef<Path>, options: SkillOptions) -> Result<Skill
 
 /// Load all skills from a directory (each immediate subdirectory containing a `SKILL.md`),
 /// matching python's `load_skills`.
+///
+/// # Errors
+///
+/// Returns [`crate::error::ConductorError::Agent`] if `path` itself can't be read as a directory, or (via [`load_skill`]) if any subdirectory's `SKILL.md` is missing or malformed.
 pub fn load_skills(
     path: impl AsRef<Path>,
     model: Option<&str>,
@@ -834,7 +848,7 @@ pub fn load_skills(
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("")
-            .to_string();
+            .to_owned();
         let overrides = agent_models.get(&name).cloned().unwrap_or_default();
         let options = SkillOptions {
             model: model.map(String::from),
@@ -932,8 +946,8 @@ mod tests {
     #[test]
     fn test_format_skill_params_lists_keys() {
         let params = vec![
-            ("rounds".to_string(), json!(3)),
-            ("verbose".to_string(), json!(true)),
+            ("rounds".to_owned(), json!(3)),
+            ("verbose".to_owned(), json!(true)),
         ];
         assert_eq!(
             format_skill_params(&params),
@@ -943,7 +957,7 @@ mod tests {
 
     #[test]
     fn test_format_prompt_with_params_prepends_when_nonempty() {
-        let params = vec![("rounds".to_string(), json!(3))];
+        let params = vec![("rounds".to_owned(), json!(3))];
         let result = format_prompt_with_params("Do the thing.", &params);
         assert_eq!(
             result,
@@ -961,15 +975,15 @@ mod tests {
 
     #[test]
     fn test_merge_ordered_params_keeps_default_position_appends_new() {
-        let defaults = vec![("a".to_string(), json!(1)), ("b".to_string(), json!(2))];
-        let overrides = vec![("b".to_string(), json!(20)), ("c".to_string(), json!(3))];
+        let defaults = vec![("a".to_owned(), json!(1)), ("b".to_owned(), json!(2))];
+        let overrides = vec![("b".to_owned(), json!(20)), ("c".to_owned(), json!(3))];
         let merged = merge_ordered_params(&defaults, &overrides);
         assert_eq!(
             merged,
             vec![
-                ("a".to_string(), json!(1)),
-                ("b".to_string(), json!(20)),
-                ("c".to_string(), json!(3)),
+                ("a".to_owned(), json!(1)),
+                ("b".to_owned(), json!(20)),
+                ("c".to_owned(), json!(3)),
             ]
         );
     }
@@ -1036,7 +1050,7 @@ mod tests {
         let skill_agent = load_skill(
             &dir,
             SkillOptions {
-                model: Some("openai/gpt-4o".to_string()),
+                model: Some("openai/gpt-4o".to_owned()),
                 ..Default::default()
             },
         )
@@ -1045,8 +1059,8 @@ mod tests {
 
         let agent_def = skill_agent.into_agent_def().unwrap();
         assert_eq!(agent_def.name, "nested-skill");
-        assert_eq!(agent_def.model, Some("openai/gpt-4o".to_string()));
-        assert_eq!(agent_def.framework, Some("skill".to_string()));
+        assert_eq!(agent_def.model, Some("openai/gpt-4o".to_owned()));
+        assert_eq!(agent_def.framework, Some("skill".to_owned()));
         assert_eq!(agent_def.framework_config, Some(raw_config));
 
         fs::remove_dir_all(&dir).ok();
@@ -1066,7 +1080,7 @@ mod tests {
             .with_sub_agent(skill_agent.into_agent_def().unwrap())
             .unwrap();
         assert_eq!(parent.agents.len(), 1);
-        assert_eq!(parent.agents[0].framework, Some("skill".to_string()));
+        assert_eq!(parent.agents[0].framework, Some("skill".to_owned()));
 
         fs::remove_dir_all(&dir).ok();
     }
@@ -1106,9 +1120,9 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .map(|v| v.as_str().unwrap().to_string())
+            .map(|v| v.as_str().unwrap().to_owned())
             .collect();
-        assert!(resource_files.contains(&"references/notes.md".to_string()));
+        assert!(resource_files.contains(&"references/notes.md".to_owned()));
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -1120,7 +1134,7 @@ mod tests {
             "---\nname: params-skill\nparams:\n  rounds:\n    default: 1\n---\n\nBody.",
         );
         let mut overrides = HashMap::new();
-        overrides.insert("rounds".to_string(), json!(5));
+        overrides.insert("rounds".to_owned(), json!(5));
         let agent = load_skill(
             &dir,
             SkillOptions {
@@ -1172,7 +1186,7 @@ mod tests {
         let dir = temp_skill_dir("read_file_ok");
         write_file(&dir.join("notes.txt"), "hello notes");
         let mut allowed = HashSet::new();
-        allowed.insert("notes.txt".to_string());
+        allowed.insert("notes.txt".to_owned());
         let result = read_skill_file(&dir, &allowed, &[], "notes.txt");
         assert_eq!(result, "hello notes");
         fs::remove_dir_all(&dir).ok();
@@ -1198,9 +1212,9 @@ mod tests {
     #[test]
     fn test_read_skill_file_serves_virtual_section() {
         let dir = temp_skill_dir("read_file_section");
-        let sections = vec![("intro".to_string(), "## Intro\nhello".to_string())];
+        let sections = vec![("intro".to_owned(), "## Intro\nhello".to_owned())];
         let mut allowed = HashSet::new();
-        allowed.insert("skill_section:intro".to_string());
+        allowed.insert("skill_section:intro".to_owned());
         let result = read_skill_file(&dir, &allowed, &sections, "skill_section:intro");
         assert_eq!(result, "## Intro\nhello");
         fs::remove_dir_all(&dir).ok();
