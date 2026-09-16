@@ -1,11 +1,16 @@
 # Agents — Design Docs (Rust SDK port)
 
-Status: **design phase**, no implementation merged yet. These documents plan the port of
-the python-sdk "Agents" feature (`conductor.ai.agents`) to the Rust SDK, per
-[`Agent_Parity_checklist.txt`](../../Agent_Parity_checklist.txt). Source of truth for behavior
-is the python-sdk; java-sdk (`conductor-client-ai`) is the secondary typed-language reference
-where mentioned, though it wasn't available locally at research time — diff against it before
-finalizing implementation if possible.
+Status: **implemented** (see [`development-waves.md`](development-waves.md) for exactly which
+items, including the few still open). These documents originally planned the port of the
+python-sdk "Agents" feature (`conductor.ai.agents`) to the Rust SDK, per
+[`Agent_Parity_checklist.txt`](../../Agent_Parity_checklist.txt); they're kept as the design
+rationale for the shipped implementation (`src/agents/`), not just historical planning notes —
+several source files still point back to specific sections here for the "why," not just the
+"what." Source of truth for behavior is the python-sdk; java-sdk (`conductor-client-ai`) is the
+secondary typed-language reference where mentioned.
+
+Where a doc below describes something not yet built, it's called out explicitly (search for
+"not yet implemented" / "open follow-up") rather than left ambiguous.
 
 | Doc | Purpose |
 |---|---|

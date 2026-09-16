@@ -1,10 +1,11 @@
 # Worked Examples (proposed API)
 
-**Illustrative.** The types below (`AgentDef`, `#[tool]`, `AgentRuntime`, `Credentials`, …) are
-the proposal in [`rust-sdk-design.md`](rust-sdk-design.md) — none of this exists in the crate
-yet, and none of it is guaranteed to compile as-shown once implementation starts. These are meant
-to make the design concrete enough to critique before writing real code against it, and to become
-the basis for `examples/agent_*.rs` once the types exist.
+**Now implemented** — the types below (`AgentDef`, `#[tool]`, `AgentRuntime`, `Credentials`, …)
+exist in `src/agents/` as proposed in [`rust-sdk-design.md`](rust-sdk-design.md), though the
+snippets here were written before implementation and aren't guaranteed to compile verbatim
+against the final API (e.g. builder methods that return `Result` where these examples assume
+infallible chaining) — see `examples/sdk_playback_*.rs` for real, compiling, playback-verified
+examples covering the same scenarios.
 
 All three assume `--features agents` and a running Conductor server (`Configuration::from_env()`),
 same as every other example in this crate.

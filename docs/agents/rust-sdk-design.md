@@ -1,10 +1,12 @@
 # One-Pager: Agents in rust-sdk (target design)
 
-Status: proposal. Nothing here is implemented. Cross-checked against current rust-sdk
-conventions (`Deref`-based Orkes extension, `.with_x()` builders, `thiserror` + `ConductorError`,
+Status: **implemented** in `src/agents/` (see [`development-waves.md`](development-waves.md) for
+the item-by-item breakdown, including the few still-open follow-ups this doc's phasing notes
+call out). Written as a proposal, cross-checked against current rust-sdk conventions
+(`Deref`-based Orkes extension, `.with_x()` builders, `thiserror` + `ConductorError`,
 `async-trait` `Worker`, `schemars`-based schema generation, flat `mod`+`pub use` client
-registration, hierarchical env-var config) so this slots in rather than introducing a second
-style.
+registration, hierarchical env-var config) so it would slot in rather than introduce a second
+style — kept as the design rationale for the shipped result, not just historical planning notes.
 
 This is purely additive — nothing in the existing crate (the `LlmChatComplete`/`LlmTextComplete`
 workflow-task builders, `agentic_workflow.rs`/`multiagent_chat.rs` examples) implements an

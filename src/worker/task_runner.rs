@@ -459,9 +459,18 @@ impl TaskRunner {
 
         let exec_start = Instant::now();
 
+        // Start a lease-extension heartbeat alongside execution, if configured -- matches
+        // python-sdk's `LeaseManager`, translated to a per-task spawned tokio task (cheap here,
+        // unlike an OS thread) rather than a shared background-thread manager.
+        let heartbeat_handle = Self::maybe_spawn_lease_heartbeat(task_client, &task, config);
+
         // Execute the worker - pass reference to avoid clone in worker trait
         let exec_result = worker.execute(&task).await;
         let exec_duration = exec_start.elapsed();
+
+        if let Some(handle) = heartbeat_handle {
+            handle.abort();
+        }
 
         // Convert result to TaskResult
         let task_result = match exec_result {
@@ -540,6 +549,88 @@ impl TaskRunner {
 
         Ok(())
     }
+
+    /// Start a background heartbeat loop for `task`, if lease extension is enabled and the
+    /// task's `response_timeout_seconds` makes it worthwhile. Returns `None` (spawning nothing)
+    /// when disabled, matching python-sdk's `_track_lease`'s early-return conditions exactly.
+    fn maybe_spawn_lease_heartbeat(
+        task_client: &TaskClient,
+        task: &Arc<Task>,
+        config: &Arc<WorkerConfig>,
+    ) -> Option<tokio::task::JoinHandle<()>> {
+        if !config.lease_extend_enabled {
+            return None;
+        }
+        if task.response_timeout_seconds <= 0 {
+            return None;
+        }
+        let interval_secs = task.response_timeout_seconds as f64 * config.lease_extend_threshold;
+        // Matches python's `LeaseManager.track`: an interval under a second isn't worth
+        // scheduling a repeating heartbeat for.
+        if interval_secs < 1.0 {
+            return None;
+        }
+
+        let task_client = task_client.clone();
+        let task_id = task.task_id.clone();
+        let workflow_instance_id = task.workflow_instance_id.clone();
+        let interval = Duration::from_secs_f64(interval_secs);
+
+        Some(tokio::spawn(Self::send_lease_heartbeats(
+            task_client,
+            task_id,
+            workflow_instance_id,
+            interval,
+        )))
+    }
+
+    /// Send a lease-extension heartbeat every `interval`, starting `interval` after this is
+    /// spawned (not immediately) -- matches python's `LeaseManager`, which arms
+    /// `last_heartbeat_time` at `track()` time and only fires once that much time has elapsed.
+    /// Runs until the caller aborts the returned `JoinHandle` (when the task finishes), which is
+    /// the only way this loop ends.
+    #[expect(clippy::infinite_loop)]
+    async fn send_lease_heartbeats(
+        task_client: TaskClient,
+        task_id: String,
+        workflow_instance_id: String,
+        interval: Duration,
+    ) {
+        // Matches python's `LeaseManager._send_heartbeat`: a short, fixed retry count with fast
+        // backoff -- deliberately not `TaskClient::update_task_with_retry`'s 10/20/30s schedule,
+        // which is sized for terminal completion updates, not a fast-repeating keep-alive that
+        // will just get another chance at the next tick anyway.
+        const LEASE_EXTEND_RETRY_COUNT: u32 = 3;
+
+        let mut ticker = tokio::time::interval_at(tokio::time::Instant::now() + interval, interval);
+        loop {
+            ticker.tick().await;
+            let heartbeat = crate::models::TaskResult {
+                task_id: task_id.clone(),
+                workflow_instance_id: workflow_instance_id.clone(),
+                status: crate::models::TaskResultStatus::InProgress,
+                extend_lease: true,
+                ..Default::default()
+            };
+
+            for attempt in 0..LEASE_EXTEND_RETRY_COUNT {
+                match task_client.update_task(&heartbeat).await {
+                    Ok(_) => {
+                        debug!(task_id = %task_id, "Extended lease");
+                        break;
+                    }
+                    Err(e) if attempt + 1 < LEASE_EXTEND_RETRY_COUNT => {
+                        warn!(task_id = %task_id, error = %e, attempt, "Lease heartbeat failed, retrying");
+                        tokio::time::sleep(Duration::from_millis(500 * u64::from(attempt + 2)))
+                            .await;
+                    }
+                    Err(e) => {
+                        error!(task_id = %task_id, error = %e, "Failed to extend lease after {LEASE_EXTEND_RETRY_COUNT} attempts");
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -583,5 +674,70 @@ mod tests {
 
         assert_eq!(runner.task_type(), "test_task");
         assert_eq!(runner.config().thread_count, 5);
+    }
+
+    fn test_task_client() -> TaskClient {
+        let config = Configuration::new("http://localhost:8080/api");
+        TaskClient::new(ApiClient::new(config).unwrap())
+    }
+
+    #[test]
+    fn test_lease_heartbeat_not_spawned_when_disabled() {
+        let task_client = test_task_client();
+        let task = Arc::new(Task {
+            response_timeout_seconds: 30,
+            ..Default::default()
+        });
+        let config = Arc::new(WorkerConfig::new("t").with_lease_extend_enabled(false));
+
+        let handle = TaskRunner::maybe_spawn_lease_heartbeat(&task_client, &task, &config);
+        assert!(handle.is_none());
+    }
+
+    #[test]
+    fn test_lease_heartbeat_not_spawned_without_response_timeout() {
+        let task_client = test_task_client();
+        let task = Arc::new(Task {
+            response_timeout_seconds: 0,
+            ..Default::default()
+        });
+        let config = Arc::new(WorkerConfig::new("t").with_lease_extend_enabled(true));
+
+        let handle = TaskRunner::maybe_spawn_lease_heartbeat(&task_client, &task, &config);
+        assert!(handle.is_none());
+    }
+
+    #[test]
+    fn test_lease_heartbeat_not_spawned_when_interval_too_short() {
+        let task_client = test_task_client();
+        // 1s timeout * 0.8 threshold = 0.8s, matching python's "< 1 second" skip.
+        let task = Arc::new(Task {
+            response_timeout_seconds: 1,
+            ..Default::default()
+        });
+        let config = Arc::new(WorkerConfig::new("t").with_lease_extend_enabled(true));
+
+        let handle = TaskRunner::maybe_spawn_lease_heartbeat(&task_client, &task, &config);
+        assert!(handle.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_lease_heartbeat_spawned_when_enabled_and_worthwhile() {
+        let task_client = test_task_client();
+        let task = Arc::new(Task {
+            response_timeout_seconds: 30,
+            ..Default::default()
+        });
+        let config = Arc::new(
+            WorkerConfig::new("t")
+                .with_lease_extend_enabled(true)
+                .with_lease_extend_threshold(0.8),
+        );
+
+        let handle = TaskRunner::maybe_spawn_lease_heartbeat(&task_client, &task, &config);
+        assert!(handle.is_some());
+        // Abort immediately -- this test only checks that a heartbeat loop gets scheduled at
+        // all, not its actual network behavior (which needs a live/mock server and real time).
+        handle.unwrap().abort();
     }
 }

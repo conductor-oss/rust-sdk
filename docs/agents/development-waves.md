@@ -46,16 +46,16 @@ Wave 5 — Agents: framework adapters (fully independent of each other and of Wa
 
 Wave 6 — Lease extension / automatic heartbeat (independent of all Agents work; touches src/worker/)
 
-- [ ] Add lease_extend_enabled: bool (+ threshold, default 80%) to WorkerConfig.
-- [ ] Heartbeat scheduler: at task_runner.rs:429 (execute_and_update_task), spawn a timer alongside the worker future that fires at 80% of responseTimeoutSeconds.
-- [ ] On fire, send a TaskResult { extend_lease: true, .. } via task_client.update_task_with_retry without completing the task (field already exists: task_result.rs:65).
-- [ ] Cancel the heartbeat timer when the task completes/fails before the threshold (tie into the existing catch_unwind/TaskOutcome completion path at task_runner.rs:400-421).
+- [x] Add lease_extend_enabled: bool (+ threshold, default 80%) to WorkerConfig. (`lease_extend_threshold: f64`, default `0.8`, both env-resolvable per the existing hierarchical config pattern.)
+- [x] Heartbeat scheduler: spawns a tokio task alongside the worker future (`TaskRunner::maybe_spawn_lease_heartbeat`/`send_lease_heartbeats` in task_runner.rs) that fires at `lease_extend_threshold` of responseTimeoutSeconds. Deliberately a per-task spawned tokio task rather than python's shared-thread `LeaseManager` singleton — see LEASE_EXTENSION.md for why that's the right call here.
+- [x] On fire, send a TaskResult { extend_lease: true, status: InProgress, .. } via task_client.update_task, with its own short/fast retry (3 attempts) rather than update_task_with_retry's 10/20/30s schedule, which is sized for terminal completion updates, not a keep-alive.
+- [x] Cancel the heartbeat timer when the task completes/fails (JoinHandle::abort() right after `worker.execute()` returns, before the result is converted/sent).
 
 Wave 7 — Docs (each is a standalone file, fully parallel, zero code dependency)
 
-- [ ] SCHEMA_CLIENT.md — document the already-implemented src/client/schema_client.rs (pure doc gap, no code needed).
-- [ ] LEASE_EXTENSION.md — pairs with Wave 6.
-- [ ] docs/agents/* updates for each Wave 1-5 item as it lands (README.md, api-reference equivalent).
+- [x] SCHEMA_CLIENT.md — document the already-implemented src/client/schema_client.rs (pure doc gap, no code needed).
+- [x] LEASE_EXTENSION.md — pairs with Wave 6.
+- [x] docs/agents/* status headers updated to reflect Waves 1-5 being implemented (README.md, examples.md, rust-sdk-design.md) — not a line-by-line api-reference rewrite, just correcting the "nothing implemented yet" framing that was no longer true.
 - [ ] WORKFLOW_TESTING.md, observability.md, security.md, debugging.md, upgrading.md, api-map.md, connection-authentication.md, deployment-scaling.md, reliability.md, schedules-events.md, server-setup.md, workflow-lifecycle.md, workflow-message-queue.md, core-quickstart.md — each needs a quick "does rust-sdk actually have this capability" check before writing (like I did for schema client vs. lease extension); flag any that turn out to be real code gaps rather than doc gaps.
 
 Sizing note: Waves 1–3 (≈16 tasks) are genuinely embarrassingly parallel — new files, no shared-file contention. Wave 4 (runtime) is the riskiest to parallelize cleanly since several items touch the same new runtime.rs; I'd assign it to one person/agent rather than splitting. Wave 5 and 6 are fully independent of everything else and could start on day one in parallel with Wave 1.

@@ -36,6 +36,16 @@ pub struct WorkerConfig {
 
     /// Whether the worker is paused.
     pub paused: bool,
+
+    /// Whether to automatically extend a task's server-side lease with periodic heartbeats
+    /// while it's still executing, matching python-sdk's `LeaseManager`. Off by default —
+    /// only useful for workers whose execution time can approach `responseTimeoutSeconds`.
+    pub lease_extend_enabled: bool,
+
+    /// Fraction of a task's `responseTimeoutSeconds` after which a heartbeat is sent (and
+    /// repeated at the same interval for as long as the task keeps running). Matches
+    /// python-sdk's `LEASE_EXTEND_DURATION_FACTOR`.
+    pub lease_extend_threshold: f64,
 }
 
 impl Default for WorkerConfig {
@@ -51,6 +61,8 @@ impl Default for WorkerConfig {
             strict_schema: false,
             poll_timeout: Duration::from_millis(100),
             paused: false,
+            lease_extend_enabled: false,
+            lease_extend_threshold: 0.8,
         }
     }
 }
@@ -119,6 +131,20 @@ impl WorkerConfig {
         self.strict_schema = strict;
         self
     }
+
+    /// Enable automatic lease-extension heartbeats.
+    #[must_use]
+    pub fn with_lease_extend_enabled(mut self, enabled: bool) -> Self {
+        self.lease_extend_enabled = enabled;
+        self
+    }
+
+    /// Set the fraction of `responseTimeoutSeconds` after which a heartbeat is sent.
+    #[must_use]
+    pub fn with_lease_extend_threshold(mut self, threshold: f64) -> Self {
+        self.lease_extend_threshold = threshold;
+        self
+    }
 }
 
 /// Resolve worker configuration from environment variables.
@@ -167,6 +193,18 @@ pub fn resolve_worker_config(worker_name: &str, defaults: WorkerConfig) -> Worke
         ),
 
         paused: resolve_bool(&worker_name_upper, "PAUSED", defaults.paused),
+
+        lease_extend_enabled: resolve_bool(
+            &worker_name_upper,
+            "LEASE_EXTEND_ENABLED",
+            defaults.lease_extend_enabled,
+        ),
+
+        lease_extend_threshold: resolve_f64(
+            &worker_name_upper,
+            "LEASE_EXTEND_THRESHOLD",
+            defaults.lease_extend_threshold,
+        ),
     }
 }
 
@@ -256,6 +294,12 @@ fn resolve_bool(worker_name: &str, property: &str, default: bool) -> bool {
     matches!(value.to_lowercase().as_str(), "true" | "1" | "yes")
 }
 
+/// Resolve a floating-point value from environment.
+fn resolve_f64(worker_name: &str, property: &str, default: f64) -> f64 {
+    let value = resolve_string(worker_name, property, default.to_string());
+    value.parse().unwrap_or(default)
+}
+
 /// Resolve a duration in milliseconds.
 fn resolve_duration_millis(worker_name: &str, property: &str, default_millis: u64) -> Duration {
     let millis = resolve_usize(worker_name, property, default_millis as usize);
@@ -272,6 +316,18 @@ mod tests {
         assert_eq!(config.thread_count, 1);
         assert_eq!(config.poll_interval.as_millis(), 100);
         assert!(!config.paused);
+        assert!(!config.lease_extend_enabled);
+        assert!((config.lease_extend_threshold - 0.8).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_lease_extend_builder() {
+        let config = WorkerConfig::new("test_task")
+            .with_lease_extend_enabled(true)
+            .with_lease_extend_threshold(0.5);
+
+        assert!(config.lease_extend_enabled);
+        assert!((config.lease_extend_threshold - 0.5).abs() < f64::EPSILON);
     }
 
     #[test]
