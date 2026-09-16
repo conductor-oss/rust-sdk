@@ -151,8 +151,10 @@ impl CodeExecutor for LocalCodeExecutor {
 
         let result = match timeout(Duration::from_secs(self.timeout_seconds), cmd.output()).await {
             Ok(Ok(output)) => ExecutionResult {
-                output: String::from_utf8_lossy(&output.stdout).to_string(),
-                error: String::from_utf8_lossy(&output.stderr).to_string(),
+                // Normalize \r\n -> \n, matching python subprocess text-mode's
+                // universal-newlines behavior (the child's own CRT emits \r\n on Windows).
+                output: String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"),
+                error: String::from_utf8_lossy(&output.stderr).replace("\r\n", "\n"),
                 exit_code: output.status.code().unwrap_or(-1),
                 timed_out: false,
             },
@@ -287,8 +289,10 @@ impl CodeExecutor for DockerCodeExecutor {
         // Extra 10s for container startup, matching python.
         match timeout(Duration::from_secs(self.timeout_seconds + 10), cmd.output()).await {
             Ok(Ok(output)) => ExecutionResult {
-                output: String::from_utf8_lossy(&output.stdout).to_string(),
-                error: String::from_utf8_lossy(&output.stderr).to_string(),
+                // Normalize \r\n -> \n, matching python subprocess text-mode's
+                // universal-newlines behavior (the child's own CRT emits \r\n on Windows).
+                output: String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"),
+                error: String::from_utf8_lossy(&output.stderr).replace("\r\n", "\n"),
                 exit_code: output.status.code().unwrap_or(-1),
                 timed_out: false,
             },
@@ -512,6 +516,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // `bash` isn't guaranteed to be resolvable via `Command::new("bash")` on a Windows CI
+    // runner's default PATH (Git's bash.exe may not be on it), unlike Linux/macOS.
+    #[cfg_attr(windows, ignore = "bash is not guaranteed to be on PATH on Windows")]
     async fn test_local_code_executor_bash() {
         let executor = LocalCodeExecutor::new("bash");
         let result = executor.execute("echo hi").await;

@@ -377,7 +377,10 @@ async fn run_skill_script(interpreter: &str, script_path: &Path, args: &Value) -
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Value::String(format!("ERROR (exit {code}):\n{stderr}"));
     }
-    Value::String(String::from_utf8_lossy(&output.stdout).to_string())
+    // Normalize `\r\n` -> `\n`, matching python's `subprocess.run(..., text=True)` universal-
+    // newlines behavior on Windows (where the child's own CRT text-mode stdout emits `\r\n`
+    // even though the pipe itself is a raw byte stream).
+    Value::String(String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"))
 }
 
 /// Read one allowed skill resource (or virtual `skill_section:*` entry), matching python's
@@ -578,7 +581,11 @@ fn discover_resource_files(dir: &Path) -> Vec<String> {
                 .filter_map(|f| {
                     f.strip_prefix(dir)
                         .ok()
-                        .map(|p| p.to_string_lossy().to_string())
+                        // Always emit `/`-separated relative paths (matching python's
+                        // `pathlib`-on-POSIX output), regardless of host OS -- these are used
+                        // as stable identifiers (e.g. the allowlist `read_skill_file` checks
+                        // against), not passed back to the filesystem directly.
+                        .map(|p| p.to_string_lossy().replace('\\', "/"))
                 })
                 .collect();
             files.sort();
