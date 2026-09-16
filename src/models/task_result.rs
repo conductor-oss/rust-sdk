@@ -17,6 +17,8 @@ pub enum TaskResultStatus {
     FailedWithTerminalError,
     /// Task is still in progress.
     InProgress,
+    /// Task was canceled.
+    Canceled,
 }
 
 /// Result of a task execution.

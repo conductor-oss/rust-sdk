@@ -142,6 +142,11 @@ pub enum TaskType {
     /// Start workflow batch task (Orkes).
     #[serde(rename = "START_WORKFLOW_BATCH")]
     StartWorkflowBatch,
+    /// Pull pending messages from a running workflow's Workflow Message Queue (WMQ). See
+    /// [`WorkflowTask::pull_workflow_messages`] and
+    /// [`crate::client::WorkflowClient::send_message`].
+    #[serde(rename = "PULL_WORKFLOW_MESSAGES")]
+    PullWorkflowMessages,
     /// Unrecognized task type from the server.
     #[serde(other)]
     Other,
@@ -437,6 +442,35 @@ impl WorkflowTask {
             task_type: TaskType::Wait,
             ..Default::default()
         }
+    }
+
+    /// Pull up to `batch_size` pending messages from this workflow's Workflow Message Queue
+    /// (WMQ) -- see [`crate::client::WorkflowClient::send_message`] for pushing messages into
+    /// it. Blocks (stays `IN_PROGRESS`, server re-evaluates roughly every second) until at least
+    /// one message is available, unless [`WorkflowTask::non_blocking`] is set. Output has
+    /// `messages` (array) and `count` (int) keys.
+    ///
+    /// Requires `conductor.workflow-message-queue.enabled=true` on the target server.
+    pub fn pull_workflow_messages(task_ref_name: impl Into<String>, batch_size: i32) -> Self {
+        Self {
+            name: "pull_workflow_messages".to_owned(),
+            task_reference_name: task_ref_name.into(),
+            task_type: TaskType::PullWorkflowMessages,
+            input_parameters: HashMap::from([(
+                "batchSize".to_owned(),
+                serde_json::json!(batch_size),
+            )]),
+            ..Default::default()
+        }
+    }
+
+    /// Make a [`WorkflowTask::pull_workflow_messages`] task return immediately with an empty
+    /// `messages`/`count` output instead of blocking when the queue has nothing pending.
+    #[must_use]
+    pub fn non_blocking(mut self) -> Self {
+        self.input_parameters
+            .insert("blocking".to_owned(), serde_json::json!(false));
+        self
     }
 
     /// Create an HTTP task.
@@ -1383,6 +1417,23 @@ mod tests {
         let json = serde_json::to_string(&wf).unwrap();
         assert!(json.contains("\"name\":\"test\""));
         assert!(json.contains("\"tasks\":["));
+    }
+
+    #[test]
+    fn test_pull_workflow_messages_task_builder() {
+        let task = WorkflowTask::pull_workflow_messages("pull_messages", 5);
+        assert_eq!(task.task_type, TaskType::PullWorkflowMessages);
+        assert_eq!(
+            task.input_parameters.get("batchSize"),
+            Some(&serde_json::json!(5))
+        );
+        assert!(!task.input_parameters.contains_key("blocking"));
+
+        let non_blocking = WorkflowTask::pull_workflow_messages("pull_messages", 5).non_blocking();
+        assert_eq!(
+            non_blocking.input_parameters.get("blocking"),
+            Some(&serde_json::json!(false))
+        );
     }
 
     #[test]

@@ -476,6 +476,7 @@ fn status_to_string(status: crate::models::TaskResultStatus) -> &'static str {
         crate::models::TaskResultStatus::Failed => "FAILED",
         crate::models::TaskResultStatus::FailedWithTerminalError => "FAILED_WITH_TERMINAL_ERROR",
         crate::models::TaskResultStatus::InProgress => "IN_PROGRESS",
+        crate::models::TaskResultStatus::Canceled => "CANCELED",
     }
 }
 

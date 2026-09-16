@@ -30,8 +30,8 @@ pub use schema_client::SchemaClient;
 pub use secret_client::SecretClient;
 pub use task_client::TaskClient;
 pub use workflow_client::{
-    CorrelationIdsSearchRequest, SearchResult, SignalResponse, TestWorkflowRequest, WorkflowClient,
-    WorkflowRun, WorkflowStateUpdate,
+    CorrelationIdsSearchRequest, SearchResult, SignalResponse, TaskMock, TestWorkflowRequest,
+    WorkflowClient, WorkflowRun, WorkflowStateUpdate,
 };
 
 /// Alias for `ConductorClient`, matching the Python SDK's `OrkesClients`.
