@@ -94,6 +94,16 @@ pub enum TaskType {
     /// LLM store embeddings task.
     #[serde(rename = "LLM_STORE_EMBEDDINGS")]
     LlmStoreEmbeddings,
+    /// Search a vector database using a pre-computed embedding vector (as opposed to
+    /// [`TaskType::LlmSearchIndex`], which searches by query text).
+    #[serde(rename = "LLM_SEARCH_EMBEDDINGS")]
+    LlmSearchEmbeddings,
+    /// Generate an image using an LLM provider.
+    #[serde(rename = "GENERATE_IMAGE")]
+    GenerateImage,
+    /// Generate audio (text-to-speech) using an LLM provider.
+    #[serde(rename = "GENERATE_AUDIO")]
+    GenerateAudio,
     /// List available tools from an MCP (Model Context Protocol) server.
     #[serde(rename = "LIST_MCP_TOOLS")]
     ListMcpTools,
@@ -1028,6 +1038,81 @@ impl WorkflowTask {
         }
     }
 
+    /// Create an LLM search-by-embedding task -- searches a vector database using a
+    /// pre-computed embedding vector, as opposed to [`WorkflowTask::llm_search_index`], which
+    /// searches by query text.
+    pub fn llm_search_embeddings(
+        task_ref_name: impl Into<String>,
+        vector_db: impl Into<String>,
+        index: impl Into<String>,
+        embeddings: Vec<f64>,
+    ) -> Self {
+        let mut input = HashMap::new();
+        input.insert("vectorDB".to_owned(), serde_json::json!(vector_db.into()));
+        input.insert("index".to_owned(), serde_json::json!(index.into()));
+        input.insert("embeddings".to_owned(), serde_json::json!(embeddings));
+        input.insert("maxResults".to_owned(), serde_json::json!(1));
+
+        Self {
+            name: "llm_search_embeddings".to_owned(),
+            task_reference_name: task_ref_name.into(),
+            task_type: TaskType::LlmSearchEmbeddings,
+            input_parameters: input,
+            ..Default::default()
+        }
+    }
+
+    /// Create an image-generation task.
+    pub fn generate_image(
+        task_ref_name: impl Into<String>,
+        llm_provider: impl Into<String>,
+        model: impl Into<String>,
+        prompt: impl Into<String>,
+    ) -> Self {
+        let mut input = HashMap::new();
+        input.insert(
+            "llmProvider".to_owned(),
+            serde_json::json!(llm_provider.into()),
+        );
+        input.insert("model".to_owned(), serde_json::json!(model.into()));
+        input.insert("prompt".to_owned(), serde_json::json!(prompt.into()));
+        input.insert("width".to_owned(), serde_json::json!(1024));
+        input.insert("height".to_owned(), serde_json::json!(1024));
+        input.insert("n".to_owned(), serde_json::json!(1));
+        input.insert("outputFormat".to_owned(), serde_json::json!("png"));
+
+        Self {
+            name: "generate_image".to_owned(),
+            task_reference_name: task_ref_name.into(),
+            task_type: TaskType::GenerateImage,
+            input_parameters: input,
+            ..Default::default()
+        }
+    }
+
+    /// Create an audio-generation (text-to-speech) task.
+    pub fn generate_audio(
+        task_ref_name: impl Into<String>,
+        llm_provider: impl Into<String>,
+        model: impl Into<String>,
+    ) -> Self {
+        let mut input = HashMap::new();
+        input.insert(
+            "llmProvider".to_owned(),
+            serde_json::json!(llm_provider.into()),
+        );
+        input.insert("model".to_owned(), serde_json::json!(model.into()));
+        input.insert("n".to_owned(), serde_json::json!(1));
+
+        Self {
+            name: "generate_audio".to_owned(),
+            task_reference_name: task_ref_name.into(),
+            task_type: TaskType::GenerateAudio,
+            input_parameters: input,
+            ..Default::default()
+        }
+    }
+
     /// Set namespace for vector DB tasks.
     #[must_use]
     pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
@@ -1057,6 +1142,109 @@ impl WorkflowTask {
         );
         self.input_parameters
             .insert("embeddingModel".to_owned(), serde_json::json!(model.into()));
+        self
+    }
+
+    /// Set embedding vector dimensions, for [`WorkflowTask::llm_search_embeddings`].
+    #[must_use]
+    pub fn with_dimensions(mut self, dimensions: i32) -> Self {
+        self.input_parameters
+            .insert("dimensions".to_owned(), serde_json::json!(dimensions));
+        self
+    }
+
+    /// Set the number of outputs to generate, for [`WorkflowTask::generate_image`]/
+    /// [`WorkflowTask::generate_audio`].
+    #[must_use]
+    pub fn with_n(mut self, n: i32) -> Self {
+        self.input_parameters
+            .insert("n".to_owned(), serde_json::json!(n));
+        self
+    }
+
+    /// Override the default `1024`x`1024` size, for [`WorkflowTask::generate_image`].
+    #[must_use]
+    pub fn with_image_dimensions(mut self, width: i32, height: i32) -> Self {
+        self.input_parameters
+            .insert("width".to_owned(), serde_json::json!(width));
+        self.input_parameters
+            .insert("height".to_owned(), serde_json::json!(height));
+        self
+    }
+
+    /// Set a size specification (e.g. `"1024x1024"`), as an alternative to
+    /// [`WorkflowTask::with_image_dimensions`], for [`WorkflowTask::generate_image`].
+    #[must_use]
+    pub fn with_size(mut self, size: impl Into<String>) -> Self {
+        self.input_parameters
+            .insert("size".to_owned(), serde_json::json!(size.into()));
+        self
+    }
+
+    /// Set image style (e.g. `"natural"`, `"vivid"`), for [`WorkflowTask::generate_image`].
+    #[must_use]
+    pub fn with_style(mut self, style: impl Into<String>) -> Self {
+        self.input_parameters
+            .insert("style".to_owned(), serde_json::json!(style.into()));
+        self
+    }
+
+    /// Set the image weight parameter, for [`WorkflowTask::generate_image`].
+    #[must_use]
+    pub fn with_weight(mut self, weight: f64) -> Self {
+        self.input_parameters
+            .insert("weight".to_owned(), serde_json::json!(weight));
+        self
+    }
+
+    /// Override the default `"png"` output format, for [`WorkflowTask::generate_image`].
+    #[must_use]
+    pub fn with_output_format(mut self, format: impl Into<String>) -> Self {
+        self.input_parameters
+            .insert("outputFormat".to_owned(), serde_json::json!(format.into()));
+        self
+    }
+
+    /// Set the text to convert to speech, for [`WorkflowTask::generate_audio`].
+    #[must_use]
+    pub fn with_text(mut self, text: impl Into<String>) -> Self {
+        self.input_parameters
+            .insert("text".to_owned(), serde_json::json!(text.into()));
+        self
+    }
+
+    /// Set the voice, for [`WorkflowTask::generate_audio`].
+    #[must_use]
+    pub fn with_voice(mut self, voice: impl Into<String>) -> Self {
+        self.input_parameters
+            .insert("voice".to_owned(), serde_json::json!(voice.into()));
+        self
+    }
+
+    /// Set the speech speed multiplier, for [`WorkflowTask::generate_audio`].
+    #[must_use]
+    pub fn with_speed(mut self, speed: f64) -> Self {
+        self.input_parameters
+            .insert("speed".to_owned(), serde_json::json!(speed));
+        self
+    }
+
+    /// Set the audio response format (e.g. `"mp3"`, `"wav"`), for
+    /// [`WorkflowTask::generate_audio`].
+    #[must_use]
+    pub fn with_response_format(mut self, format: impl Into<String>) -> Self {
+        self.input_parameters.insert(
+            "responseFormat".to_owned(),
+            serde_json::json!(format.into()),
+        );
+        self
+    }
+
+    /// Set an alternative prompt, for [`WorkflowTask::generate_audio`].
+    #[must_use]
+    pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.input_parameters
+            .insert("prompt".to_owned(), serde_json::json!(prompt.into()));
         self
     }
 
@@ -1433,6 +1621,135 @@ mod tests {
         assert_eq!(
             non_blocking.input_parameters.get("blocking"),
             Some(&serde_json::json!(false))
+        );
+    }
+
+    #[test]
+    fn test_llm_search_embeddings_task_builder() {
+        let task = WorkflowTask::llm_search_embeddings(
+            "search_ref",
+            "pinecone_db",
+            "my_index",
+            vec![0.1, 0.2, 0.3],
+        )
+        .with_namespace("my_namespace")
+        .with_dimensions(3)
+        .with_embedding_model("openai", "text-embedding-3-small");
+
+        assert_eq!(task.task_type, TaskType::LlmSearchEmbeddings);
+        assert_eq!(
+            task.input_parameters.get("vectorDB"),
+            Some(&serde_json::json!("pinecone_db"))
+        );
+        assert_eq!(
+            task.input_parameters.get("embeddings"),
+            Some(&serde_json::json!([0.1, 0.2, 0.3]))
+        );
+        assert_eq!(
+            task.input_parameters.get("maxResults"),
+            Some(&serde_json::json!(1))
+        );
+        assert_eq!(
+            task.input_parameters.get("namespace"),
+            Some(&serde_json::json!("my_namespace"))
+        );
+        assert_eq!(
+            task.input_parameters.get("dimensions"),
+            Some(&serde_json::json!(3))
+        );
+        assert_eq!(
+            task.input_parameters.get("embeddingModel"),
+            Some(&serde_json::json!("text-embedding-3-small"))
+        );
+    }
+
+    #[test]
+    fn test_generate_image_task_builder_has_python_matching_defaults() {
+        let task = WorkflowTask::generate_image("img_ref", "openai", "dall-e-3", "a cat");
+
+        assert_eq!(task.task_type, TaskType::GenerateImage);
+        assert_eq!(
+            task.input_parameters.get("prompt"),
+            Some(&serde_json::json!("a cat"))
+        );
+        assert_eq!(
+            task.input_parameters.get("width"),
+            Some(&serde_json::json!(1024))
+        );
+        assert_eq!(
+            task.input_parameters.get("height"),
+            Some(&serde_json::json!(1024))
+        );
+        assert_eq!(task.input_parameters.get("n"), Some(&serde_json::json!(1)));
+        assert_eq!(
+            task.input_parameters.get("outputFormat"),
+            Some(&serde_json::json!("png"))
+        );
+    }
+
+    #[test]
+    fn test_generate_image_task_builder_overrides() {
+        let task = WorkflowTask::generate_image("img_ref", "openai", "dall-e-3", "a cat")
+            .with_image_dimensions(512, 512)
+            .with_size("512x512")
+            .with_style("vivid")
+            .with_weight(0.5)
+            .with_n(2)
+            .with_output_format("jpg");
+
+        assert_eq!(
+            task.input_parameters.get("width"),
+            Some(&serde_json::json!(512))
+        );
+        assert_eq!(
+            task.input_parameters.get("size"),
+            Some(&serde_json::json!("512x512"))
+        );
+        assert_eq!(
+            task.input_parameters.get("style"),
+            Some(&serde_json::json!("vivid"))
+        );
+        assert_eq!(
+            task.input_parameters.get("weight"),
+            Some(&serde_json::json!(0.5))
+        );
+        assert_eq!(task.input_parameters.get("n"), Some(&serde_json::json!(2)));
+        assert_eq!(
+            task.input_parameters.get("outputFormat"),
+            Some(&serde_json::json!("jpg"))
+        );
+    }
+
+    #[test]
+    fn test_generate_audio_task_builder() {
+        let task = WorkflowTask::generate_audio("audio_ref", "openai", "tts-1")
+            .with_text("hello world")
+            .with_voice("alloy")
+            .with_speed(1.5)
+            .with_response_format("mp3")
+            .with_prompt("an alternative prompt");
+
+        assert_eq!(task.task_type, TaskType::GenerateAudio);
+        assert_eq!(task.input_parameters.get("n"), Some(&serde_json::json!(1)));
+        assert_eq!(
+            task.input_parameters.get("text"),
+            Some(&serde_json::json!("hello world"))
+        );
+        assert_eq!(
+            task.input_parameters.get("voice"),
+            Some(&serde_json::json!("alloy"))
+        );
+        assert_eq!(
+            task.input_parameters.get("speed"),
+            Some(&serde_json::json!(1.5))
+        );
+        assert_eq!(
+            task.input_parameters.get("responseFormat"),
+            Some(&serde_json::json!("mp3"))
+        );
+        assert_eq!(
+            task.input_parameters.get("prompt"),
+            Some(&serde_json::json!("an alternative prompt"))
         );
     }
 
