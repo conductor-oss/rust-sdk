@@ -127,7 +127,25 @@ a Rust SDK compelling. Build it when a concrete user asks for it, not speculativ
 - **LangChain `AgentExecutor`-equivalent full extraction.** Lower engineering cost than LangGraph
   in python (find `.tools`, find the chat model, map `BaseTool` → schema → worker), and would
   reuse the same `FrameworkAgent`/extraction machinery as Phase 1 if a comparably-adopted Rust
-  crate existed — but none does yet. Revisit if one emerges.
+  crate existed. **Re-checked 2026-09-17** (Wave 8): this premise needs updating — the `rig`
+  ecosystem (`rig-core` + `rig-agent`, <https://github.com/0xPlaygrounds/rig>) is no longer a
+  fringe crate: `rig-core` has ~2.8M all-time / ~1.56M 90-day downloads on crates.io as of this
+  check, dwarfing `langchain-rust` (~155K all-time, last published 2024-10-06 — effectively
+  unmaintained) and the brand-new `langgraph` crate (~1.2K downloads, published within the last
+  90 days, too immature to call adopted). `rig` is the closest thing Rust has today to a
+  dominant, actively-maintained LangChain-equivalent.
+  Still not adapting it, but for a *different* reason than "nothing exists": `rig_agent::Agent`'s
+  shape doesn't fit `FrameworkAgent`'s synchronous-extraction contract. Its fields are private
+  with only `name()`/`description()`/`model_handle()` getters (`model_handle()` returns an opaque
+  `&ModelHandle`, not a plain `"provider/model"` string `FrameworkAgent::model()` needs), and tool
+  discovery (`tool_definitions()`) is `async` and takes a `prompt: Option<String>` — tools are
+  resolved dynamically per-prompt, not held as a static list `FrameworkAgent::tools()`'s
+  synchronous `Vec<ToolDef>` can represent. This is structurally the same "can't do full
+  extraction, only black-box passthrough" situation `claude_agent_sdk.rs`'s module doc describes,
+  not a `FrameworkAgent`-shaped gap. `rig-agent` itself is also very new (published alongside this
+  `rig-core` split ~2026-08-17; nearly all its downloads are within the 90-day window) — revisit
+  once/if its API stabilizes, but a passthrough adapter (à la Claude Agent SDK) is the more
+  plausible shape to build if a concrete user asks, not full extraction.
 - **Google ADK.** No Rust equivalent exists. Python's own ADK support is the thinnest of the five
   (no dedicated adapter file, falls through to the generic walker) — there's nothing
   framework-specific to port even if a Rust ADK-alike appears; Phase 1's generic trait already
@@ -153,5 +171,5 @@ to discover this the way python's users currently have to — via source or logs
 | Anthropic (provider) | `model = "anthropic/..."` | native | v1 | Core `AgentDef` |
 | Anthropic (framework, i.e. Claude Agent SDK / CLI) | subprocess + stream-json | passthrough only | 2, low priority | Least "Conductor orchestrates" value; hard external CLI/Node dependency |
 | LangGraph | typed graph declaration (no bytecode introspection possible) | new `GraphAgentDef`, not an adapter from an external crate | 2 | Serves the same niche without depending on Rust ecosystem maturity |
-| LangChain | — | `FrameworkAgent` trait, if/when an adopted crate exists | deprioritized | No dominant Rust equivalent today |
+| LangChain | `rig`/`rig-agent` is now the dominant crate (re-checked 2026-09-17), but its shape is passthrough-only | passthrough adapter (à la Claude Agent SDK), not `FrameworkAgent` extraction | deprioritized, build on concrete ask | `rig_agent::Agent` has no static tool list / plain model string to extract — see "Explicitly deprioritized" above |
 | Google ADK | — | `FrameworkAgent` trait covers the shape already | deprioritized | No Rust equivalent; python's own support is already the thinnest of the five |
