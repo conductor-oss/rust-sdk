@@ -57,6 +57,12 @@ pub struct TaskRunner {
     running_tasks: Arc<parking_lot::Mutex<HashSet<String>>>,
     /// Count of spawned tasks (including those waiting for semaphore).
     spawned_task_count: Arc<AtomicUsize>,
+    /// Count of real poll attempts (successful or failed) made against the server so far. Used
+    /// by [`super::TaskHandler::verify_workers_started`] to tell "the polling loop hasn't
+    /// attempted a single real poll yet" apart from "the loop started but is legitimately
+    /// waiting" -- [`TaskRunner::is_running`] alone can't distinguish those, since it flips
+    /// `true` before the first poll ever happens.
+    poll_attempts: Arc<AtomicU64>,
 }
 
 impl TaskRunner {
@@ -104,6 +110,7 @@ impl TaskRunner {
             active_task_count: Arc::new(AtomicUsize::new(0)),
             running_tasks: Arc::new(parking_lot::Mutex::new(HashSet::new())),
             spawned_task_count: Arc::new(AtomicUsize::new(0)),
+            poll_attempts: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -129,6 +136,14 @@ impl TaskRunner {
     #[must_use]
     pub fn spawned_task_count(&self) -> usize {
         self.spawned_task_count.load(Ordering::SeqCst)
+    }
+
+    /// Get the number of real poll attempts (successful or failed) made against the server so
+    /// far. Zero until the first one completes -- see the field's doc comment for why this
+    /// exists separately from [`TaskRunner::is_running`].
+    #[must_use]
+    pub fn poll_attempt_count(&self) -> u64 {
+        self.poll_attempts.load(Ordering::SeqCst)
     }
 
     /// Check if the runner is running.
@@ -269,6 +284,7 @@ impl TaskRunner {
 
         let poll_duration = poll_start.elapsed();
         *self.last_poll_time.lock() = Instant::now();
+        self.poll_attempts.fetch_add(1, Ordering::SeqCst);
 
         match poll_result {
             Ok(tasks) => {
@@ -674,6 +690,8 @@ mod tests {
 
         assert_eq!(runner.task_type(), "test_task");
         assert_eq!(runner.config().thread_count, 5);
+        assert_eq!(runner.poll_attempt_count(), 0);
+        assert!(!runner.is_running());
     }
 
     fn test_task_client() -> TaskClient {

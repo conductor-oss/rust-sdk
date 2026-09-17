@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
@@ -212,6 +213,79 @@ impl TaskHandler {
         );
 
         Ok(())
+    }
+
+    /// Verify that every registered worker's polling task actually started and completed at
+    /// least one real poll attempt against the server, within `timeout`. Call this right after
+    /// [`TaskHandler::start`].
+    ///
+    /// Rust-native analog of python-sdk's `LocalLivenessCheck` -- **not** a literal port; see
+    /// this crate's `docs/agents/development-waves.md` (Wave 8) for why one wouldn't make sense.
+    /// Python's workers run as OS subprocesses, so it verifies each expected worker has a live
+    /// `pid` right after registration, guarding against `fork()` failing or an exception being
+    /// swallowed during subprocess bootstrap. This crate's workers are `tokio::spawn`ed futures
+    /// in the same process, where spawning itself essentially never fails silently the way
+    /// `fork()` can -- so the equivalent real risk isn't "did the task get scheduled," it's "did
+    /// this worker's task actually reach and complete its first poll," which catches an early
+    /// panic during setup (before or shortly into [`TaskRunner::run`]) or a spawned task that's
+    /// starved and never reaches the network call. [`TaskRunner::poll_attempt_count`] is the
+    /// signal used to tell that apart from [`TaskRunner::is_running`] merely being `true`, which
+    /// happens before the first poll is even attempted.
+    ///
+    /// (Worth noting since it shaped this method's design: python's own `LocalLivenessCheck` is
+    /// unreachable dead code today -- defined, but never called from `runtime.py`/
+    /// `worker_manager.py`, has no config field wired up, and no test covers it. This isn't
+    /// "port an existing python behavior," it's "build the rust-native version of the same
+    /// underlying safety net," since there's no real python behavior to match against.)
+    ///
+    /// No-op (returns `Ok(())` immediately) if [`TaskHandler::start`] hasn't been called yet, or
+    /// registered no workers -- there's nothing to verify.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Worker`] naming every task type that either
+    /// exited before its first poll (its spawned task ended, e.g. via an early panic) or simply
+    /// hadn't completed one within `timeout`.
+    pub async fn verify_workers_started(&self, timeout: Duration) -> Result<()> {
+        if self.runners.is_empty() {
+            return Ok(());
+        }
+
+        let deadline = Instant::now() + timeout;
+        let poll_interval = Duration::from_millis(50);
+
+        loop {
+            let not_ready: Vec<String> = self
+                .runners
+                .iter()
+                .zip(&self.handles)
+                .filter_map(|(runner, handle)| {
+                    if handle.is_finished() {
+                        Some(format!(
+                            "{} (task exited before its first poll)",
+                            runner.task_type()
+                        ))
+                    } else if runner.poll_attempt_count() == 0 {
+                        Some(runner.task_type().to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if not_ready.is_empty() {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(ConductorError::worker(format!(
+                    "Worker startup verification failed: worker(s) never completed a first \
+                     poll within {timeout:?}: [{}]. This usually means a worker panicked during \
+                     setup, or the async runtime is starved. Check logs and retry start().",
+                    not_ready.join(", "),
+                )));
+            }
+            tokio::time::sleep(poll_interval).await;
+        }
     }
 
     /// Stop all workers gracefully.
@@ -563,5 +637,81 @@ mod tests {
         assert!(handler.is_ok());
         let handler = handler.unwrap();
         assert_eq!(handler.worker_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_verify_workers_started_is_a_no_op_before_start() {
+        let config = Configuration::new("http://localhost:8080/api");
+        let mut handler = TaskHandler::new(config).unwrap();
+        handler.add_worker(TestWorker {
+            name: "never_started".to_owned(),
+        });
+
+        // start() was never called, so there are no runners/handles yet -- nothing to verify.
+        handler
+            .verify_workers_started(Duration::ZERO)
+            .await
+            .expect("no-op before start() must not error");
+    }
+
+    #[tokio::test]
+    async fn test_verify_workers_started_succeeds_after_a_real_poll() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .and(wiremock::matchers::path(
+                "/api/tasks/poll/batch/verify_started_ok",
+            ))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&mock_server)
+            .await;
+
+        let config = Configuration::new(format!("{}/api", mock_server.uri()));
+        let mut handler = TaskHandler::new(config).unwrap();
+        handler.add_worker(TestWorker {
+            name: "verify_started_ok".to_owned(),
+        });
+        handler.start().await.unwrap();
+
+        handler
+            .verify_workers_started(Duration::from_secs(2))
+            .await
+            .expect("worker should complete a real poll well within 2s");
+
+        // Not calling handler.stop() -- see test_resume_registers_workers_... in
+        // agents::runtime for why: the #[tokio::test] runtime aborts the spawned poller when
+        // this function returns, which is faster and just as clean here.
+    }
+
+    #[tokio::test]
+    async fn test_verify_workers_started_times_out_when_poll_never_completes() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        // A response slower than the timeout below simulates a worker whose task is legitimately
+        // still running but hasn't reached (completed) its first real poll yet.
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .and(wiremock::matchers::path(
+                "/api/tasks/poll/batch/verify_started_stuck",
+            ))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!([]))
+                    .set_delay(Duration::from_secs(5)),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let config = Configuration::new(format!("{}/api", mock_server.uri()));
+        let mut handler = TaskHandler::new(config).unwrap();
+        handler.add_worker(TestWorker {
+            name: "verify_started_stuck".to_owned(),
+        });
+        handler.start().await.unwrap();
+
+        let err = handler
+            .verify_workers_started(Duration::from_millis(200))
+            .await
+            .expect_err("poll response is delayed well past the 200ms timeout");
+        assert!(err.to_string().contains("verify_started_stuck"));
     }
 }

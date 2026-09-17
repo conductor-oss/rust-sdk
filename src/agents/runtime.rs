@@ -942,6 +942,17 @@ impl AgentRuntime {
         })
     }
 
+    /// Access the underlying [`TaskHandler`] that [`AgentRuntime::serve`]/[`AgentRuntime::resume`]
+    /// register local tool workers onto.
+    ///
+    /// The main current use is calling [`TaskHandler::verify_workers_started`] right after
+    /// `serve`/`resume` returns, to confirm every worker actually started polling before
+    /// proceeding -- e.g. before handing out a URL/webhook that assumes the agent is ready.
+    #[must_use]
+    pub fn task_handler(&self) -> &TaskHandler {
+        &self.task_handler
+    }
+
     /// Compile an [`AgentDef`] into a Conductor workflow, without deploying it.
     ///
     /// Serializes `agent` via [`AgentConfigSerializer::serialize`] and wraps it in the
