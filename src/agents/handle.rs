@@ -16,18 +16,27 @@
 //! `AgentClient`/`AgentHandle::new`) if a HANDOFF/SEQUENTIAL/PARALLEL sub-execution needs a
 //! direct response.
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use crate::client::AgentClient;
-use crate::error::Result;
+use crate::error::{ConductorError, Result};
 
-use super::result::{poll_until_terminal, AgentResult, AgentStatus};
+use super::liveness::{find_new_stalls, StallPolicy};
+use super::result::{AgentResult, AgentStatus};
 use super::stream::AgentStream;
 
 /// Interval between `get_status` polls in [`AgentHandle::join`].
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
+
+/// Default stall threshold for [`AgentHandle::join`]'s built-in stall detection -- matches
+/// python-sdk's `liveness_stall_seconds` default.
+const DEFAULT_STALL_SECONDS: f64 = 30.0;
+
+/// Default interval between stall checks -- matches python-sdk's `liveness_check_interval_seconds`.
+const DEFAULT_STALL_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Non-blocking handle to a running (or already-finished) agent execution.
 ///
@@ -77,11 +86,90 @@ impl AgentHandle {
     /// `AgentResult(output=status.output, ...)`; there is no separate `get_execution` fetch in
     /// the common path, because the terminal `/status` response already carries the output.
     ///
+    /// Also runs the [`StallPolicy::Warn`]-policy stall detection described on
+    /// [`AgentHandle::join_with_options`], using that method's default thresholds. Use
+    /// [`AgentHandle::join_with_options`] directly to customize them or to select
+    /// [`StallPolicy::Raise`].
+    ///
     /// # Errors
     ///
     /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn join(&self) -> Result<AgentResult> {
-        poll_until_terminal(POLL_INTERVAL, || self.status()).await
+        self.join_with_options(
+            DEFAULT_STALL_SECONDS,
+            DEFAULT_STALL_CHECK_INTERVAL,
+            StallPolicy::Warn,
+        )
+        .await
+    }
+
+    /// [`AgentHandle::join`], with configurable stall detection.
+    ///
+    /// Every `check_interval`, fetches the full workflow (`GET /workflow/{id}?includeTasks=true`)
+    /// and looks for any task stuck `SCHEDULED` with zero polls for at least `stall_seconds` --
+    /// a strong signal that no worker is running for it. See the `super::liveness` module doc
+    /// for exactly what this does and doesn't catch (rust has no per-execution worker domain to
+    /// scope the check to, unlike python-sdk's `ServerLivenessMonitor`). A stall-check tick that
+    /// itself fails (e.g. a transient HTTP error) is skipped silently rather than failing
+    /// `join()` over a liveness-check-specific problem; the next tick tries again.
+    ///
+    /// With `policy` set to [`StallPolicy::Warn`], a detected stall is logged
+    /// (`tracing::warn!`) and `join()` keeps waiting. With `policy` set to
+    /// [`StallPolicy::Raise`], `join()` returns `Err(`[`crate::error::ConductorError::WorkerStall`]`)`
+    /// as soon as a new stall is found.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the status request fails at the
+    /// transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`]
+    /// variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`]
+    /// if the response body can't be deserialized. Returns
+    /// [`crate::error::ConductorError::WorkerStall`] if `policy` is [`StallPolicy::Raise`] and a
+    /// stall is detected.
+    pub async fn join_with_options(
+        &self,
+        stall_seconds: f64,
+        check_interval: Duration,
+        policy: StallPolicy,
+    ) -> Result<AgentResult> {
+        let workflow_client = self.client.workflow_client();
+        let mut seen_stalls = HashSet::new();
+        let mut next_stall_check = tokio::time::Instant::now() + check_interval;
+
+        loop {
+            let status = self.status().await?;
+            if status.is_terminal() {
+                return Ok(AgentResult::from_status(status));
+            }
+
+            if tokio::time::Instant::now() >= next_stall_check {
+                next_stall_check = tokio::time::Instant::now() + check_interval;
+                if let Ok(workflow) = workflow_client.get_workflow(&self.execution_id, true).await {
+                    let now_millis = chrono::Utc::now().timestamp_millis();
+                    let stalls =
+                        find_new_stalls(&workflow, stall_seconds, now_millis, &mut seen_stalls);
+                    if !stalls.is_empty() {
+                        match policy {
+                            StallPolicy::Warn => {
+                                tracing::warn!(
+                                    execution_id = %self.execution_id,
+                                    stalled_tasks = ?stalls,
+                                    "Worker stall detected: task(s) queued with no poller"
+                                );
+                            }
+                            StallPolicy::Raise => {
+                                return Err(ConductorError::WorkerStall {
+                                    execution_id: self.execution_id.clone(),
+                                    stalled_tasks: stalls,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            tokio::time::sleep(POLL_INTERVAL).await;
+        }
     }
 
     /// Open a live [`AgentStream`] of [`super::AgentEvent`]s for this execution, over the

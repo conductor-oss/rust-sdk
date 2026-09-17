@@ -26,8 +26,6 @@
 
 use serde_json::Value;
 
-use crate::error::Result;
-
 /// Snapshot of an agent execution's status, as returned by `GET /agent/{executionId}/status`.
 ///
 /// Mirrors python-sdk's `AgentStatus` dataclass (`result.py`) field-for-field. Built via
@@ -165,26 +163,6 @@ impl AgentResult {
     }
 }
 
-/// Poll `get_status` (via `poll_once`) until [`AgentStatus::is_terminal`], sleeping
-/// `poll_interval` between attempts, then return the terminal [`AgentResult`]. Shared by
-/// `AgentHandle::join`/`AgentRuntime::run` so the poll loop has exactly one implementation.
-pub(super) async fn poll_until_terminal<F, Fut>(
-    poll_interval: std::time::Duration,
-    mut poll_once: F,
-) -> Result<AgentResult>
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<AgentStatus>>,
-{
-    loop {
-        let status = poll_once().await?;
-        if status.is_terminal() {
-            return Ok(AgentResult::from_status(status));
-        }
-        tokio::time::sleep(poll_interval).await;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,30 +296,5 @@ mod tests {
         let result = AgentResult::from_status(status);
         assert!(result.error.is_none());
         assert!(result.is_failed());
-    }
-
-    #[tokio::test]
-    async fn test_poll_until_terminal_polls_until_status_is_terminal() {
-        let mut calls = 0;
-        let result = poll_until_terminal(std::time::Duration::from_millis(1), || {
-            calls += 1;
-            let call = calls;
-            async move {
-                if call < 3 {
-                    Ok(AgentStatus::from_response("exec-10", &json!({"status": "RUNNING"})))
-                } else {
-                    Ok(AgentStatus::from_response(
-                        "exec-10",
-                        &json!({"status": "COMPLETED", "isComplete": true, "output": {"result": "ok"}}),
-                    ))
-                }
-            }
-        })
-        .await
-        .unwrap();
-
-        assert_eq!(calls, 3);
-        assert_eq!(result.output, json!({"result": "ok"}));
-        assert!(result.is_success());
     }
 }

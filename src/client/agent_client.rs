@@ -29,6 +29,15 @@ impl AgentClient {
         Self { api }
     }
 
+    /// Get a [`crate::client::WorkflowClient`] over the same underlying [`ApiClient`] -- an
+    /// agent execution *is* a Conductor workflow, so its task-level detail (used by
+    /// [`crate::agents::AgentHandle::join`]'s stall detection) comes from the ordinary
+    /// workflow-inspection API, not a separate agent-specific one.
+    #[must_use]
+    pub fn workflow_client(&self) -> crate::client::WorkflowClient {
+        crate::client::WorkflowClient::new(self.api.clone())
+    }
+
     /// Compile an agent definition into a Conductor workflow, without deploying it.
     /// `POST /agent/compile`.
     ///

@@ -97,6 +97,36 @@ pub enum ConductorError {
     #[cfg(feature = "agents")]
     #[error("Terminal tool error: {0}")]
     TerminalTool(String),
+
+    /// [`crate::agents::AgentHandle::join`] detected a task stuck `SCHEDULED` with no worker
+    /// ever polling it, past the configured stall threshold -- matching python-sdk's
+    /// `WorkerStallError` (`runtime/_liveness.py`), with `StallPolicy::Raise` selected. See
+    /// [`StalledTaskInfo`] and `docs/agents/development-waves.md`'s Wave 8 notes on why this is
+    /// a narrower check than python's domain-scoped one (rust has no per-execution worker
+    /// domain to scope by).
+    #[cfg(feature = "agents")]
+    #[error(
+        "Worker stall detected on execution {execution_id}: {} task(s) queued with no poller",
+        .stalled_tasks.len()
+    )]
+    WorkerStall {
+        execution_id: String,
+        stalled_tasks: Vec<StalledTaskInfo>,
+    },
+}
+
+/// One `SCHEDULED` task that has been queued past the stall threshold with `poll_count == 0`
+/// -- i.e. no worker has ever polled for it. Carried by
+/// [`ConductorError::WorkerStall`]. See `docs/agents/development-waves.md`'s Wave 8.
+#[cfg(feature = "agents")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct StalledTaskInfo {
+    /// The task definition name (task type) that's stuck.
+    pub task_def_name: String,
+    /// The specific stuck task's ID.
+    pub task_id: String,
+    /// How long it's been queued, in seconds.
+    pub seconds_queued: f64,
 }
 
 impl ConductorError {

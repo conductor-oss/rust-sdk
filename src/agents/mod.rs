@@ -26,6 +26,7 @@ mod guardrail;
 mod handle;
 #[cfg(feature = "jupyter")]
 mod jupyter_executor;
+mod liveness;
 mod mcp_discovery;
 mod memory;
 mod ocg;
@@ -71,6 +72,7 @@ pub use guardrail::{
 pub use handle::AgentHandle;
 #[cfg(feature = "jupyter")]
 pub use jupyter_executor::JupyterCodeExecutor;
+pub use liveness::StallPolicy;
 pub use mcp_discovery::{
     clear_mcp_discovery_cache, discover_mcp_tools, expand_mcp_tool_def, DiscoveredMcpTool,
 };
