@@ -1156,8 +1156,10 @@ impl AgentRuntime {
     /// [`AgentDef`] doesn't model that concept yet — so every sub-agent is recursed into
     /// unconditionally.
     ///
-    /// Blocks for as long as the underlying [`TaskHandler::start`] keeps its runners alive; call
-    /// [`AgentRuntime::shutdown`] (from another task) to stop them.
+    /// Registers workers and spawns their polling loops in the background, then returns --
+    /// [`TaskHandler::start`] only blocks long enough to register/spawn, not for the runners'
+    /// whole lifetime. Call [`AgentRuntime::shutdown`] (from another task, once this runtime is
+    /// no longer needed) to stop them.
     ///
     /// # Errors
     ///
@@ -1165,6 +1167,40 @@ impl AgentRuntime {
     pub async fn serve(&mut self, agent: &AgentDef) -> Result<()> {
         self.register_agent_workers(agent);
         self.task_handler.start().await
+    }
+
+    /// Re-attach to an execution this runtime didn't itself start -- typically after a process
+    /// restart, since the execution is durable on the server regardless of which process
+    /// started it. Registers `agent`'s local tool workers (identically to
+    /// [`AgentRuntime::serve`]) and starts them polling, then returns an [`AgentHandle`] bound
+    /// to `execution_id`.
+    ///
+    /// Call once per runtime, before it has already registered workers via
+    /// [`AgentRuntime::serve`]/[`AgentRuntime::start`] for a different execution of the same
+    /// `agent` -- calling it twice (or alongside `serve`) on the same runtime instance would
+    /// register duplicate workers for the same task types, exactly as calling `serve` itself
+    /// twice would.
+    ///
+    /// Narrower than python-sdk's `AgentRuntime.resume`: python extracts the execution's
+    /// per-run worker domain from its `taskToDomain` mapping and re-registers workers scoped to
+    /// that domain, because each stateful python execution gets a random per-run domain. This
+    /// crate's worker registration (`register_agent_workers`) has no equivalent per-execution
+    /// domain concept at all -- workers are always registered by task-type name alone, shared
+    /// across every concurrent execution of the same agent -- so there is no domain to extract
+    /// or re-apply here.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Worker`] if `agent` (and its sub-agent tree)
+    /// registers no workers -- see [`TaskHandler::start`].
+    pub async fn resume(
+        &mut self,
+        execution_id: impl Into<String>,
+        agent: &AgentDef,
+    ) -> Result<AgentHandle> {
+        self.register_agent_workers(agent);
+        self.task_handler.start().await?;
+        Ok(AgentHandle::new(self.agent_client.clone(), execution_id))
     }
 
     /// Registers every worker [`AgentRuntime::serve`]'s doc comment describes for `agent` alone,
@@ -1372,6 +1408,30 @@ mod tests {
         let config = Configuration::new("http://localhost:8080/api");
         let runtime = AgentRuntime::new(config);
         runtime.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_resume_registers_workers_and_returns_a_handle_for_the_given_execution_id() {
+        let mock_server = wiremock::MockServer::start().await;
+        let config = Configuration::new(format!("{}/api", mock_server.uri()));
+        let mut runtime = AgentRuntime::new(config).unwrap();
+
+        let agent = AgentDef::new("resumable_agent")
+            .unwrap()
+            .with_tool(ToolDef::function::<Value, _, _>(
+                "my_tool",
+                "a test tool",
+                serde_json::json!({"type": "object"}),
+                |_args: Value| async move { Ok(Value::Null) },
+            ));
+
+        let handle = runtime.resume("exec-existing-123", &agent).await.unwrap();
+        assert_eq!(handle.execution_id(), "exec-existing-123");
+
+        // Not calling `runtime.shutdown()`: this test's #[tokio::test] runtime drops (and with
+        // it, aborts) the poller task `resume` spawned as soon as this function returns, which
+        // is faster and just as clean here as a graceful stop -- there's no real in-flight work
+        // to drain against a mock server this test never registered a poll response on.
     }
 
     /// `compile()`/`deploy()`/`start()` all build their outgoing payload around
