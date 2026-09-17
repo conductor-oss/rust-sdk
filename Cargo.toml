@@ -278,9 +278,6 @@ futures = "0.3"
 # Environment/Config
 dotenvy = "0.15"
 
-# Derive macros for worker functions
-inventory = "0.3"
-
 # JSON Schema generation
 schemars = "0.8"
 

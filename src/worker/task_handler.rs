@@ -57,6 +57,20 @@ impl TaskHandler {
     }
 
     /// Add a worker to the handler.
+    ///
+    /// Registration is always explicit -- there is no scan-a-package auto-discovery here,
+    /// unlike python-sdk's `worker_loader.py`/`runtime/discovery.py`. Python needs that because
+    /// it has no compile-time registry to lean on; Rust's callers already write out every
+    /// `TaskDef`/`AgentDef`/`ToolDef` by hand at a well-typed call site, so scanning for them
+    /// would only add indirection, not remove real boilerplate. A crate-level `inventory`
+    /// dependency was carried for a while in anticipation of a `#[worker]`-style attribute macro
+    /// doing `inventory::submit!`-based collection instead, but was removed unused (Wave 8):
+    /// besides never having a caller, that approach has a real sharp edge `inventory` itself
+    /// documents -- registrations only get linked in if the registering crate is a *direct*
+    /// dependency of the final binary, which link-time dead-code elimination can silently defeat
+    /// depending on build settings. `add_worker`/`add_workers` (and
+    /// [`TaskHandlerBuilder::worker`]/[`TaskHandlerBuilder::workers`]) staying explicit sidesteps
+    /// that class of bug entirely.
     pub fn add_worker(&mut self, worker: impl Worker + 'static) {
         self.workers.push(Arc::new(worker));
     }
