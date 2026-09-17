@@ -434,14 +434,30 @@ pub enum AgentEvent {
     ToolCall { execution_id: String, tool_name: String, args: Value },
     ToolResult { execution_id: String, tool_name: String, result: Value },
     Handoff { execution_id: String, target: String },
-    Waiting { execution_id: String, tool_name: String, args: Value },   // HITL pause
-    Message { execution_id: String, content: String },
+    Waiting { execution_id: String, pending_tool: Value },   // HITL pause, freeform payload
     GuardrailPass { execution_id: String, guardrail_name: String },
-    GuardrailFail { execution_id: String, guardrail_name: String, message: String },
-    Error { execution_id: String, message: String },
+    GuardrailFail { execution_id: String, guardrail_name: String, content: String },
+    Error { execution_id: String, content: String, tool_name: String },
     Done { execution_id: String, output: Value },
+    ContextCondensed { execution_id: String, content: String, messages_before: i32, messages_after: i32, exchanges_condensed: i32 },
+    SubagentStart { execution_id: String, target: String, content: String },
+    SubagentStop { execution_id: String, target: String, result: String },
 }
 ```
+
+**Corrected in Wave 8** (`docs/agents/development-waves.md`): the shape shown above is what actually
+shipped, verified directly against the server's `AgentSSEEvent.java` DTO and every real call site
+in `AgentEventListener.java`/`AgentHumanTask.java` — not this section's original sketch, which had
+drifted from reality on two fronts. First, the originally-shipped code implemented an even smaller,
+different 5-variant set (`Message`/`Progress`/`Waiting`/`Done`/`Error`) than even this sketch
+proposed — `Message`/`Progress` turned out to correspond to no real server event at all, and
+`Waiting`/`Error`'s field shapes here (`tool_name`/`args` directly on `Waiting`; a bare `message`
+on `Error`) don't match what the server actually sends either (a single freeform `pending_tool` on
+`Waiting`; `content`/`tool_name` on `Error`, never a field named `message`). Second, `Waiting`'s
+payload is genuinely freeform (mixes `snake_case`/`camelCase` keys depending on which are present),
+so it's modeled as a raw `Value`, not a typed `args: Value` field. `ContextCondensed`/
+`SubagentStart`/`SubagentStop` are real server event kinds neither this original sketch nor
+python's own `EventType` enum account for.
 
 Preserve the one load-bearing subtlety: HITL responses (`respond`/`approve`/`reject`) must carry
 the **event's `execution_id`**, not the handle's top-level one, because

@@ -14,6 +14,39 @@
 //! `id:`/`retry:` lines and `:`-prefixed comments this parser ignores) is the standard documented
 //! at <https://html.spec.whatwg.org/multipage/server-sent-events.html>; only the `data:` payload
 //! (parsed as this crate's own `AgentEvent` JSON shape) is meaningful here.
+//!
+//! # Variant shapes are verified against the real server, not python
+//!
+//! The previous version of this enum (`Message`/`Progress`/`Waiting`/`Done`/`Error`) was checked
+//! against python's `EventType`, which turned out to itself be an incomplete/inaccurate proxy for
+//! the real wire format. Re-derived from the actual source of truth instead --
+//! `AgentSSEEvent.java` (the DTO the server serializes) and `AgentEventListener.java`/
+//! `AgentHumanTask.java` (every real call site that constructs one) -- which surfaced two kinds
+//! of bug in the old enum, not just missing coverage:
+//!
+//! - `Message`/`Progress` don't correspond to anything the real server ever sends -- there is no
+//!   `AgentSSEEvent.message(...)`/`.progress(...)` factory, and no emit call site anywhere in
+//!   `AgentEventListener`/`AgentHumanTask` sends either `type`. They were never reachable against
+//!   a real server.
+//! - `Waiting`'s old shape (`tool_name`/`args` fields directly on the event) and `Error`'s old
+//!   shape (a field literally named `error`) don't match the real payload either: the server's
+//!   `waiting` event carries a single freeform `pendingTool` map (see [`AgentEvent::Waiting`]'s
+//!   doc), and its `error` event carries `content`/`toolName`, never a field named `error`. Any
+//!   caller that received a real `waiting`/`error` event from an actual server would have failed
+//!   to deserialize under the old enum.
+//!
+//! The current set below is exhaustively every `AgentSSEEvent` factory method that exists
+//! server-side today, each variant's fields matching that factory's parameters exactly --
+//! including three (`ContextCondensed`/`SubagentStart`/`SubagentStop`) that aren't in python's own
+//! `EventType` either, so this is not just "catch up to python."
+//!
+//! # Known limitation: no forward-compatible catch-all
+//!
+//! This enum has no `Unknown`/`#[serde(other)]` fallback variant, so a server that ever adds a
+//! 13th event kind would make [`AgentStream::next`] return a deserialization `Err` for it,
+//! stopping iteration. This is a pre-existing property of this design (true of the old 5-variant
+//! enum too), not something newly introduced fixing the shapes above -- left as a separate,
+//! not-yet-requested robustness improvement rather than folded into this fix.
 
 use futures::{StreamExt as _, TryStreamExt as _};
 use serde::{Deserialize, Serialize};
@@ -27,28 +60,81 @@ use crate::error::{ConductorError, Result};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentEvent {
-    /// A chat/log message emitted during the run.
-    #[serde(rename = "message")]
-    Message {
+    /// An LLM call started for a task. `content` is that task's reference name.
+    #[serde(rename = "thinking")]
+    Thinking {
         #[serde(rename = "executionId")]
         execution_id: String,
-        content: Value,
+        content: String,
     },
-    /// A lifecycle progress update (e.g. "model call started").
-    #[serde(rename = "progress")]
-    Progress {
-        #[serde(rename = "executionId")]
-        execution_id: String,
-        message: String,
-    },
-    /// The execution is paused on a human-in-the-loop tool call awaiting a decision.
-    #[serde(rename = "waiting")]
-    Waiting {
+    /// A tool is about to be invoked.
+    #[serde(rename = "tool_call")]
+    ToolCall {
         #[serde(rename = "executionId")]
         execution_id: String,
         #[serde(rename = "toolName")]
         tool_name: String,
         args: Value,
+    },
+    /// A tool call finished.
+    #[serde(rename = "tool_result")]
+    ToolResult {
+        #[serde(rename = "executionId")]
+        execution_id: String,
+        #[serde(rename = "toolName")]
+        tool_name: String,
+        result: Value,
+    },
+    /// Execution handed off to a sub-agent/sub-workflow.
+    #[serde(rename = "handoff")]
+    Handoff {
+        #[serde(rename = "executionId")]
+        execution_id: String,
+        target: String,
+    },
+    /// The execution is paused awaiting input (a human-in-the-loop tool call, or a
+    /// server-side workflow pause).
+    ///
+    /// `pending_tool` is deliberately a raw [`Value`], not a typed struct: the real server DTO
+    /// (`AgentSSEEvent.pendingTool`, built by `AgentHumanTask.start()`) mixes `snake_case` and
+    /// `camelCase` keys (`tool_name`, `parameters`, `toolCalls`, `response_schema`,
+    /// `response_ui_schema`, `taskRefName`) and only conditionally includes several of them --
+    /// there's no single fixed schema to model faithfully. Can also be an empty object (a
+    /// workflow-level pause with no specific pending tool).
+    #[serde(rename = "waiting")]
+    Waiting {
+        #[serde(rename = "executionId")]
+        execution_id: String,
+        #[serde(rename = "pendingTool", default)]
+        pending_tool: Value,
+    },
+    /// A guardrail check passed.
+    #[serde(rename = "guardrail_pass")]
+    GuardrailPass {
+        #[serde(rename = "executionId")]
+        execution_id: String,
+        #[serde(rename = "guardrailName")]
+        guardrail_name: String,
+    },
+    /// A guardrail check failed. `content` is the guardrail's failure message.
+    #[serde(rename = "guardrail_fail")]
+    GuardrailFail {
+        #[serde(rename = "executionId")]
+        execution_id: String,
+        #[serde(rename = "guardrailName")]
+        guardrail_name: String,
+        content: String,
+    },
+    /// A task failed or timed out, or the workflow was terminated. `content` is the failure
+    /// reason; `tool_name` is the task/workflow reference name it happened on (literally
+    /// `"workflow"` for a workflow-level termination, matching the server's own convention).
+    #[serde(rename = "error")]
+    Error {
+        #[serde(rename = "executionId")]
+        execution_id: String,
+        content: String,
+        #[serde(rename = "toolName")]
+        tool_name: String,
     },
     /// The execution finished successfully.
     #[serde(rename = "done")]
@@ -57,12 +143,35 @@ pub enum AgentEvent {
         execution_id: String,
         output: Value,
     },
-    /// The execution failed.
-    #[serde(rename = "error")]
-    Error {
+    /// The conversation's context window was condensed/summarized. `content` is what triggered
+    /// the condensation.
+    #[serde(rename = "context_condensed")]
+    ContextCondensed {
         #[serde(rename = "executionId")]
         execution_id: String,
-        error: String,
+        content: String,
+        #[serde(rename = "messagesBefore")]
+        messages_before: i32,
+        #[serde(rename = "messagesAfter")]
+        messages_after: i32,
+        #[serde(rename = "exchangesCondensed")]
+        exchanges_condensed: i32,
+    },
+    /// A sub-agent execution started. `content` is the prompt it was given.
+    #[serde(rename = "subagent_start")]
+    SubagentStart {
+        #[serde(rename = "executionId")]
+        execution_id: String,
+        target: String,
+        content: String,
+    },
+    /// A sub-agent execution stopped.
+    #[serde(rename = "subagent_stop")]
+    SubagentStop {
+        #[serde(rename = "executionId")]
+        execution_id: String,
+        target: String,
+        result: String,
     },
 }
 
@@ -71,11 +180,18 @@ impl AgentEvent {
     #[must_use]
     pub fn execution_id(&self) -> &str {
         match self {
-            AgentEvent::Message { execution_id, .. }
-            | AgentEvent::Progress { execution_id, .. }
+            AgentEvent::Thinking { execution_id, .. }
+            | AgentEvent::ToolCall { execution_id, .. }
+            | AgentEvent::ToolResult { execution_id, .. }
+            | AgentEvent::Handoff { execution_id, .. }
             | AgentEvent::Waiting { execution_id, .. }
+            | AgentEvent::GuardrailPass { execution_id, .. }
+            | AgentEvent::GuardrailFail { execution_id, .. }
+            | AgentEvent::Error { execution_id, .. }
             | AgentEvent::Done { execution_id, .. }
-            | AgentEvent::Error { execution_id, .. } => execution_id,
+            | AgentEvent::ContextCondensed { execution_id, .. }
+            | AgentEvent::SubagentStart { execution_id, .. }
+            | AgentEvent::SubagentStop { execution_id, .. } => execution_id,
         }
     }
 }
@@ -170,7 +286,7 @@ fn parse_event(data: &str) -> Result<AgentEvent> {
 /// let mut stream = agent_client.stream(&execution_id).await?.into();
 /// while let Some(event) = stream.next().await.transpose()? {
 ///     match event {
-///         AgentEvent::Waiting { execution_id, tool_name, .. } => { /* ... */ }
+///         AgentEvent::Waiting { execution_id, pending_tool, .. } => { /* ... */ }
 ///         AgentEvent::Done { output, .. } => println!("{output}"),
 ///         _ => {}
 ///     }
@@ -225,8 +341,7 @@ mod tests {
         serde_json::json!({
             "type": "waiting",
             "executionId": execution_id,
-            "toolName": "issue_refund",
-            "args": {"amount": 42.0}
+            "pendingTool": {"tool_name": "issue_refund", "parameters": {"amount": 42.0}}
         })
         .to_string()
     }
@@ -241,8 +356,10 @@ mod tests {
             event,
             AgentEvent::Waiting {
                 execution_id: "exec-1".to_owned(),
-                tool_name: "issue_refund".to_owned(),
-                args: serde_json::json!({"amount": 42.0}),
+                pending_tool: serde_json::json!({
+                    "tool_name": "issue_refund",
+                    "parameters": {"amount": 42.0}
+                }),
             }
         );
         assert_eq!(event.execution_id(), "exec-1");
@@ -270,15 +387,15 @@ mod tests {
     #[test]
     fn test_decoder_handles_multiple_data_lines_in_one_frame() {
         let mut decoder = SseDecoder::new();
-        decoder.push(b"data: {\"type\":\"message\",\n");
+        decoder.push(b"data: {\"type\":\"thinking\",\n");
         decoder.push(b"data: \"executionId\":\"exec-3\",\"content\":\"hi\"}\n\n");
         let data = decoder.next_data().expect("frame should be complete");
         let event = parse_event(&data).unwrap();
         assert_eq!(
             event,
-            AgentEvent::Message {
+            AgentEvent::Thinking {
                 execution_id: "exec-3".to_owned(),
-                content: Value::String("hi".to_owned()),
+                content: "hi".to_owned(),
             }
         );
     }
@@ -336,7 +453,8 @@ mod tests {
         let json = serde_json::json!({
             "type": "error",
             "executionId": "exec-7",
-            "error": "tool timed out"
+            "content": "tool timed out",
+            "toolName": "issue_refund_ref"
         })
         .to_string();
         let event = parse_event(&json).unwrap();
@@ -344,25 +462,169 @@ mod tests {
             event,
             AgentEvent::Error {
                 execution_id: "exec-7".to_owned(),
-                error: "tool timed out".to_owned(),
+                content: "tool timed out".to_owned(),
+                tool_name: "issue_refund_ref".to_owned(),
             }
         );
     }
 
     #[test]
-    fn test_parse_event_progress_variant() {
+    fn test_parse_event_thinking_variant() {
         let json = serde_json::json!({
-            "type": "progress",
+            "type": "thinking",
             "executionId": "exec-8",
-            "message": "calling model"
+            "content": "llm_call_ref"
         })
         .to_string();
         let event = parse_event(&json).unwrap();
         assert_eq!(
             event,
-            AgentEvent::Progress {
+            AgentEvent::Thinking {
                 execution_id: "exec-8".to_owned(),
-                message: "calling model".to_owned(),
+                content: "llm_call_ref".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_event_tool_call_and_tool_result_variants() {
+        let call_json = serde_json::json!({
+            "type": "tool_call",
+            "executionId": "exec-9",
+            "toolName": "issue_refund",
+            "args": {"amount": 42.0}
+        })
+        .to_string();
+        assert_eq!(
+            parse_event(&call_json).unwrap(),
+            AgentEvent::ToolCall {
+                execution_id: "exec-9".to_owned(),
+                tool_name: "issue_refund".to_owned(),
+                args: serde_json::json!({"amount": 42.0}),
+            }
+        );
+
+        let result_json = serde_json::json!({
+            "type": "tool_result",
+            "executionId": "exec-9",
+            "toolName": "issue_refund",
+            "result": {"refunded": true}
+        })
+        .to_string();
+        assert_eq!(
+            parse_event(&result_json).unwrap(),
+            AgentEvent::ToolResult {
+                execution_id: "exec-9".to_owned(),
+                tool_name: "issue_refund".to_owned(),
+                result: serde_json::json!({"refunded": true}),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_event_handoff_variant() {
+        let json = serde_json::json!({
+            "type": "handoff",
+            "executionId": "exec-10",
+            "target": "billing_agent"
+        })
+        .to_string();
+        assert_eq!(
+            parse_event(&json).unwrap(),
+            AgentEvent::Handoff {
+                execution_id: "exec-10".to_owned(),
+                target: "billing_agent".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_event_guardrail_pass_and_fail_variants() {
+        let pass_json = serde_json::json!({
+            "type": "guardrail_pass",
+            "executionId": "exec-11",
+            "guardrailName": "no_pii"
+        })
+        .to_string();
+        assert_eq!(
+            parse_event(&pass_json).unwrap(),
+            AgentEvent::GuardrailPass {
+                execution_id: "exec-11".to_owned(),
+                guardrail_name: "no_pii".to_owned(),
+            }
+        );
+
+        let fail_json = serde_json::json!({
+            "type": "guardrail_fail",
+            "executionId": "exec-11",
+            "guardrailName": "no_pii",
+            "content": "found an SSN"
+        })
+        .to_string();
+        assert_eq!(
+            parse_event(&fail_json).unwrap(),
+            AgentEvent::GuardrailFail {
+                execution_id: "exec-11".to_owned(),
+                guardrail_name: "no_pii".to_owned(),
+                content: "found an SSN".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_event_context_condensed_variant() {
+        let json = serde_json::json!({
+            "type": "context_condensed",
+            "executionId": "exec-12",
+            "content": "token_limit",
+            "messagesBefore": 40,
+            "messagesAfter": 10,
+            "exchangesCondensed": 15
+        })
+        .to_string();
+        assert_eq!(
+            parse_event(&json).unwrap(),
+            AgentEvent::ContextCondensed {
+                execution_id: "exec-12".to_owned(),
+                content: "token_limit".to_owned(),
+                messages_before: 40,
+                messages_after: 10,
+                exchanges_condensed: 15,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_event_subagent_start_and_stop_variants() {
+        let start_json = serde_json::json!({
+            "type": "subagent_start",
+            "executionId": "exec-13",
+            "target": "researcher",
+            "content": "find the latest price"
+        })
+        .to_string();
+        assert_eq!(
+            parse_event(&start_json).unwrap(),
+            AgentEvent::SubagentStart {
+                execution_id: "exec-13".to_owned(),
+                target: "researcher".to_owned(),
+                content: "find the latest price".to_owned(),
+            }
+        );
+
+        let stop_json = serde_json::json!({
+            "type": "subagent_stop",
+            "executionId": "exec-13",
+            "target": "researcher",
+            "result": "$42"
+        })
+        .to_string();
+        assert_eq!(
+            parse_event(&stop_json).unwrap(),
+            AgentEvent::SubagentStop {
+                execution_id: "exec-13".to_owned(),
+                target: "researcher".to_owned(),
+                result: "$42".to_owned(),
             }
         );
     }

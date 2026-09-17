@@ -224,8 +224,10 @@ let handle = runtime.start(&agent, input).await?;
 let mut stream = handle.stream().await?;
 while let Some(event) = stream.next().await.transpose()? {
     match event {
-        AgentEvent::Waiting { execution_id, tool_name, args } if tool_name == "issue_refund" => {
-            if args["amount"].as_f64().unwrap_or(0.0) < 100.0 {
+        AgentEvent::Waiting { execution_id, pending_tool }
+            if pending_tool["tool_name"] == "issue_refund" =>
+        {
+            if pending_tool["parameters"]["amount"].as_f64().unwrap_or(0.0) < 100.0 {
                 handle.approve(&execution_id).await?;
             } else {
                 handle.reject(&execution_id, "Needs a manager").await?;
