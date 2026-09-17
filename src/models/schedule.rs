@@ -29,6 +29,11 @@ pub struct WorkflowSchedule {
     #[serde(default)]
     pub paused: bool,
 
+    /// Why the schedule is paused, if it was paused with a reason. Server-populated;
+    /// there is no way to set this on save -- see [`SaveScheduleRequest`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused_reason: Option<String>,
+
     /// Whether to run tasks that were missed during the paused period.
     #[serde(default)]
     pub run_catchup_schedule_instances: bool,
@@ -45,6 +50,10 @@ pub struct WorkflowSchedule {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zone_id: Option<String>,
 
+    /// Human-readable description.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
     /// Create time (epoch ms).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_time: Option<i64>,
@@ -53,13 +62,19 @@ pub struct WorkflowSchedule {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
 
-    /// Update time (epoch ms).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Update time (epoch ms). Server field is `updatedTime`, not the `updateTime`
+    /// `rename_all = "camelCase"` would derive from this name -- confirmed against
+    /// `WorkflowSchedule.java`'s actual field name.
+    #[serde(rename = "updatedTime", skip_serializing_if = "Option::is_none")]
     pub update_time: Option<i64>,
 
     /// Updated by user.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
+
+    /// Next scheduled run time (epoch ms), if the server has computed one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_run_time: Option<i64>,
 }
 
 /// Start workflow request for schedules.
@@ -126,6 +141,10 @@ pub struct SaveScheduleRequest {
     /// Timezone.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zone_id: Option<String>,
+
+    /// Human-readable description.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 impl SaveScheduleRequest {
@@ -171,6 +190,34 @@ impl SaveScheduleRequest {
     #[must_use]
     pub fn paused(mut self, paused: bool) -> Self {
         self.paused = paused;
+        self
+    }
+
+    /// Set whether missed fires should be replayed on resume.
+    #[must_use]
+    pub fn with_catchup(mut self, run_catchup_schedule_instances: bool) -> Self {
+        self.run_catchup_schedule_instances = run_catchup_schedule_instances;
+        self
+    }
+
+    /// Set the schedule's active window start (epoch ms).
+    #[must_use]
+    pub fn with_start_time(mut self, schedule_start_time: i64) -> Self {
+        self.schedule_start_time = Some(schedule_start_time);
+        self
+    }
+
+    /// Set the schedule's active window end (epoch ms).
+    #[must_use]
+    pub fn with_end_time(mut self, schedule_end_time: i64) -> Self {
+        self.schedule_end_time = Some(schedule_end_time);
+        self
+    }
+
+    /// Set a human-readable description.
+    #[must_use]
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
         self
     }
 }

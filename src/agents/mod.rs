@@ -33,6 +33,7 @@ mod ocg;
 mod plan;
 mod result;
 mod runtime;
+mod schedule;
 mod semantic_memory;
 mod serializer;
 mod skill;
@@ -85,6 +86,7 @@ pub use plan::{
 };
 pub use result::{AgentResult, AgentStatus, ToolCallRecord};
 pub use runtime::AgentRuntime;
+pub use schedule::{list_schedules, wire_name, Schedule, ScheduleInfo};
 pub use semantic_memory::{InMemoryStore, MemoryEntry, MemoryStore, SemanticMemory};
 pub use serializer::AgentConfigSerializer;
 pub use skill::{

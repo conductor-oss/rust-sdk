@@ -38,6 +38,14 @@ impl AgentClient {
         crate::client::WorkflowClient::new(self.api.clone())
     }
 
+    /// Get a [`crate::client::SchedulerClient`] over the same underlying [`ApiClient`] -- used by
+    /// [`crate::agents::AgentRuntime::deploy_with_schedules`] to reconcile an agent's cron
+    /// schedules alongside its workflow definition.
+    #[must_use]
+    pub fn scheduler_client(&self) -> crate::client::SchedulerClient {
+        crate::client::SchedulerClient::new(self.api.clone())
+    }
+
     /// Compile an agent definition into a Conductor workflow, without deploying it.
     /// `POST /agent/compile`.
     ///

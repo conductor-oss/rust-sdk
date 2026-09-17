@@ -30,6 +30,7 @@ use super::def::{sanitize_for_task_name, AgentDef};
 use super::guardrail::Guardrail;
 use super::handle::AgentHandle;
 use super::result::AgentResult;
+use super::schedule::{self, Schedule};
 use super::serializer::AgentConfigSerializer;
 use super::termination::TerminationCondition;
 use super::tool::{ToolContext, ToolDef, ToolHandler};
@@ -971,6 +972,40 @@ impl AgentRuntime {
         self.agent_client.deploy_agent(&payload).await
     }
 
+    /// [`AgentRuntime::deploy`], then reconcile the agent's cron schedules in the same call --
+    /// matches python's `deploy(agent, schedules=...)`.
+    ///
+    /// Unlike python, this crate's `deploy` only ever takes one agent (see its doc comment), so
+    /// python's runtime check that `schedules` requires "exactly one agent" has no equivalent
+    /// here -- the signature already guarantees it.
+    ///
+    /// `schedules` follows the same tri-state contract as python's `deploy(..., schedules=...)`:
+    /// - `None`: leave this agent's existing schedules untouched (the default -- this method
+    ///   behaves exactly like [`AgentRuntime::deploy`] if you never pass anything else).
+    /// - `Some(&[])`: delete every schedule currently registered for this agent.
+    /// - `Some(non-empty)`: upsert the listed schedules; delete any existing schedule for this
+    ///   agent that isn't in the list.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`AgentRuntime::deploy`], plus [`crate::error::ConductorError::Agent`] if
+    /// `schedules` contains a duplicate [`Schedule::name`] or a schedule whose `start_at` is not
+    /// strictly before its `end_at`.
+    pub async fn deploy_with_schedules(
+        &self,
+        agent: &AgentDef,
+        schedules: Option<&[Schedule]>,
+    ) -> Result<Value> {
+        let response = self.deploy(agent).await?;
+        schedule::reconcile(
+            &self.agent_client.scheduler_client(),
+            &agent.name,
+            schedules,
+        )
+        .await?;
+        Ok(response)
+    }
+
     /// Start an agent execution without blocking for completion.
     ///
     /// Serializes `agent`, merges `input` into the top-level `AgentStartRequest` fields the
@@ -1497,6 +1532,106 @@ mod tests {
     fn test_extract_execution_id_reads_snake_case_fallback() {
         let id = extract_execution_id(&serde_json::json!({"execution_id": "exec-2"})).unwrap();
         assert_eq!(id, "exec-2");
+    }
+
+    #[tokio::test]
+    async fn test_deploy_with_schedules_none_only_deploys() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/api/agent/deploy"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "registeredName": "billing_agent",
+                })),
+            )
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = Configuration::new(format!("{}/api", mock_server.uri()));
+        let runtime = AgentRuntime::new(config).unwrap();
+        let agent = AgentDef::new("billing_agent").unwrap();
+
+        runtime
+            .deploy_with_schedules(&agent, None)
+            .await
+            .expect("deploy_with_schedules failed");
+
+        // No scheduler mocks were registered above and `expect(1)` is asserted on drop: if
+        // `deploy_with_schedules` touched the scheduler at all with `schedules = None`, either
+        // this test would panic on an unmatched request or the mount's own request count would
+        // be wrong -- either way, catches a regression that starts reconciling unconditionally.
+    }
+
+    #[tokio::test]
+    async fn test_deploy_with_schedules_upserts_and_prunes() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/api/agent/deploy"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "registeredName": "billing_agent",
+                })),
+            )
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .and(wiremock::matchers::path("/api/scheduler/schedules"))
+            .and(wiremock::matchers::query_param(
+                "workflowName",
+                "billing_agent",
+            ))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                    {
+                        "name": "billing_agent-stale",
+                        "cronExpression": "0 0 * * * *",
+                        "workflowName": "billing_agent",
+                    },
+                    {
+                        "name": "billing_agent-daily",
+                        "cronExpression": "0 0 * * * *",
+                        "workflowName": "billing_agent",
+                    },
+                ])),
+            )
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        wiremock::Mock::given(wiremock::matchers::method("DELETE"))
+            .and(wiremock::matchers::path(
+                "/api/scheduler/schedules/billing_agent-stale",
+            ))
+            .respond_with(wiremock::ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/api/scheduler/schedules"))
+            .respond_with(wiremock::ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = Configuration::new(format!("{}/api", mock_server.uri()));
+        let runtime = AgentRuntime::new(config).unwrap();
+        let agent = AgentDef::new("billing_agent").unwrap();
+        let schedules = vec![Schedule::new("daily", "0 0 * * * *").unwrap()];
+
+        runtime
+            .deploy_with_schedules(&agent, Some(&schedules))
+            .await
+            .expect("deploy_with_schedules failed");
+
+        // `billing_agent-stale` (not in `schedules`) must have been pruned via the DELETE mock
+        // above, and `billing_agent-daily` upserted via the POST mock -- both `expect(1)`s are
+        // asserted on drop.
     }
 
     #[test]
