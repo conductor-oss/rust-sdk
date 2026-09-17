@@ -13,6 +13,7 @@ mod prompt_client;
 mod scheduler_client;
 mod schema_client;
 mod secret_client;
+mod service_registry_client;
 mod task_client;
 mod workflow_client;
 
@@ -28,6 +29,7 @@ pub use prompt_client::PromptClient;
 pub use scheduler_client::SchedulerClient;
 pub use schema_client::SchemaClient;
 pub use secret_client::SecretClient;
+pub use service_registry_client::ServiceRegistryClient;
 pub use task_client::TaskClient;
 pub use workflow_client::{
     CorrelationIdsSearchRequest, SearchResult, SignalResponse, TaskMock, TestWorkflowRequest,

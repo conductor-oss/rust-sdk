@@ -8,6 +8,7 @@ mod rerun_workflow_request;
 mod schedule;
 mod schema;
 mod secret;
+mod service_registry;
 pub mod task;
 mod task_def;
 mod task_result;
@@ -28,6 +29,10 @@ pub use schedule::{
 };
 pub use schema::SchemaDef;
 pub use secret::MetadataTag;
+pub use service_registry::{
+    CircuitBreakerConfig, CircuitBreakerTransitionResponse, ProtoRegistryEntry, RequestParam,
+    ServiceMethod, ServiceRegistry, ServiceRegistryConfig,
+};
 pub use task::{Task, TaskExecLog, TaskStatus};
 pub use task_def::{RetryLogic, TaskDef, TimeoutPolicy};
 pub use task_result::{TaskInProgress, TaskResult, TaskResultStatus};

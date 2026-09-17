@@ -10,7 +10,8 @@ use crate::http::ApiClient;
 use super::AgentClient;
 use super::{
     AuthorizationClient, EventClient, IntegrationClient, MetadataClient, OrkesMetadataClient,
-    PromptClient, SchedulerClient, SchemaClient, SecretClient, TaskClient, WorkflowClient,
+    PromptClient, SchedulerClient, SchemaClient, SecretClient, ServiceRegistryClient, TaskClient,
+    WorkflowClient,
 };
 
 /// Main Conductor client combining all API clients.
@@ -219,6 +220,19 @@ impl ConductorClient {
     #[must_use]
     pub fn get_agent_client(&self) -> AgentClient {
         self.agent_client()
+    }
+
+    /// Get the service registry client for managing HTTP/gRPC service
+    /// definitions, methods, proto files, and circuit breakers.
+    #[must_use]
+    pub fn service_registry_client(&self) -> ServiceRegistryClient {
+        ServiceRegistryClient::new(self.api.clone())
+    }
+
+    /// Alias for `service_registry_client()` - matches Python SDK naming.
+    #[must_use]
+    pub fn get_service_registry_client(&self) -> ServiceRegistryClient {
+        self.service_registry_client()
     }
 
     /// Get the underlying API client.

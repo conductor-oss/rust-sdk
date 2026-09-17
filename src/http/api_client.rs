@@ -279,6 +279,69 @@ impl ApiClient {
         }
     }
 
+    /// GET request returning the raw response body as bytes, instead of deserializing it as
+    /// JSON.
+    ///
+    /// For binary (non-JSON) payloads, e.g. protobuf file contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn get_bytes(&self, path: impl Into<ApiPath<'_>>) -> Result<Vec<u8>> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
+
+        let mut request = self.client.get(&url);
+        request = self.add_auth_header(request).await?;
+
+        let response = self
+            .send_observed("GET", p.path, p.metric_uri, request)
+            .await?;
+        let status = response.status();
+
+        if status.is_success() {
+            Ok(response
+                .bytes()
+                .await
+                .map_err(ConductorError::Http)?
+                .to_vec())
+        } else {
+            Err(self.handle_error_response(response).await)
+        }
+    }
+
+    /// POST request with a raw binary body and no response body.
+    ///
+    /// For binary (non-JSON) payloads, e.g. protobuf file contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn post_bytes_no_response(
+        &self,
+        path: impl Into<ApiPath<'_>>,
+        body: Vec<u8>,
+    ) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
+
+        let mut request = self.client.post(&url);
+        request = self.add_auth_header(request).await?;
+        request = request.body(body);
+        request = request.header("Content-Type", "application/octet-stream");
+
+        let response = self
+            .send_observed("POST", p.path, p.metric_uri, request)
+            .await?;
+        let status = response.status();
+
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(self.handle_error_response(response).await)
+        }
+    }
+
     /// POST request.
     ///
     /// # Errors
