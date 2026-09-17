@@ -9,9 +9,9 @@ use crate::http::ApiClient;
 #[cfg(feature = "agents")]
 use super::AgentClient;
 use super::{
-    AuthorizationClient, EventClient, IntegrationClient, MetadataClient, OrkesMetadataClient,
-    PromptClient, SchedulerClient, SchemaClient, SecretClient, ServiceRegistryClient, TaskClient,
-    WorkflowClient,
+    AiOrchestrator, AuthorizationClient, EventClient, IntegrationClient, MetadataClient,
+    OrkesMetadataClient, PromptClient, SchedulerClient, SchemaClient, SecretClient,
+    ServiceRegistryClient, TaskClient, WorkflowClient,
 };
 
 /// Main Conductor client combining all API clients.
@@ -168,6 +168,13 @@ impl ConductorClient {
     #[must_use]
     pub fn get_integration_client(&self) -> IntegrationClient {
         self.integration_client()
+    }
+
+    /// Get the AI orchestrator: a typed convenience layer over `integration_client()`/
+    /// `prompt_client()` for registering LLM/vector-DB integrations and testing prompts.
+    #[must_use]
+    pub fn ai_orchestrator(&self) -> AiOrchestrator {
+        AiOrchestrator::from_api_client(self.api.clone())
     }
 
     /// Get the prompt client for AI prompt templates.

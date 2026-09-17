@@ -1,6 +1,7 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+mod ai_integration;
 mod authorization;
 mod integration;
 mod prompt;
@@ -15,6 +16,10 @@ mod task_result;
 mod workflow;
 mod workflow_def;
 
+pub use ai_integration::{
+    AzureOpenAiConfig, IntegrationConfig, LlmProvider, OpenAiConfig, PineconeConfig, VectorDb,
+    WeaviateConfig,
+};
 pub use authorization::{
     AccessKey, AccessType, ConductorApplication, ConductorUser, CreateOrUpdateApplicationRequest,
     CreatedAccessKey, GrantedPermission, Group, Permission, Role, SubjectRef, SubjectType,
