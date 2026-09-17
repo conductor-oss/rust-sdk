@@ -39,6 +39,7 @@ mod skill;
 mod stream;
 mod swarm;
 mod termination;
+mod testing;
 mod tool;
 mod tracing;
 
@@ -82,7 +83,7 @@ pub use plan::{
     plan_execute, Action, Context, Generate, Op, OpBody, Plan, PlanExecuteOptions, Ref, Step,
     Validation,
 };
-pub use result::{AgentResult, AgentStatus};
+pub use result::{AgentResult, AgentStatus, ToolCallRecord};
 pub use runtime::AgentRuntime;
 pub use semantic_memory::{InMemoryStore, MemoryEntry, MemoryStore, SemanticMemory};
 pub use serializer::AgentConfigSerializer;
@@ -93,6 +94,7 @@ pub use skill::{
 pub use stream::{AgentEvent, AgentStream};
 pub use swarm::{SwarmConditionFn, SwarmContext, SwarmTransition};
 pub use termination::TerminationCondition;
+pub use testing::{expect, mock_run, Expect, ScriptedEvent};
 pub use tool::{ToolContext, ToolDef, ToolHandler, ToolType};
 pub use tracing::{
     agent_run_span, compile_span, handoff_span, is_tracing_enabled, llm_call_span,

@@ -19,10 +19,13 @@
 //!   behavior, reproduced here rather than "fixed", since python is the source of truth).
 //!
 //! Deliberately out of scope here (python's `AgentResult` also has `correlation_id`, `messages`,
-//! `tool_calls`, `token_usage`, `finish_reason`, `sub_results`, `events` — none of which this
-//! crate has an extraction path for yet, e.g. no `_extract_tool_calls`/`_extract_token_usage`
-//! equivalent). Adding those fields with no way to populate them would just be dead weight;
-//! they belong with whatever future work ports that extraction logic.
+//! `token_usage`, `finish_reason`, `sub_results`, `events` — none of which this crate has an
+//! extraction path for yet, e.g. no `_extract_token_usage` equivalent). Adding those fields with
+//! no way to populate them would just be dead weight; they belong with whatever future work
+//! ports that extraction logic. `tool_calls` is the one exception: [`super::testing::mock_run`]
+//! populates it directly from a scripted event sequence rather than extracting it from a live
+//! response, so it's real on a mock-built result even though it's still always empty on one
+//! built via [`AgentResult::from_status`].
 
 use serde_json::Value;
 
@@ -106,10 +109,30 @@ impl AgentStatus {
     }
 }
 
+/// One tool invocation observed during an agent execution: the tool name, the arguments it was
+/// called with, and its result (`None` if the call never got a result, e.g. the mocked/real
+/// execution ended before one arrived). Mirrors the shape of python-sdk's `AgentResult.tool_calls`
+/// dict entries (`{"name": ..., "args": ..., "result": ...}`), as a proper type instead of an
+/// untyped dict-of-dicts.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallRecord {
+    /// The tool's name.
+    pub name: String,
+    /// Arguments the tool was called with.
+    pub args: Value,
+    /// The tool's result, if one was recorded.
+    pub result: Option<Value>,
+}
+
 /// Terminal outcome of an agent execution, returned by `AgentRuntime::run`/`AgentHandle::join`.
 ///
 /// Mirrors the subset of python-sdk's `AgentResult` dataclass this crate can actually populate
-/// today — see the module doc for what's deliberately not ported yet.
+/// today — see the module doc for what's deliberately not ported yet. `tool_calls` is one
+/// exception, added for [`super::testing::mock_run`]: it's always empty on a result built via
+/// [`AgentResult::from_status`] (there's still no extraction path from a live `/status` poll,
+/// same caveat as every other deliberately-omitted field the module doc lists), but real,
+/// scripted data on a result [`super::testing::mock_run`] builds.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentResult {
@@ -129,6 +152,11 @@ pub struct AgentResult {
     /// `"FAILED"` or `"TERMINATED"`. `None` for `"TIMED_OUT"` too — matching python's exact
     /// `if status.status in ("FAILED", "TERMINATED")` check, not "fixed" to also cover timeout.
     pub error: Option<String>,
+
+    /// Tool calls observed during the run, in call order. See the struct doc for why this is
+    /// always empty outside [`super::testing::mock_run`] today.
+    #[serde(default)]
+    pub tool_calls: Vec<ToolCallRecord>,
 }
 
 impl AgentResult {
@@ -145,6 +173,7 @@ impl AgentResult {
             output: status.output,
             status: status.status,
             error,
+            tool_calls: Vec::new(),
         }
     }
 
