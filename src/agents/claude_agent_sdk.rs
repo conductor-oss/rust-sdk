@@ -86,6 +86,26 @@ use crate::error::{ConductorError, Result};
 /// Name of the `claude` CLI binary this transport shells out to.
 const CLAUDE_BINARY: &str = "claude";
 
+/// Resolve a short Claude Agent SDK model alias to its full model id, matching python's
+/// `conductor.ai.agents.claude_code.resolve_claude_code_model` table and semantics exactly.
+///
+/// An empty `alias` returns `None`, meaning "let the `claude` CLI pick its own default" -- the
+/// same meaning python gives it. Any other string is looked up in the alias table and, if not
+/// found there, passed through unchanged (it's assumed to already be a full model id).
+#[must_use]
+pub fn resolve_claude_code_model(alias: &str) -> Option<String> {
+    if alias.is_empty() {
+        return None;
+    }
+    let resolved = match alias {
+        "opus" => "claude-opus-4-6",
+        "sonnet" => "claude-sonnet-4-6",
+        "haiku" => "claude-haiku-4-5",
+        other => other,
+    };
+    Some(resolved.to_owned())
+}
+
 /// Builder for the subset of `claude` CLI flags this transport knows how to set.
 ///
 /// Consuming `with_*` methods, matching this crate's builder convention (see
@@ -115,11 +135,27 @@ impl ClaudeAgentSdkOptions {
         self
     }
 
-    /// Set the `--model <name>` flag.
+    /// Set the `--model <name>` flag. Sets the value exactly as given -- for resolving a short
+    /// alias (`"opus"`/`"sonnet"`/`"haiku"`) first, use
+    /// [`ClaudeAgentSdkOptions::with_model_alias`] instead.
     #[must_use]
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
+    }
+
+    /// Set the `--model <name>` flag from a short alias, resolving it via
+    /// [`resolve_claude_code_model`] first (e.g. `"opus"` becomes `"claude-opus-4-6"`).
+    ///
+    /// An empty alias is a no-op -- it leaves any previously-set model untouched, matching
+    /// [`resolve_claude_code_model`]'s `None` meaning "let the `claude` CLI use its own
+    /// default" rather than "clear the model."
+    #[must_use]
+    pub fn with_model_alias(self, alias: impl AsRef<str>) -> Self {
+        match resolve_claude_code_model(alias.as_ref()) {
+            Some(model) => self.with_model(model),
+            None => self,
+        }
     }
 
     /// Set the `--max-turns <n>` flag.
@@ -539,6 +575,49 @@ pub fn update_task_progress_nonblocking(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_resolve_claude_code_model_resolves_known_aliases() {
+        assert_eq!(
+            resolve_claude_code_model("opus"),
+            Some("claude-opus-4-6".to_owned())
+        );
+        assert_eq!(
+            resolve_claude_code_model("sonnet"),
+            Some("claude-sonnet-4-6".to_owned())
+        );
+        assert_eq!(
+            resolve_claude_code_model("haiku"),
+            Some("claude-haiku-4-5".to_owned())
+        );
+    }
+
+    #[test]
+    fn test_resolve_claude_code_model_empty_alias_returns_none() {
+        assert_eq!(resolve_claude_code_model(""), None);
+    }
+
+    #[test]
+    fn test_resolve_claude_code_model_passes_through_unknown_alias() {
+        assert_eq!(
+            resolve_claude_code_model("claude-opus-4-6"),
+            Some("claude-opus-4-6".to_owned())
+        );
+    }
+
+    #[test]
+    fn test_with_model_alias_resolves_and_sets_model() {
+        let opts = ClaudeAgentSdkOptions::new().with_model_alias("opus");
+        assert_eq!(opts.model.as_deref(), Some("claude-opus-4-6"));
+    }
+
+    #[test]
+    fn test_with_model_alias_empty_leaves_existing_model_untouched() {
+        let opts = ClaudeAgentSdkOptions::new()
+            .with_model("claude-opus-4-6")
+            .with_model_alias("");
+        assert_eq!(opts.model.as_deref(), Some("claude-opus-4-6"));
+    }
 
     #[test]
     fn one_shot_minimal_options_appends_print_and_prompt() {

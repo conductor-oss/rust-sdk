@@ -47,9 +47,9 @@ mod tracing;
 pub use callback::{CallbackContext, CallbackHandler};
 #[cfg(feature = "claude-agent-sdk")]
 pub use claude_agent_sdk::{
-    push_event_nonblocking, update_task_progress_nonblocking, ClaudeAgentSdkOptions,
-    ClaudeAgentSdkQuery, ClaudeAgentSdkStream, ProgressMetadata, ProgressThrottle,
-    PROGRESS_UPDATE_INTERVAL,
+    push_event_nonblocking, resolve_claude_code_model, update_task_progress_nonblocking,
+    ClaudeAgentSdkOptions, ClaudeAgentSdkQuery, ClaudeAgentSdkStream, ProgressMetadata,
+    ProgressThrottle, PROGRESS_UPDATE_INTERVAL,
 };
 pub use cli_config::CliConfig;
 pub use code_execution_config::{CodeExecutionConfig, CommandValidator, ConfiguredExecutor};
