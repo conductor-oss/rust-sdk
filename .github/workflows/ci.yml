@@ -246,13 +246,18 @@ jobs:
   # branch at a pinned commit rather than a release tag — bump PLAYBACK_SERVER_REF
   # to a release once the PR lands, and drop this comment.
   #
-  # Known gap, not a rust-sdk regression: `04_http_and_mcp_tools` and one
-  # recording in `16e_credentials_http_tool` fail LLM-request matching
-  # because the `mcp-testkit` test-tool server's tool definitions have
-  # drifted from what they were when these recordings were captured
-  # (neither this SDK nor python-sdk's own agent-e2e.yml pin a mcp-testkit
-  # version). Non-blocking (continue-on-error) until that's resolved
-  # upstream — see the recordings-verification step below.
+  # Known, permanent gap, not a rust-sdk regression: 1 of the 93 recordings
+  # (16e_credentials_http_tool's 2nd LLM turn) can never be replayed — GitHub
+  # scopes its response ETag to the specific authenticated identity/token
+  # that made the original recorded request (`Vary: Authorization`), so no
+  # token generated today can reproduce that exact ETag. Confirmed against 4
+  # real GitHub tokens across every combination of type/scope. Expect
+  # 92/93 played back. Non-blocking (continue-on-error) for that one
+  # unfixable recording — see the recordings-verification step below. mcp-testkit's
+  # tool-catalog docstrings are dedented differently under Python 3.14 vs
+  # 3.12 (a CPython difference, not an mcp-testkit bug) — the pinned
+  # `setup-python` version below must stay 3.12 or `04_http_and_mcp_tools`
+  # will spuriously fail LLM-request matching too.
   test-playback:
     name: LLM Playback Verification
     runs-on: ubuntu-latest
