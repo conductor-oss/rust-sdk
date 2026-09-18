@@ -76,7 +76,7 @@ fn create_workers() -> Vec<FnWorker> {
         FnWorker::new("fetch_user_data", |task: Task| async move {
             let user_id = task
                 .get_input_string("user_id")
-                .unwrap_or_else(|| "unknown".to_string());
+                .unwrap_or_else(|| "unknown".to_owned());
 
             info!("Fetching data for user: {}", user_id);
 
@@ -95,7 +95,7 @@ fn create_workers() -> Vec<FnWorker> {
         FnWorker::new("fetch_external_api", |task: Task| async move {
             let url = task
                 .get_input_string("url")
-                .unwrap_or_else(|| "https://example.com".to_string());
+                .unwrap_or_else(|| "https://example.com".to_owned());
 
             info!("Fetching external API: {}", url);
 
@@ -114,7 +114,7 @@ fn create_workers() -> Vec<FnWorker> {
         FnWorker::new("process_batch", |task: Task| async move {
             let batch_id = task
                 .get_input_string("batch_id")
-                .unwrap_or_else(|| "batch_0".to_string());
+                .unwrap_or_else(|| "batch_0".to_owned());
 
             let poll_count = task.poll_count;
 
@@ -145,7 +145,7 @@ fn create_workers() -> Vec<FnWorker> {
         FnWorker::new("compute_hash", |task: Task| async move {
             let data = task
                 .get_input_string("data")
-                .unwrap_or_else(|| "default".to_string());
+                .unwrap_or_else(|| "default".to_owned());
 
             info!("Computing hash for data: {}", &data[..data.len().min(20)]);
 

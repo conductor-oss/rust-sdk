@@ -1,6 +1,7 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+mod ai_integration;
 mod authorization;
 mod integration;
 mod prompt;
@@ -8,12 +9,17 @@ mod rerun_workflow_request;
 mod schedule;
 mod schema;
 mod secret;
+mod service_registry;
 pub mod task;
 mod task_def;
 mod task_result;
 mod workflow;
 mod workflow_def;
 
+pub use ai_integration::{
+    AzureOpenAiConfig, IntegrationConfig, LlmProvider, OpenAiConfig, PineconeConfig, VectorDb,
+    WeaviateConfig,
+};
 pub use authorization::{
     AccessKey, AccessType, ConductorApplication, ConductorUser, CreateOrUpdateApplicationRequest,
     CreatedAccessKey, GrantedPermission, Group, Permission, Role, SubjectRef, SubjectType,
@@ -28,6 +34,10 @@ pub use schedule::{
 };
 pub use schema::SchemaDef;
 pub use secret::MetadataTag;
+pub use service_registry::{
+    CircuitBreakerConfig, CircuitBreakerTransitionResponse, ProtoRegistryEntry, RequestParam,
+    ServiceMethod, ServiceRegistry, ServiceRegistryConfig,
+};
 pub use task::{Task, TaskExecLog, TaskStatus};
 pub use task_def::{RetryLogic, TaskDef, TimeoutPolicy};
 pub use task_result::{TaskInProgress, TaskResult, TaskResultStatus};

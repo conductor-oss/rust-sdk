@@ -8,19 +8,24 @@ use crate::models::{
     PromptTemplate,
 };
 
-/// Client for managing integrations with external systems
+/// Client for managing integrations with external systems.
 #[derive(Clone)]
 pub struct IntegrationClient {
     api: ApiClient,
 }
 
 impl IntegrationClient {
-    /// Create a new integration client
+    /// Create a new integration client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self { api }
     }
 
-    /// Associate a prompt with an AI integration and model
+    /// Associate a prompt with an AI integration and model.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn associate_prompt_with_integration(
         &self,
         ai_integration: &str,
@@ -28,8 +33,7 @@ impl IntegrationClient {
         prompt_name: &str,
     ) -> Result<()> {
         let path = format!(
-            "/integrations/provider/{}/integration/{}/prompt/{}",
-            ai_integration, model_name, prompt_name
+            "/integrations/provider/{ai_integration}/integration/{model_name}/prompt/{prompt_name}"
         );
         self.api
             .post_no_body_no_response(ApiPath::templated(
@@ -39,16 +43,17 @@ impl IntegrationClient {
             .await
     }
 
-    /// Delete a specific integration API
+    /// Delete a specific integration API.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_integration_api(
         &self,
         api_name: &str,
         integration_name: &str,
     ) -> Result<()> {
-        let path = format!(
-            "/integrations/provider/{}/integration/{}",
-            integration_name, api_name
-        );
+        let path = format!("/integrations/provider/{integration_name}/integration/{api_name}");
         self.api
             .delete_no_content(ApiPath::templated(
                 &path,
@@ -57,24 +62,29 @@ impl IntegrationClient {
             .await
     }
 
-    /// Delete an integration
+    /// Delete an integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_integration(&self, integration_name: &str) -> Result<()> {
-        let path = format!("/integrations/provider/{}", integration_name);
+        let path = format!("/integrations/provider/{integration_name}");
         self.api
             .delete_no_content(ApiPath::templated(&path, "/integrations/provider/{name}"))
             .await
     }
 
-    /// Get an integration API
+    /// Get an integration API.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_integration_api(
         &self,
         api_name: &str,
         integration_name: &str,
     ) -> Result<IntegrationApi> {
-        let path = format!(
-            "/integrations/provider/{}/integration/{}",
-            integration_name, api_name
-        );
+        let path = format!("/integrations/provider/{integration_name}/integration/{api_name}");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -83,12 +93,16 @@ impl IntegrationClient {
             .await
     }
 
-    /// Get all APIs for an integration
+    /// Get all APIs for an integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_integration_apis(
         &self,
         integration_name: &str,
     ) -> Result<Vec<IntegrationApi>> {
-        let path = format!("/integrations/provider/{}/integration", integration_name);
+        let path = format!("/integrations/provider/{integration_name}/integration");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -97,29 +111,39 @@ impl IntegrationClient {
             .await
     }
 
-    /// Get an integration
+    /// Get an integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_integration(&self, integration_name: &str) -> Result<Integration> {
-        let path = format!("/integrations/provider/{}", integration_name);
+        let path = format!("/integrations/provider/{integration_name}");
         self.api
             .get(ApiPath::templated(&path, "/integrations/provider/{name}"))
             .await
     }
 
-    /// Get all integrations
+    /// Get all integrations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_integrations(&self) -> Result<Vec<Integration>> {
         self.api.get("/integrations/provider").await
     }
 
-    /// Get prompts associated with an integration
+    /// Get prompts associated with an integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_prompts_with_integration(
         &self,
         ai_integration: &str,
         model_name: &str,
     ) -> Result<Vec<PromptTemplate>> {
-        let path = format!(
-            "/integrations/provider/{}/integration/{}/prompt",
-            ai_integration, model_name
-        );
+        let path =
+            format!("/integrations/provider/{ai_integration}/integration/{model_name}/prompt");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -128,16 +152,18 @@ impl IntegrationClient {
             .await
     }
 
-    /// Get token usage for an integration API
+    /// Get token usage for an integration API.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_token_usage_for_integration(
         &self,
         api_name: &str,
         integration_name: &str,
     ) -> Result<i64> {
-        let path = format!(
-            "/integrations/provider/{}/integration/{}/metrics",
-            integration_name, api_name
-        );
+        let path =
+            format!("/integrations/provider/{integration_name}/integration/{api_name}/metrics");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -146,12 +172,16 @@ impl IntegrationClient {
             .await
     }
 
-    /// Get token usage for an integration provider
+    /// Get token usage for an integration provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_token_usage_for_integration_provider(
         &self,
         name: &str,
     ) -> Result<serde_json::Value> {
-        let path = format!("/integrations/provider/{}/metrics", name);
+        let path = format!("/integrations/provider/{name}/metrics");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -160,17 +190,18 @@ impl IntegrationClient {
             .await
     }
 
-    /// Save (create or update) an integration API
+    /// Save (create or update) an integration API.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn save_integration_api(
         &self,
         integration_name: &str,
         api_name: &str,
         api_details: &IntegrationApiUpdate,
     ) -> Result<()> {
-        let path = format!(
-            "/integrations/provider/{}/integration/{}",
-            integration_name, api_name
-        );
+        let path = format!("/integrations/provider/{integration_name}/integration/{api_name}");
         self.api
             .put_no_response(
                 ApiPath::templated(&path, "/integrations/provider/{name}/integration/{apiName}"),
@@ -179,13 +210,17 @@ impl IntegrationClient {
             .await
     }
 
-    /// Save (create or update) an integration
+    /// Save (create or update) an integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn save_integration(
         &self,
         integration_name: &str,
         integration_details: &IntegrationUpdate,
     ) -> Result<()> {
-        let path = format!("/integrations/provider/{}", integration_name);
+        let path = format!("/integrations/provider/{integration_name}");
         self.api
             .put_no_response(
                 ApiPath::templated(&path, "/integrations/provider/{name}"),
@@ -196,17 +231,18 @@ impl IntegrationClient {
 
     // Tags
 
-    /// Delete a tag from an integration
+    /// Delete a tag from an integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn delete_tag_for_integration(
         &self,
         tags: &[MetadataTag],
         integration_name: &str,
         api_name: &str,
     ) -> Result<()> {
-        let path = format!(
-            "/integrations/provider/{}/integration/{}/tags",
-            integration_name, api_name
-        );
+        let path = format!("/integrations/provider/{integration_name}/integration/{api_name}/tags");
         self.api
             .delete_with_body(
                 ApiPath::templated(
@@ -218,13 +254,17 @@ impl IntegrationClient {
             .await
     }
 
-    /// Delete a tag from an integration provider
+    /// Delete a tag from an integration provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn delete_tag_for_integration_provider(
         &self,
         tags: &[MetadataTag],
         name: &str,
     ) -> Result<()> {
-        let path = format!("/integrations/provider/{}/tags", name);
+        let path = format!("/integrations/provider/{name}/tags");
         self.api
             .delete_with_body(
                 ApiPath::templated(&path, "/integrations/provider/{name}/tags"),
@@ -233,17 +273,18 @@ impl IntegrationClient {
             .await
     }
 
-    /// Set tags for an integration
+    /// Set tags for an integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn put_tag_for_integration(
         &self,
         tags: &[MetadataTag],
         integration_name: &str,
         api_name: &str,
     ) -> Result<()> {
-        let path = format!(
-            "/integrations/provider/{}/integration/{}/tags",
-            integration_name, api_name
-        );
+        let path = format!("/integrations/provider/{integration_name}/integration/{api_name}/tags");
         self.api
             .put_no_response(
                 ApiPath::templated(
@@ -255,13 +296,17 @@ impl IntegrationClient {
             .await
     }
 
-    /// Set tags for an integration provider
+    /// Set tags for an integration provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn put_tag_for_integration_provider(
         &self,
         tags: &[MetadataTag],
         name: &str,
     ) -> Result<()> {
-        let path = format!("/integrations/provider/{}/tags", name);
+        let path = format!("/integrations/provider/{name}/tags");
         self.api
             .put_no_response(
                 ApiPath::templated(&path, "/integrations/provider/{name}/tags"),
@@ -270,16 +315,17 @@ impl IntegrationClient {
             .await
     }
 
-    /// Get tags for an integration
+    /// Get tags for an integration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_tags_for_integration(
         &self,
         integration_name: &str,
         api_name: &str,
     ) -> Result<Vec<MetadataTag>> {
-        let path = format!(
-            "/integrations/provider/{}/integration/{}/tags",
-            integration_name, api_name
-        );
+        let path = format!("/integrations/provider/{integration_name}/integration/{api_name}/tags");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -288,9 +334,13 @@ impl IntegrationClient {
             .await
     }
 
-    /// Get tags for an integration provider
+    /// Get tags for an integration provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_tags_for_integration_provider(&self, name: &str) -> Result<Vec<MetadataTag>> {
-        let path = format!("/integrations/provider/{}/tags", name);
+        let path = format!("/integrations/provider/{name}/tags");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -299,12 +349,16 @@ impl IntegrationClient {
             .await
     }
 
-    /// Get available APIs for an integration provider
+    /// Get available APIs for an integration provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_integration_available_apis(
         &self,
         integration_name: &str,
     ) -> Result<Vec<String>> {
-        let path = format!("/integrations/provider/{}/models", integration_name);
+        let path = format!("/integrations/provider/{integration_name}/models");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -313,12 +367,20 @@ impl IntegrationClient {
             .await
     }
 
-    /// Get all integration provider definitions
+    /// Get all integration provider definitions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_integration_provider_defs(&self) -> Result<Vec<serde_json::Value>> {
         self.api.get("/integrations/def").await
     }
 
-    /// Get all providers and their integrations
+    /// Get all providers and their integrations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_providers_and_integrations(&self) -> Result<serde_json::Value> {
         self.api.get("/integrations").await
     }

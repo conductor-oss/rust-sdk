@@ -4,7 +4,7 @@
 use schemars::{schema::RootSchema, schema_for, JsonSchema};
 use serde_json::Value;
 
-/// Generate a JSON Schema for a type
+/// Generate a JSON Schema for a type.
 ///
 /// # Arguments
 /// * `strict` - If true, sets `additionalProperties: false` to reject extra fields
@@ -23,7 +23,11 @@ use serde_json::Value;
 /// let schema = generate_schema::<MyInput>(true);
 /// println!("{}", serde_json::to_string_pretty(&schema).unwrap());
 /// ```
-pub fn generate_schema<T: JsonSchema>(strict: bool) -> Value {
+#[must_use]
+pub fn generate_schema<T>(strict: bool) -> Value
+where
+    T: JsonSchema,
+{
     let schema = schema_for!(T);
     let mut value = serde_json::to_value(schema).unwrap_or(Value::Null);
 
@@ -34,8 +38,12 @@ pub fn generate_schema<T: JsonSchema>(strict: bool) -> Value {
     value
 }
 
-/// Generate a JSON Schema with custom settings
-pub fn generate_schema_with_settings<T: JsonSchema>(settings: &SchemaSettings) -> Value {
+/// Generate a JSON Schema with custom settings.
+#[must_use]
+pub fn generate_schema_with_settings<T>(settings: &SchemaSettings) -> Value
+where
+    T: JsonSchema,
+{
     let schema = schema_for!(T);
     let mut value = serde_json::to_value(schema).unwrap_or(Value::Null);
 
@@ -46,12 +54,12 @@ pub fn generate_schema_with_settings<T: JsonSchema>(settings: &SchemaSettings) -
     value
 }
 
-/// Apply strict schema validation (additionalProperties: false) recursively
+/// Apply strict schema validation (additionalProperties: false) recursively.
 fn apply_strict_schema(value: &mut Value) {
     if let Value::Object(map) = value {
         // If this object has "properties", it's an object schema - add additionalProperties: false
         if map.contains_key("properties") {
-            map.insert("additionalProperties".to_string(), Value::Bool(false));
+            map.insert("additionalProperties".to_owned(), Value::Bool(false));
         }
 
         // Recursively apply to nested schemas
@@ -65,112 +73,132 @@ fn apply_strict_schema(value: &mut Value) {
     }
 }
 
-/// Settings for schema generation
+/// Settings for schema generation.
 #[derive(Debug, Clone, Default)]
 pub struct SchemaSettings {
-    /// If true, sets additionalProperties: false
+    /// If true, sets additionalProperties: false.
     pub strict: bool,
-    /// Schema title override
+    /// Schema title override.
     pub title: Option<String>,
-    /// Schema description override
+    /// Schema description override.
     pub description: Option<String>,
 }
 
 impl SchemaSettings {
-    /// Create new schema settings
+    /// Create new schema settings.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Enable strict mode (additionalProperties: false)
+    /// Enable strict mode (additionalProperties: false).
+    #[must_use]
     pub fn strict(mut self) -> Self {
         self.strict = true;
         self
     }
 
-    /// Set schema title
+    /// Set schema title.
+    #[must_use]
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
-    /// Set schema description
+    /// Set schema description.
+    #[must_use]
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 }
 
-/// Schema definition for registration with Conductor
+/// Schema definition for registration with Conductor.
 #[derive(Debug, Clone)]
 pub struct TaskSchema {
-    /// Schema name (e.g., "task_name_input" or "task_name_output")
+    /// Schema name (e.g., "`task_name_input`" or "`task_name_output`").
     pub name: String,
-    /// JSON Schema content
+    /// JSON Schema content.
     pub schema: Value,
-    /// Schema version
+    /// Schema version.
     pub version: i32,
-    /// Schema type (INPUT or OUTPUT)
+    /// Schema type (INPUT or OUTPUT).
     pub schema_type: SchemaType,
 }
 
-/// Type of schema
+/// Type of schema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchemaType {
-    /// Input schema for task
+    /// Input schema for task.
     Input,
-    /// Output schema for task
+    /// Output schema for task.
     Output,
 }
 
 impl TaskSchema {
-    /// Create a new input schema
-    pub fn input<T: JsonSchema>(task_name: &str, strict: bool) -> Self {
+    /// Create a new input schema.
+    #[must_use]
+    pub fn input<T>(task_name: &str, strict: bool) -> Self
+    where
+        T: JsonSchema,
+    {
         Self {
-            name: format!("{}_input", task_name),
+            name: format!("{task_name}_input"),
             schema: generate_schema::<T>(strict),
             version: 1,
             schema_type: SchemaType::Input,
         }
     }
 
-    /// Create a new output schema
-    pub fn output<T: JsonSchema>(task_name: &str, strict: bool) -> Self {
+    /// Create a new output schema.
+    #[must_use]
+    pub fn output<T>(task_name: &str, strict: bool) -> Self
+    where
+        T: JsonSchema,
+    {
         Self {
-            name: format!("{}_output", task_name),
+            name: format!("{task_name}_output"),
             schema: generate_schema::<T>(strict),
             version: 1,
             schema_type: SchemaType::Output,
         }
     }
 
-    /// Set schema version
+    /// Set schema version.
+    #[must_use]
     pub fn with_version(mut self, version: i32) -> Self {
         self.version = version;
         self
     }
 
-    /// Convert to SchemaDef for registration
+    /// Convert to `SchemaDef` for registration.
+    #[must_use]
     pub fn to_schema_def(&self) -> crate::models::SchemaDef {
         crate::models::SchemaDef::new(self.name.clone(), self.version, self.schema.clone())
     }
 }
 
-/// Helper trait for workers that can generate schemas
+/// Helper trait for workers that can generate schemas.
 pub trait WorkerSchema {
-    /// Generate input schema for this worker
+    /// Generate input schema for this worker.
+    #[must_use]
     fn input_schema(_strict: bool) -> Option<Value> {
         None
     }
 
-    /// Generate output schema for this worker
+    /// Generate output schema for this worker.
+    #[must_use]
     fn output_schema(_strict: bool) -> Option<Value> {
         None
     }
 }
 
-/// Get the root schema for a type
-pub fn get_root_schema<T: JsonSchema>() -> RootSchema {
+/// Get the root schema for a type.
+#[must_use]
+pub fn get_root_schema<T>() -> RootSchema
+where
+    T: JsonSchema,
+{
     schema_for!(T)
 }
 

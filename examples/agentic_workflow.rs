@@ -14,7 +14,7 @@ use conductor::{
 const LLM_PROVIDER: &str = "openai";
 const LLM_MODEL: &str = "gpt-4o-mini";
 
-/// Tool definitions in OpenAI function calling format
+/// Tool definitions in `OpenAI` function calling format
 fn get_tool_definitions() -> serde_json::Value {
     serde_json::json!([
         {
@@ -129,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
 
     for task in &tool_tasks {
         match metadata_client.register_task_def(task).await {
-            Ok(_) => println!("  Registered task: {}", task.name),
+            Ok(()) => println!("  Registered task: {}", task.name),
             Err(e) => println!("  Task {} may already exist: {}", task.name, e),
         }
     }
@@ -145,7 +145,7 @@ async fn main() -> anyhow::Result<()> {
     let workflow_name = "rust_ai_agent";
 
     // Step 1: LLM reasoning - decide which tool to use
-    let system_prompt = r#"You are a helpful AI assistant with access to tools.
+    let system_prompt = "You are a helpful AI assistant with access to tools.
 Analyze the user's question and decide which tool to use.
 
 Available tools:
@@ -154,7 +154,7 @@ Available tools:
 - search_knowledge: Search the internal knowledge base
 - no_tool_needed: Answer directly without tools
 
-You MUST call exactly one function. Choose the most appropriate tool based on the user's question."#;
+You MUST call exactly one function. Choose the most appropriate tool based on the user's question.";
 
     let reasoning_task =
         WorkflowTask::llm_chat_complete("agent_reasoning_ref", LLM_PROVIDER, LLM_MODEL)
@@ -168,7 +168,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
             .with_max_tokens(500);
 
     // Step 2: Parse the tool call response
-    let parse_script = r#"
+    let parse_script = "
     (function(){
         var output = $.llm_output;
         var toolCall = null;
@@ -202,7 +202,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
             has_tool_call: false
         };
     })();
-    "#;
+    ";
 
     let parse_task = WorkflowTask::inline("parse_tool_call_ref", parse_script)
         .with_input_param("llm_output", "${agent_reasoning_ref.output}");
@@ -260,7 +260,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
     )]);
 
     // Step 4: Format the final response
-    let format_script = r#"
+    let format_script = r"
     (function(){
         var toolName = $.tool_name;
         var toolResult = $.tool_result;
@@ -277,7 +277,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
             summary: context
         };
     })();
-    "#;
+    ";
 
     let format_task = WorkflowTask::inline("format_response_ref", format_script)
         .with_input_param(
@@ -295,7 +295,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
         .with_task(parse_task)
         .with_task(tool_switch)
         .with_task(format_task)
-        .with_input_parameters(vec!["question".to_string()])
+        .with_input_parameters(vec!["question".to_owned()])
         .with_output_param(
             "tool_used",
             "${format_response_ref.output.result.tool_used}",
@@ -322,7 +322,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
     metadata_client
         .register_or_update_workflow_def(&workflow, true)
         .await?;
-    println!("  Workflow registered: {}", workflow_name);
+    println!("  Workflow registered: {workflow_name}");
 
     // ==========================================================================
     // Display Tool Definitions
@@ -341,7 +341,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
                     .get("description")
                     .and_then(|d| d.as_str())
                     .unwrap_or("?");
-                println!("  {} - {}", name, desc);
+                println!("  {name} - {desc}");
             }
         }
     }
@@ -374,7 +374,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
     println!();
 
     let test_question = "What's the weather like in Tokyo?";
-    println!("Question: {}", test_question);
+    println!("Question: {test_question}");
     println!();
 
     let request = StartWorkflowRequest::new(workflow_name)
@@ -383,7 +383,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
 
     match workflow_client.start_workflow(&request).await {
         Ok(workflow_id) => {
-            println!("Workflow started: {}", workflow_id);
+            println!("Workflow started: {workflow_id}");
             println!();
 
             // Poll for completion
@@ -403,7 +403,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
                 match workflow_client.get_workflow(&workflow_id, true).await {
                     Ok(wf) => {
                         let status = wf.status;
-                        print!("\r  Status: {:?}          ", status);
+                        print!("\r  Status: {status:?}          ");
 
                         if status == WorkflowStatus::Completed {
                             println!();
@@ -413,7 +413,7 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
                             println!("{}", "-".repeat(60));
 
                             if let Some(tool) = wf.output.get("tool_used") {
-                                println!("Tool Selected: {}", tool);
+                                println!("Tool Selected: {tool}");
                             }
                             if let Some(output) = wf.output.get("tool_output") {
                                 println!("Tool Output: {}", serde_json::to_string_pretty(output)?);
@@ -429,9 +429,9 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
                                 | WorkflowStatus::TimedOut
                         ) {
                             println!();
-                            println!("  Agent workflow failed: {:?}", status);
+                            println!("  Agent workflow failed: {status:?}");
                             if let Some(reason) = wf.reason_for_incompletion {
-                                println!("  Reason: {}", reason);
+                                println!("  Reason: {reason}");
                             }
                             println!();
                             println!("  Note: This is expected if:");
@@ -441,14 +441,14 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
                         }
                     }
                     Err(e) => {
-                        println!("  Error checking status: {}", e);
+                        println!("  Error checking status: {e}");
                         break;
                     }
                 }
             }
         }
         Err(e) => {
-            println!("  Could not start agent workflow: {}", e);
+            println!("  Could not start agent workflow: {e}");
             println!();
             println!("  This is expected if LLM integration is not configured.");
         }
@@ -486,8 +486,8 @@ You MUST call exactly one function. Choose the most appropriate tool based on th
     println!();
 
     match metadata_client.delete_workflow_def(workflow_name, 1).await {
-        Ok(_) => println!("  Deleted workflow: {}", workflow_name),
-        Err(e) => println!("  Could not delete workflow: {}", e),
+        Ok(()) => println!("  Deleted workflow: {workflow_name}"),
+        Err(e) => println!("  Could not delete workflow: {e}"),
     }
 
     // Note: We don't delete task definitions as they may be used by other workflows

@@ -142,11 +142,11 @@ impl StatsCollector {
         let avg_time = total_time.checked_div(completed).unwrap_or(0);
 
         println!("\n=== Worker Statistics ===");
-        println!("  Total polls: {}", polls);
-        println!("  Tasks received: {}", received);
-        println!("  Tasks completed: {}", completed);
-        println!("  Tasks failed: {}", failed);
-        println!("  Avg execution time: {}ms", avg_time);
+        println!("  Total polls: {polls}");
+        println!("  Tasks received: {received}");
+        println!("  Tasks completed: {completed}");
+        println!("  Tasks failed: {failed}");
+        println!("  Avg execution time: {avg_time}ms");
         println!("=========================\n");
     }
 }
@@ -252,11 +252,11 @@ async fn main() -> Result<()> {
 
     // 2. SLA monitoring (alert if task takes > 500ms)
     let sla_monitor = Arc::new(SLAMonitor::new(500));
-    handler.add_event_listener(sla_monitor.clone());
+    handler.add_event_listener(Arc::clone(&sla_monitor) as Arc<dyn TaskRunnerEventsListener>);
 
     // 3. Statistics collector
     let stats = Arc::new(StatsCollector::new());
-    handler.add_event_listener(stats.clone());
+    handler.add_event_listener(Arc::clone(&stats) as Arc<dyn TaskRunnerEventsListener>);
 
     // 4. Error alerter
     handler.add_event_listener(Arc::new(ErrorAlerter::new()));

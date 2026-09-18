@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let workflow_id = &workflow_run.workflow_id;
-    println!("Workflow started: {}", workflow_id);
+    println!("Workflow started: {workflow_id}");
     println!(
         "See execution at: {}/execution/{}",
         config.ui_host, workflow_id
@@ -83,10 +83,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let mut variables = HashMap::new();
-    variables.insert("case".to_string(), serde_json::json!("case1"));
+    variables.insert("case".to_owned(), serde_json::json!("case1"));
 
     let state_update = WorkflowStateUpdate {
-        task_reference_name: Some("wait_task_ref".to_string()),
+        task_reference_name: Some("wait_task_ref".to_owned()),
         task_result: Some(task_result.clone()),
         variables,
     };
@@ -95,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .update_state(
             workflow_id,
             &state_update,
-            Some(&["wait_task_ref_1".to_string(), "wait_task_ref_2".to_string()]),
+            Some(&["wait_task_ref_1".to_owned(), "wait_task_ref_2".to_owned()]),
             Some(5),
         )
         .await?;
@@ -109,16 +109,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let last_task_ref = workflow_run
         .tasks
         .last()
-        .map(|t| t.reference_task_name.as_str())
-        .unwrap_or("unknown");
+        .map_or("unknown", |t| t.reference_task_name.as_str());
 
-    println!("Last task: {} (expected wait_task_ref_1)", last_task_ref);
+    println!("Last task: {last_task_ref} (expected wait_task_ref_1)");
 
     // Complete the final wait task
-    println!("\nCompleting {}...", last_task_ref);
+    println!("\nCompleting {last_task_ref}...");
 
     let final_update = WorkflowStateUpdate {
-        task_reference_name: Some(last_task_ref.to_string()),
+        task_reference_name: Some(last_task_ref.to_owned()),
         task_result: Some(task_result),
         variables: HashMap::new(),
     };

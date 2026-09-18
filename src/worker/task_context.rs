@@ -3,7 +3,7 @@
 
 use crate::models::Task;
 
-/// Context for the currently executing task
+/// Context for the currently executing task.
 ///
 /// This provides convenient access to task metadata and execution state,
 /// similar to Python SDK's `get_task_context()`.
@@ -54,7 +54,8 @@ pub struct TaskContext {
 }
 
 impl TaskContext {
-    /// Create a TaskContext from a Task
+    /// Create a `TaskContext` from a Task.
+    #[must_use]
     pub fn from_task(task: &Task) -> Self {
         Self {
             task_id: task.task_id.clone(),
@@ -71,27 +72,31 @@ impl TaskContext {
         }
     }
 
-    /// Get the unique task ID
+    /// Get the unique task ID.
+    #[must_use]
     pub fn task_id(&self) -> &str {
         &self.task_id
     }
 
-    /// Get the workflow instance ID
+    /// Get the workflow instance ID.
+    #[must_use]
     pub fn workflow_instance_id(&self) -> &str {
         &self.workflow_instance_id
     }
 
-    /// Get the task type (definition name)
+    /// Get the task type (definition name).
+    #[must_use]
     pub fn task_type(&self) -> &str {
         &self.task_type
     }
 
-    /// Get the reference task name within the workflow
+    /// Get the reference task name within the workflow.
+    #[must_use]
     pub fn reference_task_name(&self) -> &str {
         &self.reference_task_name
     }
 
-    /// Get the poll count for long-running tasks
+    /// Get the poll count for long-running tasks.
     ///
     /// This increments each time the task is polled after returning
     /// `TaskInProgress`. Use this to track progress or implement
@@ -109,48 +114,57 @@ impl TaskContext {
     /// let offset = ctx.poll_count() * 100;
     /// // process_items(offset, 100);
     /// ```
+    #[must_use]
     pub fn poll_count(&self) -> i32 {
         self.poll_count
     }
 
-    /// Get the current retry count
+    /// Get the current retry count.
     ///
     /// Indicates how many times this task has been retried after failures.
+    #[must_use]
     pub fn retry_count(&self) -> i32 {
         self.retry_count
     }
 
-    /// Get the correlation ID (if set)
+    /// Get the correlation ID (if set).
+    #[must_use]
     pub fn correlation_id(&self) -> Option<&str> {
         self.correlation_id.as_deref()
     }
 
-    /// Get the domain (if set)
+    /// Get the domain (if set).
+    #[must_use]
     pub fn domain(&self) -> Option<&str> {
         self.domain.as_deref()
     }
 
-    /// Get the scheduled time (epoch milliseconds)
+    /// Get the scheduled time (epoch milliseconds).
+    #[must_use]
     pub fn scheduled_time(&self) -> i64 {
         self.scheduled_time
     }
 
-    /// Get the start time (epoch milliseconds)
+    /// Get the start time (epoch milliseconds).
+    #[must_use]
     pub fn start_time(&self) -> i64 {
         self.start_time
     }
 
-    /// Get the iteration count (for loop tasks)
+    /// Get the iteration count (for loop tasks).
+    #[must_use]
     pub fn iteration(&self) -> i32 {
         self.iteration
     }
 
-    /// Check if this is the first poll (poll_count == 0)
+    /// Check if this is the first poll (`poll_count` == 0).
+    #[must_use]
     pub fn is_first_poll(&self) -> bool {
         self.poll_count == 0
     }
 
-    /// Check if this is a retry (retry_count > 0)
+    /// Check if this is a retry (`retry_count` > 0).
+    #[must_use]
     pub fn is_retry(&self) -> bool {
         self.retry_count > 0
     }
@@ -163,14 +177,14 @@ mod tests {
     #[test]
     fn test_task_context_from_task() {
         let task = Task {
-            task_id: "task-123".to_string(),
-            workflow_instance_id: "wf-456".to_string(),
-            task_type: "my_task".to_string(),
-            reference_task_name: "my_task_ref".to_string(),
+            task_id: "task-123".to_owned(),
+            workflow_instance_id: "wf-456".to_owned(),
+            task_type: "my_task".to_owned(),
+            reference_task_name: "my_task_ref".to_owned(),
             poll_count: 5,
             retry_count: 1,
-            correlation_id: Some("corr-789".to_string()),
-            domain: Some("production".to_string()),
+            correlation_id: Some("corr-789".to_owned()),
+            domain: Some("production".to_owned()),
             ..Default::default()
         };
 

@@ -1,0 +1,279 @@
+// Copyright {{.Year}} Conductor OSS
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+use std::sync::Arc;
+
+/// Rule-based agent-to-agent transition for `Strategy::Swarm`.
+///
+/// Each variant carries a `target` — the name of the agent to hand off to — plus whatever that
+/// variant matches against:
+///
+/// - [`SwarmTransition::OnToolResult`]: fires when a specific tool was just called, optionally
+///   narrowed to only fire if the tool's result contains a substring.
+/// - [`SwarmTransition::OnTextMention`]: fires when the agent's latest text output mentions a
+///   substring (case-insensitive).
+/// - [`SwarmTransition::OnCondition`]: fires when an arbitrary predicate over the run context
+///   returns `true` — the escape hatch for anything the first two can't express.
+///
+/// Construct variants directly as struct literals, e.g.
+/// `SwarmTransition::OnTextMention { text: "ACTIONABLE".into(), target: "filer".into() }`.
+#[derive(Clone)]
+pub enum SwarmTransition {
+    /// Hand off after a specific tool is called, regardless of its return value unless
+    /// `result_contains` narrows it.
+    OnToolResult {
+        /// Name of the agent to hand off to.
+        target: String,
+        /// The tool whose invocation triggers the handoff.
+        tool_name: String,
+        /// If set, only trigger when the tool's result contains this substring
+        /// (case-sensitive substring match).
+        result_contains: Option<String>,
+    },
+    /// Hand off when the agent's latest text output mentions `text` (case-insensitive).
+    OnTextMention {
+        /// Name of the agent to hand off to.
+        target: String,
+        /// The text to look for (case-insensitive substring match).
+        text: String,
+    },
+    /// Hand off when an arbitrary predicate over the run context returns `true`. A panicking
+    /// closure propagates the panic normally.
+    OnCondition {
+        /// Name of the agent to hand off to.
+        target: String,
+        /// Predicate evaluated against the current [`SwarmContext`].
+        condition: SwarmConditionFn,
+    },
+}
+
+/// Boxed synchronous predicate backing [`SwarmTransition::OnCondition`].
+pub type SwarmConditionFn = Arc<dyn Fn(&SwarmContext) -> bool + Send + Sync>;
+
+impl std::fmt::Debug for SwarmTransition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SwarmTransition::OnToolResult {
+                target,
+                tool_name,
+                result_contains,
+            } => f
+                .debug_struct("OnToolResult")
+                .field("target", target)
+                .field("tool_name", tool_name)
+                .field("result_contains", result_contains)
+                .finish(),
+            SwarmTransition::OnTextMention { target, text } => f
+                .debug_struct("OnTextMention")
+                .field("target", target)
+                .field("text", text)
+                .finish(),
+            SwarmTransition::OnCondition { target, condition } => {
+                let _ = condition;
+                f.debug_struct("OnCondition")
+                    .field("target", target)
+                    .field("condition", &"Fn(..)")
+                    .finish()
+            }
+        }
+    }
+}
+
+/// Evaluation context for [`SwarmTransition::should_transition`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SwarmContext {
+    /// Latest LLM output text, if any.
+    pub result: Option<String>,
+    /// Name of the last tool called, if any.
+    pub tool_name: Option<String>,
+    /// Result of the last tool call, if any.
+    pub tool_result: Option<String>,
+}
+
+impl SwarmTransition {
+    /// Wire-format string for the `type` field (`on_tool_result` / `on_text_mention` /
+    /// `on_condition`).
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SwarmTransition::OnToolResult { .. } => "on_tool_result",
+            SwarmTransition::OnTextMention { .. } => "on_text_mention",
+            SwarmTransition::OnCondition { .. } => "on_condition",
+        }
+    }
+
+    /// The agent this transition hands off to.
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            SwarmTransition::OnToolResult { target, .. } => target,
+            SwarmTransition::OnTextMention { target, .. } => target,
+            SwarmTransition::OnCondition { target, .. } => target,
+        }
+    }
+
+    /// Evaluate whether this transition should fire:
+    ///
+    /// - `OnToolResult`: `false` unless `ctx.tool_name` equals `tool_name`; if `result_contains`
+    ///   is set, also requires `ctx.tool_result` to contain it (case-sensitive substring).
+    /// - `OnTextMention`: `true` iff `ctx.result` contains `text`, case-insensitively.
+    /// - `OnCondition`: the closure's return value, called directly against `ctx`.
+    #[must_use]
+    pub fn should_transition(&self, ctx: &SwarmContext) -> bool {
+        match self {
+            SwarmTransition::OnToolResult {
+                tool_name,
+                result_contains,
+                ..
+            } => {
+                if ctx.tool_name.as_deref() != Some(tool_name.as_str()) {
+                    return false;
+                }
+                match result_contains {
+                    Some(needle) => ctx.tool_result.as_deref().unwrap_or("").contains(needle),
+                    None => true,
+                }
+            }
+            SwarmTransition::OnTextMention { text, .. } => ctx
+                .result
+                .as_deref()
+                .unwrap_or("")
+                .to_lowercase()
+                .contains(&text.to_lowercase()),
+            SwarmTransition::OnCondition { condition, .. } => condition(ctx),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_on_tool_result_matches_tool_name() {
+        let transition = SwarmTransition::OnToolResult {
+            target: "refund".into(),
+            tool_name: "check_order".into(),
+            result_contains: None,
+        };
+        let matching_ctx = SwarmContext {
+            tool_name: Some("check_order".into()),
+            ..Default::default()
+        };
+        let other_ctx = SwarmContext {
+            tool_name: Some("other_tool".into()),
+            ..Default::default()
+        };
+        assert!(transition.should_transition(&matching_ctx));
+        assert!(!transition.should_transition(&other_ctx));
+        assert!(!transition.should_transition(&SwarmContext::default()));
+    }
+
+    #[test]
+    fn test_on_tool_result_result_contains_narrows_match() {
+        let transition = SwarmTransition::OnToolResult {
+            target: "supervisor".into(),
+            tool_name: "escalate".into(),
+            result_contains: Some("urgent".into()),
+        };
+        let ctx_with_needle = SwarmContext {
+            tool_name: Some("escalate".into()),
+            tool_result: Some("this is urgent".into()),
+            ..Default::default()
+        };
+        let ctx_without_needle = SwarmContext {
+            tool_name: Some("escalate".into()),
+            tool_result: Some("all good".into()),
+            ..Default::default()
+        };
+        assert!(transition.should_transition(&ctx_with_needle));
+        assert!(!transition.should_transition(&ctx_without_needle));
+    }
+
+    #[test]
+    fn test_on_text_mention_case_insensitive() {
+        let transition = SwarmTransition::OnTextMention {
+            target: "filer".into(),
+            text: "ACTIONABLE".into(),
+        };
+        let ctx = SwarmContext {
+            result: Some("this looks actionable to me".into()),
+            ..Default::default()
+        };
+        assert!(transition.should_transition(&ctx));
+        assert!(!transition.should_transition(&SwarmContext::default()));
+    }
+
+    #[test]
+    fn test_on_condition_calls_closure() {
+        let transition = SwarmTransition::OnCondition {
+            target: "summarizer".into(),
+            condition: Arc::new(|ctx: &SwarmContext| ctx.tool_result.as_deref() == Some("done")),
+        };
+        let done_ctx = SwarmContext {
+            tool_result: Some("done".into()),
+            ..Default::default()
+        };
+        assert!(transition.should_transition(&done_ctx));
+        assert!(!transition.should_transition(&SwarmContext::default()));
+    }
+
+    #[test]
+    fn test_target_accessor() {
+        let a = SwarmTransition::OnToolResult {
+            target: "a".into(),
+            tool_name: "t".into(),
+            result_contains: None,
+        };
+        let b = SwarmTransition::OnTextMention {
+            target: "b".into(),
+            text: "t".into(),
+        };
+        let c = SwarmTransition::OnCondition {
+            target: "c".into(),
+            condition: Arc::new(|_: &SwarmContext| false),
+        };
+        assert_eq!(a.target(), "a");
+        assert_eq!(b.target(), "b");
+        assert_eq!(c.target(), "c");
+    }
+
+    #[test]
+    fn test_as_str_wire_format() {
+        assert_eq!(
+            SwarmTransition::OnToolResult {
+                target: "x".into(),
+                tool_name: "t".into(),
+                result_contains: None,
+            }
+            .as_str(),
+            "on_tool_result"
+        );
+        assert_eq!(
+            SwarmTransition::OnTextMention {
+                target: "x".into(),
+                text: "t".into(),
+            }
+            .as_str(),
+            "on_text_mention"
+        );
+        assert_eq!(
+            SwarmTransition::OnCondition {
+                target: "x".into(),
+                condition: Arc::new(|_: &SwarmContext| false),
+            }
+            .as_str(),
+            "on_condition"
+        );
+    }
+
+    #[test]
+    fn test_debug_does_not_panic() {
+        let transition = SwarmTransition::OnCondition {
+            target: "x".into(),
+            condition: Arc::new(|_: &SwarmContext| false),
+        };
+        let debug_str = format!("{transition:?}");
+        assert!(debug_str.contains("OnCondition"));
+    }
+}

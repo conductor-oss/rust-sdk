@@ -149,7 +149,7 @@ async fn main() -> Result<()> {
 
     // Search for workflows by correlation ID
     info!("Searching for workflows with correlation_id...");
-    let query = format!("correlationId = \"{}\"", correlation_id);
+    let query = format!("correlationId = \"{correlation_id}\"");
     let search_results = workflow_client
         .search_workflows(Some(&query), None, 0, 100)
         .await?;

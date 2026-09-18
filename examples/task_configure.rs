@@ -245,8 +245,8 @@ async fn main() -> anyhow::Result<()> {
         .with_response_timeout(60)
         .with_concurrent_limit(10)
         .with_rate_limit(1000, 60)
-        .with_input_keys(vec!["orderId".to_string(), "customerId".to_string()])
-        .with_output_keys(vec!["result".to_string(), "processedAt".to_string()]);
+        .with_input_keys(vec!["orderId".to_owned(), "customerId".to_owned()])
+        .with_output_keys(vec!["result".to_owned(), "processedAt".to_owned()]);
 
     // Set poll timeout directly
     production_task.poll_timeout_seconds = 30;
@@ -303,7 +303,7 @@ async fn main() -> anyhow::Result<()> {
     println!();
     println!("Created {} task definitions:", created_tasks.len());
     for task in &created_tasks {
-        println!("  - {}", task);
+        println!("  - {task}");
     }
 
     // ==========================================================================
@@ -316,8 +316,8 @@ async fn main() -> anyhow::Result<()> {
 
     for task_name in &created_tasks {
         match metadata_client.delete_task_def(task_name).await {
-            Ok(_) => println!("  Deleted: {}", task_name),
-            Err(e) => println!("  Could not delete {}: {}", task_name, e),
+            Ok(()) => println!("  Deleted: {task_name}"),
+            Err(e) => println!("  Could not delete {task_name}: {e}"),
         }
     }
 

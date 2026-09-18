@@ -12,7 +12,7 @@ use conductor::{
 /// Worker to get user's email based on user ID
 async fn get_user_email(task: conductor::Task) -> conductor::Result<WorkerOutput> {
     let userid = task.get_input_string("userid").unwrap_or_default();
-    let email = format!("{}@example.com", userid);
+    let email = format!("{userid}@example.com");
     Ok(WorkerOutput::completed_with_result(serde_json::json!({
         "result": email
     })))
@@ -24,10 +24,7 @@ async fn send_email(task: conductor::Task) -> conductor::Result<WorkerOutput> {
     let subject = task.get_input_string("subject").unwrap_or_default();
     let body = task.get_input_string("body").unwrap_or_default();
 
-    println!(
-        "Sending email to {} with subject '{}' and body '{}'",
-        email, subject, body
-    );
+    println!("Sending email to {email} with subject '{subject}' and body '{body}'");
 
     Ok(WorkerOutput::complete())
 }
@@ -65,11 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Wait for webhook with matching criteria
     // The webhook must have type="customer" and id matching the userid
     let mut matches = HashMap::new();
-    matches.insert("$['type']".to_string(), "customer".to_string());
-    matches.insert(
-        "$['id']".to_string(),
-        "${workflow.input.userid}".to_string(),
-    );
+    matches.insert("$['type']".to_owned(), "customer".to_owned());
+    matches.insert("$['id']".to_owned(), "${workflow.input.userid}".to_owned());
 
     let wait_webhook = WorkflowTask::wait_for_webhook("wait_ref").with_matches(matches);
 
@@ -97,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let workflow_id = workflow_client.start_workflow(&request).await?;
 
-    println!("Workflow started: {}", workflow_id);
+    println!("Workflow started: {workflow_id}");
     println!("\nThe workflow is now waiting for a webhook.");
     println!("\nTo complete the workflow, send a POST request to your webhook URL:");
     println!(

@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
     let user_id = format!("rust_demo_user_{}", &uuid::Uuid::new_v4().to_string()[..8]);
 
     let user_request = UpsertUserRequest::new(format!("Demo User {}", &user_id[..8]))
-        .with_roles(vec!["USER".to_string()]);
+        .with_roles(vec!["USER".to_owned()]);
 
     match auth.upsert_user(&user_request, &user_id).await {
         Ok(user) => {
@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
 
     let group_request = UpsertGroupRequest::new(&group_id)
         .with_description("Demo group created by Rust SDK")
-        .with_roles(vec!["USER".to_string()]);
+        .with_roles(vec!["USER".to_owned()]);
 
     match auth.upsert_group(&group_request, &group_id).await {
         Ok(group) => {
@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
 
             // Add user to group
             match auth.add_user_to_group(&group_id, &user_id).await {
-                Ok(_) => info!("Added user to group"),
+                Ok(()) => info!("Added user to group"),
                 Err(e) => info!("Could not add user to group: {}", e),
             }
 
@@ -181,7 +181,7 @@ async fn main() -> Result<()> {
 
                     // Delete access key
                     match auth.delete_access_key(app_id, key_id).await {
-                        Ok(_) => info!("Deleted access key"),
+                        Ok(()) => info!("Deleted access key"),
                         Err(e) => info!("Could not delete access key: {}", e),
                     }
                 }
@@ -194,13 +194,13 @@ async fn main() -> Result<()> {
                 MetadataTag::with_value("created_by", "rust-sdk"),
             ];
             match auth.set_application_tags(&tags, app_id).await {
-                Ok(_) => info!("Added tags to application"),
+                Ok(()) => info!("Added tags to application"),
                 Err(e) => info!("Could not add tags: {}", e),
             }
 
             // Delete application
             match auth.delete_application(app_id).await {
-                Ok(_) => info!("Deleted application"),
+                Ok(()) => info!("Deleted application"),
                 Err(e) => info!("Could not delete application: {}", e),
             }
         }
@@ -221,14 +221,14 @@ async fn main() -> Result<()> {
     };
 
     let target = TargetRef {
-        id: "test_workflow".to_string(),
+        id: "test_workflow".to_owned(),
         target_type: TargetType::WorkflowDef,
     };
 
     let access = vec![AccessType::Execute, AccessType::Read];
 
     match auth.grant_permissions(&subject, &target, &access).await {
-        Ok(_) => {
+        Ok(()) => {
             info!("Granted permissions to user over workflow");
 
             // Get permissions for target
@@ -252,7 +252,7 @@ async fn main() -> Result<()> {
 
             // Remove permissions
             match auth.remove_permissions(&subject, &target, &access).await {
-                Ok(_) => info!("Removed permissions"),
+                Ok(()) => info!("Removed permissions"),
                 Err(e) => info!("Could not remove permissions: {}", e),
             }
         }
@@ -268,17 +268,17 @@ async fn main() -> Result<()> {
 
     // Remove user from group and delete
     match auth.remove_user_from_group(&group_id, &user_id).await {
-        Ok(_) => info!("Removed user from group"),
+        Ok(()) => info!("Removed user from group"),
         Err(e) => info!("Could not remove user from group: {}", e),
     }
 
     match auth.delete_group(&group_id).await {
-        Ok(_) => info!("Deleted group"),
+        Ok(()) => info!("Deleted group"),
         Err(e) => info!("Could not delete group: {}", e),
     }
 
     match auth.delete_user(&user_id).await {
-        Ok(_) => info!("Deleted user"),
+        Ok(()) => info!("Deleted user"),
         Err(e) => info!("Could not delete user: {}", e),
     }
 

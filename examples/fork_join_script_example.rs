@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut join_on: Vec<String> = Vec::new();
 
     for i in 0..fork_size {
-        let task_ref = format!("http_{}", i);
+        let task_ref = format!("http_{i}");
 
         // HTTP task marked as optional (won't fail the workflow on error)
         let http_task = WorkflowTask::http(
@@ -82,10 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     println!("Workflow registered: {}", workflow_def.name);
-    println!(
-        "\nThis workflow forks into {} parallel HTTP tasks.",
-        fork_size
-    );
+    println!("\nThis workflow forks into {fork_size} parallel HTTP tasks.");
     println!("The tasks are marked as optional and call an endpoint that returns 404.");
     println!("The custom join script allows completion even with failed optional tasks.\n");
 
@@ -93,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request = StartWorkflowRequest::new(&workflow_def.name).with_version(1);
 
     let workflow_id = workflow_client.start_workflow(&request).await?;
-    println!("Workflow started: {}", workflow_id);
+    println!("Workflow started: {workflow_id}");
     println!("Monitor at: {}/execution/{}", config.ui_host, workflow_id);
 
     // Wait a bit for execution
@@ -122,8 +119,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\nTask summary:");
-    println!("  - Completed: {}", completed);
-    println!("  - Failed: {}", failed);
+    println!("  - Completed: {completed}");
+    println!("  - Failed: {failed}");
 
     if workflow.is_terminal() {
         println!("\nWorkflow completed despite optional task failures!");

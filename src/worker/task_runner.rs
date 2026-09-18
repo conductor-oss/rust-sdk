@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use futures::FutureExt;
+use futures::FutureExt as _;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 
@@ -34,7 +34,7 @@ enum TaskOutcome {
     Panic(String),
 }
 
-/// Task runner for a single worker type
+/// Task runner for a single worker type.
 pub struct TaskRunner {
     worker: Arc<dyn Worker>,
     task_client: TaskClient,
@@ -51,16 +51,22 @@ pub struct TaskRunner {
 
     // Concurrency control - use atomic counter instead of HashSet for better performance
     semaphore: Arc<Semaphore>,
-    /// Count of tasks currently being executed (after semaphore acquired)
+    /// Count of tasks currently being executed (after semaphore acquired).
     active_task_count: Arc<AtomicUsize>,
-    /// Set of task IDs currently in flight (for debugging/monitoring)
+    /// Set of task IDs currently in flight (for debugging/monitoring).
     running_tasks: Arc<parking_lot::Mutex<HashSet<String>>>,
-    /// Count of spawned tasks (including those waiting for semaphore)
+    /// Count of spawned tasks (including those waiting for semaphore).
     spawned_task_count: Arc<AtomicUsize>,
+    /// Count of real poll attempts (successful or failed) made against the server so far. Used
+    /// by [`super::TaskHandler::verify_workers_started`] to tell "the polling loop hasn't
+    /// attempted a single real poll yet" apart from "the loop started but is legitimately
+    /// waiting" -- [`TaskRunner::is_running`] alone can't distinguish those, since it flips
+    /// `true` before the first poll ever happens.
+    poll_attempts: Arc<AtomicU64>,
 }
 
 impl TaskRunner {
-    /// Create a new task runner
+    /// Create a new task runner.
     pub fn new(
         worker: Arc<dyn Worker>,
         task_client: TaskClient,
@@ -68,9 +74,9 @@ impl TaskRunner {
     ) -> Self {
         // Resolve configuration from environment
         let defaults = WorkerConfig {
-            task_definition_name: worker.task_definition_name().to_string(),
+            task_definition_name: worker.task_definition_name().to_owned(),
             poll_interval: Duration::from_millis(worker.poll_interval_millis()),
-            domain: worker.domain().map(|s| s.to_string()),
+            domain: worker.domain().map(std::borrow::ToOwned::to_owned),
             worker_id: worker.identity(),
             thread_count: worker.thread_count(),
             ..Default::default()
@@ -104,58 +110,73 @@ impl TaskRunner {
             active_task_count: Arc::new(AtomicUsize::new(0)),
             running_tasks: Arc::new(parking_lot::Mutex::new(HashSet::new())),
             spawned_task_count: Arc::new(AtomicUsize::new(0)),
+            poll_attempts: Arc::new(AtomicU64::new(0)),
         }
     }
 
-    /// Get the task type this runner handles
+    /// Get the task type this runner handles.
+    #[must_use]
     pub fn task_type(&self) -> &str {
         &self.config.task_definition_name
     }
 
-    /// Get the worker configuration
+    /// Get the worker configuration.
+    #[must_use]
     pub fn config(&self) -> &WorkerConfig {
         &self.config
     }
 
-    /// Get the number of currently active tasks (executing, not waiting for semaphore)
+    /// Get the number of currently active tasks (executing, not waiting for semaphore).
+    #[must_use]
     pub fn active_task_count(&self) -> usize {
         self.active_task_count.load(Ordering::SeqCst)
     }
 
-    /// Get the number of spawned tasks (including those waiting for semaphore)
+    /// Get the number of spawned tasks (including those waiting for semaphore).
+    #[must_use]
     pub fn spawned_task_count(&self) -> usize {
         self.spawned_task_count.load(Ordering::SeqCst)
     }
 
-    /// Check if the runner is running
+    /// Get the number of real poll attempts (successful or failed) made against the server so
+    /// far. Zero until the first one completes -- see the field's doc comment for why this
+    /// exists separately from [`TaskRunner::is_running`].
+    #[must_use]
+    pub fn poll_attempt_count(&self) -> u64 {
+        self.poll_attempts.load(Ordering::SeqCst)
+    }
+
+    /// Check if the runner is running.
+    #[must_use]
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
 
-    /// Check if the runner is paused
+    /// Check if the runner is paused.
+    #[must_use]
     pub fn is_paused(&self) -> bool {
         self.paused.load(Ordering::SeqCst)
     }
 
-    /// Pause the runner
+    /// Pause the runner.
     pub fn pause(&self) {
         self.paused.store(true, Ordering::SeqCst);
         info!(task_type = %self.config.task_definition_name, "Task runner paused");
     }
 
-    /// Resume the runner
+    /// Resume the runner.
     pub fn resume(&self) {
         self.paused.store(false, Ordering::SeqCst);
         info!(task_type = %self.config.task_definition_name, "Task runner resumed");
     }
 
-    /// Stop the runner
+    /// Stop the runner.
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
         info!(task_type = %self.config.task_definition_name, "Task runner stopped");
     }
 
-    /// Run the polling loop
+    /// Run the polling loop.
     pub async fn run(&self) {
         self.running.store(true, Ordering::SeqCst);
 
@@ -183,7 +204,7 @@ impl TaskRunner {
         );
     }
 
-    /// Wait for all spawned tasks to complete (used during shutdown)
+    /// Wait for all spawned tasks to complete (used during shutdown).
     async fn wait_for_tasks_to_complete(&self) {
         let shutdown_timeout = Duration::from_secs(30);
         let start = Instant::now();
@@ -203,7 +224,7 @@ impl TaskRunner {
         }
     }
 
-    /// Run one iteration of the polling loop
+    /// Run one iteration of the polling loop.
     async fn run_once(&self) -> Result<()> {
         // Check if paused
         if self.paused.load(Ordering::SeqCst) {
@@ -235,7 +256,7 @@ impl TaskRunner {
 
             let elapsed = self.last_poll_time.lock().elapsed();
             if elapsed < backoff {
-                tokio::time::sleep(backoff - elapsed).await;
+                tokio::time::sleep(backoff.checked_sub(elapsed).unwrap_or_default()).await;
             }
         }
 
@@ -263,6 +284,7 @@ impl TaskRunner {
 
         let poll_duration = poll_start.elapsed();
         *self.last_poll_time.lock() = Instant::now();
+        self.poll_attempts.fetch_add(1, Ordering::SeqCst);
 
         match poll_result {
             Ok(tasks) => {
@@ -305,7 +327,7 @@ impl TaskRunner {
         Ok(())
     }
 
-    /// Spawn task execution in background
+    /// Spawn task execution in background.
     ///
     /// This method correctly handles the semaphore acquisition order to avoid
     /// race conditions in capacity calculation:
@@ -313,9 +335,9 @@ impl TaskRunner {
     /// 2. Spawn task
     /// 3. Acquire semaphore (wait if at capacity)
     /// 4. Increment active count (now executing)
-    /// 5. Track task ID in running_tasks
+    /// 5. Track task ID in `running_tasks`
     /// 6. Execute task
-    /// 7. Decrement active count and remove from running_tasks
+    /// 7. Decrement active count and remove from `running_tasks`
     /// 8. Decrement spawned count
     fn spawn_task_execution(&self, task: Task) {
         let task_id = task.task_id.clone();
@@ -336,14 +358,11 @@ impl TaskRunner {
 
         tokio::spawn(async move {
             // Acquire semaphore permit FIRST - this is the actual concurrency control
-            let _permit = match semaphore.acquire().await {
-                Ok(permit) => permit,
-                Err(_) => {
-                    // Semaphore was closed (shouldn't happen in normal operation)
-                    error!(task_id = %task_id, "Semaphore closed, dropping task");
-                    spawned_task_count.fetch_sub(1, Ordering::SeqCst);
-                    return;
-                }
+            let Ok(_permit) = semaphore.acquire().await else {
+                // Semaphore was closed (shouldn't happen in normal operation)
+                error!(task_id = %task_id, "Semaphore closed, dropping task");
+                spawned_task_count.fetch_sub(1, Ordering::SeqCst);
+                return;
             };
 
             // NOW increment active count and track the task
@@ -414,15 +433,15 @@ impl TaskRunner {
             Err(panic_payload) => {
                 let msg = panic_payload
                     .downcast_ref::<String>()
-                    .map(|s| s.as_str())
+                    .map(std::string::String::as_str)
                     .or_else(|| panic_payload.downcast_ref::<&str>().copied())
                     .unwrap_or("<non-string panic>");
-                TaskOutcome::Panic(msg.to_string())
+                TaskOutcome::Panic(msg.to_owned())
             }
         }
     }
 
-    /// Execute a task and update the result
+    /// Execute a task and update the result.
     ///
     /// Takes ownership of the Task to wrap it in Arc, avoiding clones
     /// when passing to workers.
@@ -456,9 +475,18 @@ impl TaskRunner {
 
         let exec_start = Instant::now();
 
+        // Start a lease-extension heartbeat alongside execution, if configured -- matches
+        // python-sdk's `LeaseManager`, translated to a per-task spawned tokio task (cheap here,
+        // unlike an OS thread) rather than a shared background-thread manager.
+        let heartbeat_handle = Self::maybe_spawn_lease_heartbeat(task_client, &task, config);
+
         // Execute the worker - pass reference to avoid clone in worker trait
         let exec_result = worker.execute(&task).await;
         let exec_duration = exec_start.elapsed();
+
+        if let Some(handle) = heartbeat_handle {
+            handle.abort();
+        }
 
         // Convert result to TaskResult
         let task_result = match exec_result {
@@ -537,6 +565,88 @@ impl TaskRunner {
 
         Ok(())
     }
+
+    /// Start a background heartbeat loop for `task`, if lease extension is enabled and the
+    /// task's `response_timeout_seconds` makes it worthwhile. Returns `None` (spawning nothing)
+    /// when disabled, matching python-sdk's `_track_lease`'s early-return conditions exactly.
+    fn maybe_spawn_lease_heartbeat(
+        task_client: &TaskClient,
+        task: &Arc<Task>,
+        config: &Arc<WorkerConfig>,
+    ) -> Option<tokio::task::JoinHandle<()>> {
+        if !config.lease_extend_enabled {
+            return None;
+        }
+        if task.response_timeout_seconds <= 0 {
+            return None;
+        }
+        let interval_secs = task.response_timeout_seconds as f64 * config.lease_extend_threshold;
+        // Matches python's `LeaseManager.track`: an interval under a second isn't worth
+        // scheduling a repeating heartbeat for.
+        if interval_secs < 1.0 {
+            return None;
+        }
+
+        let task_client = task_client.clone();
+        let task_id = task.task_id.clone();
+        let workflow_instance_id = task.workflow_instance_id.clone();
+        let interval = Duration::from_secs_f64(interval_secs);
+
+        Some(tokio::spawn(Self::send_lease_heartbeats(
+            task_client,
+            task_id,
+            workflow_instance_id,
+            interval,
+        )))
+    }
+
+    /// Send a lease-extension heartbeat every `interval`, starting `interval` after this is
+    /// spawned (not immediately) -- matches python's `LeaseManager`, which arms
+    /// `last_heartbeat_time` at `track()` time and only fires once that much time has elapsed.
+    /// Runs until the caller aborts the returned `JoinHandle` (when the task finishes), which is
+    /// the only way this loop ends.
+    #[expect(clippy::infinite_loop)]
+    async fn send_lease_heartbeats(
+        task_client: TaskClient,
+        task_id: String,
+        workflow_instance_id: String,
+        interval: Duration,
+    ) {
+        // Matches python's `LeaseManager._send_heartbeat`: a short, fixed retry count with fast
+        // backoff -- deliberately not `TaskClient::update_task_with_retry`'s 10/20/30s schedule,
+        // which is sized for terminal completion updates, not a fast-repeating keep-alive that
+        // will just get another chance at the next tick anyway.
+        const LEASE_EXTEND_RETRY_COUNT: u32 = 3;
+
+        let mut ticker = tokio::time::interval_at(tokio::time::Instant::now() + interval, interval);
+        loop {
+            ticker.tick().await;
+            let heartbeat = crate::models::TaskResult {
+                task_id: task_id.clone(),
+                workflow_instance_id: workflow_instance_id.clone(),
+                status: crate::models::TaskResultStatus::InProgress,
+                extend_lease: true,
+                ..Default::default()
+            };
+
+            for attempt in 0..LEASE_EXTEND_RETRY_COUNT {
+                match task_client.update_task(&heartbeat).await {
+                    Ok(_) => {
+                        debug!(task_id = %task_id, "Extended lease");
+                        break;
+                    }
+                    Err(e) if attempt + 1 < LEASE_EXTEND_RETRY_COUNT => {
+                        warn!(task_id = %task_id, error = %e, attempt, "Lease heartbeat failed, retrying");
+                        tokio::time::sleep(Duration::from_millis(500 * u64::from(attempt + 2)))
+                            .await;
+                    }
+                    Err(e) => {
+                        error!(task_id = %task_id, error = %e, "Failed to extend lease after {LEASE_EXTEND_RETRY_COUNT} attempts");
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -550,17 +660,16 @@ mod tests {
 
     #[async_trait]
     impl Worker for TestWorker {
-        fn task_definition_name(&self) -> &str {
+        fn task_definition_name(&self) -> &'static str {
             "test_task"
         }
 
         async fn execute(&self, task: &Task) -> Result<WorkerOutput> {
             let name = task
                 .get_input_string("name")
-                .unwrap_or_else(|| "World".to_string());
+                .unwrap_or_else(|| "World".to_owned());
             Ok(WorkerOutput::completed_with_result(format!(
-                "Hello, {}!",
-                name
+                "Hello, {name}!"
             )))
         }
 
@@ -581,5 +690,72 @@ mod tests {
 
         assert_eq!(runner.task_type(), "test_task");
         assert_eq!(runner.config().thread_count, 5);
+        assert_eq!(runner.poll_attempt_count(), 0);
+        assert!(!runner.is_running());
+    }
+
+    fn test_task_client() -> TaskClient {
+        let config = Configuration::new("http://localhost:8080/api");
+        TaskClient::new(ApiClient::new(config).unwrap())
+    }
+
+    #[test]
+    fn test_lease_heartbeat_not_spawned_when_disabled() {
+        let task_client = test_task_client();
+        let task = Arc::new(Task {
+            response_timeout_seconds: 30,
+            ..Default::default()
+        });
+        let config = Arc::new(WorkerConfig::new("t").with_lease_extend_enabled(false));
+
+        let handle = TaskRunner::maybe_spawn_lease_heartbeat(&task_client, &task, &config);
+        assert!(handle.is_none());
+    }
+
+    #[test]
+    fn test_lease_heartbeat_not_spawned_without_response_timeout() {
+        let task_client = test_task_client();
+        let task = Arc::new(Task {
+            response_timeout_seconds: 0,
+            ..Default::default()
+        });
+        let config = Arc::new(WorkerConfig::new("t").with_lease_extend_enabled(true));
+
+        let handle = TaskRunner::maybe_spawn_lease_heartbeat(&task_client, &task, &config);
+        assert!(handle.is_none());
+    }
+
+    #[test]
+    fn test_lease_heartbeat_not_spawned_when_interval_too_short() {
+        let task_client = test_task_client();
+        // 1s timeout * 0.8 threshold = 0.8s, matching python's "< 1 second" skip.
+        let task = Arc::new(Task {
+            response_timeout_seconds: 1,
+            ..Default::default()
+        });
+        let config = Arc::new(WorkerConfig::new("t").with_lease_extend_enabled(true));
+
+        let handle = TaskRunner::maybe_spawn_lease_heartbeat(&task_client, &task, &config);
+        assert!(handle.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_lease_heartbeat_spawned_when_enabled_and_worthwhile() {
+        let task_client = test_task_client();
+        let task = Arc::new(Task {
+            response_timeout_seconds: 30,
+            ..Default::default()
+        });
+        let config = Arc::new(
+            WorkerConfig::new("t")
+                .with_lease_extend_enabled(true)
+                .with_lease_extend_threshold(0.8),
+        );
+
+        let handle = TaskRunner::maybe_spawn_lease_heartbeat(&task_client, &task, &config);
+        assert!(handle.is_some());
+        // Abort immediately -- this test only checks that a heartbeat loop gets scheduled at
+        // all, not its actual network behavior (which needs a live/mock server and real time).
+        handle.unwrap().abort();
     }
 }

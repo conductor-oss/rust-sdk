@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .register_or_update_workflow_def(&workflow_def, true)
         .await?;
 
-    println!("Workflow registered: {}", workflow_name);
+    println!("Workflow registered: {workflow_name}");
     println!("\nStarting HTTP Poll workflow...");
     println!("The workflow will poll until randomInt < 10\n");
 

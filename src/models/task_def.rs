@@ -4,126 +4,130 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Task definition timeout policy
+/// Task definition timeout policy.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TimeoutPolicy {
-    /// Retry the task
+    /// Retry the task.
     Retry,
-    /// Timeout the workflow
+    /// Timeout the workflow.
     #[default]
     TimeOutWf,
-    /// Alert only
+    /// Alert only.
     AlertOnly,
 }
 
-/// Task retry logic
+/// Task retry logic.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum RetryLogic {
-    /// Fixed delay between retries
+    /// Fixed delay between retries.
     #[default]
     Fixed,
-    /// Exponential backoff
+    /// Exponential backoff.
     ExponentialBackoff,
-    /// Linear backoff
+    /// Linear backoff.
     LinearBackoff,
 }
 
-/// Task definition describing a task type
+/// Task definition describing a task type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskDef {
-    /// Task name (unique identifier)
+    /// Task name (unique identifier).
     pub name: String,
 
-    /// Task description
+    /// Task description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Number of retry attempts
+    /// Number of retry attempts.
     #[serde(default)]
     pub retry_count: i32,
 
-    /// Retry logic
+    /// Retry logic.
     #[serde(default)]
     pub retry_logic: RetryLogic,
 
-    /// Delay between retries in seconds
+    /// Delay between retries in seconds.
     #[serde(default)]
     pub retry_delay_seconds: i32,
 
-    /// Backoff scale factor for exponential backoff
+    /// Backoff scale factor for exponential backoff.
     #[serde(default = "default_backoff_factor")]
     pub backoff_scale_factor: i32,
 
-    /// Timeout in seconds
+    /// Timeout in seconds.
     #[serde(default = "default_timeout")]
     pub timeout_seconds: i64,
 
-    /// Response timeout in seconds
+    /// Response timeout in seconds.
     #[serde(default = "default_response_timeout")]
     pub response_timeout_seconds: i64,
 
-    /// Poll timeout in seconds
+    /// Poll timeout in seconds.
     #[serde(default)]
     pub poll_timeout_seconds: i64,
 
-    /// Timeout policy
+    /// Timeout policy.
     #[serde(default)]
     pub timeout_policy: TimeoutPolicy,
 
-    /// Maximum concurrent executions (0 = unlimited)
+    /// Maximum concurrent executions (0 = unlimited).
     #[serde(default)]
     pub concurrent_exec_limit: i32,
 
-    /// Rate limit per frequency
+    /// Rate limit per frequency.
     #[serde(default)]
     pub rate_limit_per_frequency: i32,
 
-    /// Rate limit frequency in seconds
+    /// Rate limit frequency in seconds.
     #[serde(default = "default_rate_limit_frequency")]
     pub rate_limit_frequency_in_seconds: i32,
 
-    /// Owner email
+    /// Owner email.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub owner_email: Option<String>,
 
-    /// Input keys (expected input parameters)
+    /// Input keys (expected input parameters).
     #[serde(default)]
     pub input_keys: Vec<String>,
 
-    /// Output keys (expected output parameters)
+    /// Output keys (expected output parameters).
     #[serde(default)]
     pub output_keys: Vec<String>,
 
-    /// Input template (default input values)
+    /// Input template (default input values).
     #[serde(default)]
     pub input_template: HashMap<String, serde_json::Value>,
 
-    /// Created by
+    /// Created by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
 
-    /// Created time
+    /// Created time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_time: Option<i64>,
 
-    /// Updated by
+    /// Updated by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
 
-    /// Update time
+    /// Update time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_time: Option<i64>,
 
-    /// Input schema (JSON Schema for input validation)
+    /// Input schema (JSON Schema for input validation).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<serde_json::Value>,
 
-    /// Output schema (JSON Schema for output validation)
+    /// Output schema (JSON Schema for output validation).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<serde_json::Value>,
+
+    /// Runtime metadata (e.g. declared credential names required to dispatch this task).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runtime_metadata: Vec<String>,
 }
 
 fn default_backoff_factor() -> i32 {
@@ -168,12 +172,13 @@ impl Default for TaskDef {
             update_time: None,
             input_schema: None,
             output_schema: None,
+            runtime_metadata: Vec::new(),
         }
     }
 }
 
 impl TaskDef {
-    /// Create a new task definition with the given name
+    /// Create a new task definition with the given name.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -181,13 +186,15 @@ impl TaskDef {
         }
     }
 
-    /// Set description
+    /// Set description.
+    #[must_use]
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
         self
     }
 
-    /// Set retry configuration
+    /// Set retry configuration.
+    #[must_use]
     pub fn with_retry(mut self, count: i32, logic: RetryLogic, delay_seconds: i32) -> Self {
         self.retry_count = count;
         self.retry_logic = logic;
@@ -195,10 +202,11 @@ impl TaskDef {
         self
     }
 
-    /// Set timeout configuration
+    /// Set timeout configuration.
     ///
-    /// Note: This also sets response_timeout_seconds to the same value to ensure
-    /// response_timeout_seconds <= timeout_seconds (required by Conductor validation)
+    /// Note: This also sets `response_timeout_seconds` to the same value to ensure
+    /// `response_timeout_seconds` <= `timeout_seconds` (required by Conductor validation).
+    #[must_use]
     pub fn with_timeout(mut self, timeout_seconds: i64, policy: TimeoutPolicy) -> Self {
         self.timeout_seconds = timeout_seconds;
         self.timeout_policy = policy;
@@ -209,40 +217,53 @@ impl TaskDef {
         self
     }
 
-    /// Set response timeout
+    /// Set response timeout.
+    #[must_use]
     pub fn with_response_timeout(mut self, seconds: i64) -> Self {
         self.response_timeout_seconds = seconds;
         self
     }
 
-    /// Set rate limit
+    /// Set rate limit.
+    #[must_use]
     pub fn with_rate_limit(mut self, limit: i32, frequency_seconds: i32) -> Self {
         self.rate_limit_per_frequency = limit;
         self.rate_limit_frequency_in_seconds = frequency_seconds;
         self
     }
 
-    /// Set concurrent execution limit
+    /// Set concurrent execution limit.
+    #[must_use]
     pub fn with_concurrent_limit(mut self, limit: i32) -> Self {
         self.concurrent_exec_limit = limit;
         self
     }
 
-    /// Set owner email
+    /// Set owner email.
+    #[must_use]
     pub fn with_owner(mut self, email: impl Into<String>) -> Self {
         self.owner_email = Some(email.into());
         self
     }
 
-    /// Set input keys
+    /// Set input keys.
+    #[must_use]
     pub fn with_input_keys(mut self, keys: Vec<String>) -> Self {
         self.input_keys = keys;
         self
     }
 
-    /// Set output keys
+    /// Set output keys.
+    #[must_use]
     pub fn with_output_keys(mut self, keys: Vec<String>) -> Self {
         self.output_keys = keys;
+        self
+    }
+
+    /// Set runtime metadata (e.g. declared credential names required to dispatch this task).
+    #[must_use]
+    pub fn with_runtime_metadata(mut self, runtime_metadata: Vec<String>) -> Self {
+        self.runtime_metadata = runtime_metadata;
         self
     }
 }
@@ -260,7 +281,7 @@ mod tests {
             .with_rate_limit(100, 10);
 
         assert_eq!(task_def.name, "my_task");
-        assert_eq!(task_def.description, Some("A test task".to_string()));
+        assert_eq!(task_def.description, Some("A test task".to_owned()));
         assert_eq!(task_def.retry_count, 3);
         assert_eq!(task_def.retry_logic, RetryLogic::LinearBackoff);
         assert_eq!(task_def.retry_delay_seconds, 5);
@@ -275,5 +296,34 @@ mod tests {
         let task_def = TaskDef::new("test");
         let json = serde_json::to_string(&task_def).unwrap();
         assert!(json.contains("\"name\":\"test\""));
+    }
+
+    #[test]
+    fn test_task_def_runtime_metadata_default_empty() {
+        let task_def = TaskDef::new("test");
+        assert!(task_def.runtime_metadata.is_empty());
+    }
+
+    #[test]
+    fn test_task_def_with_runtime_metadata() {
+        let task_def = TaskDef::new("test").with_runtime_metadata(vec!["openai_key".to_owned()]);
+        assert_eq!(task_def.runtime_metadata, vec!["openai_key".to_owned()]);
+    }
+
+    #[test]
+    fn test_task_def_runtime_metadata_skipped_when_empty() {
+        let task_def = TaskDef::new("test");
+        let json = serde_json::to_string(&task_def).unwrap();
+        assert!(!json.contains("runtimeMetadata"));
+    }
+
+    #[test]
+    fn test_task_def_runtime_metadata_serialized_when_present() {
+        let task_def = TaskDef::new("test").with_runtime_metadata(vec!["openai_key".to_owned()]);
+        let json = serde_json::to_string(&task_def).unwrap();
+        assert!(json.contains("\"runtimeMetadata\":[\"openai_key\"]"));
+
+        let deserialized: TaskDef = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.runtime_metadata, vec!["openai_key".to_owned()]);
     }
 }

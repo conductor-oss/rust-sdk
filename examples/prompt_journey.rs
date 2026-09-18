@@ -20,7 +20,7 @@ impl PromptJourney {
         Ok(Self {
             client,
             created_prompts: Vec::new(),
-            ai_integration: env::var("AI_INTEGRATION").unwrap_or_else(|_| "openai".to_string()),
+            ai_integration: env::var("AI_INTEGRATION").unwrap_or_else(|_| "openai".to_owned()),
         })
     }
 
@@ -36,14 +36,14 @@ impl PromptJourney {
 
         // Create greeting prompt
         println!("Creating customer greeting prompt...");
-        let greeting_prompt = r#"You are a friendly customer service representative for TechMart.
+        let greeting_prompt = "You are a friendly customer service representative for TechMart.
 
 Customer Name: ${customer_name}
 Customer Tier: ${customer_tier}
 Time of Day: ${time_of_day}
 
 Greet the customer appropriately based on their tier and the time of day.
-Keep the greeting warm, professional, and under 50 words."#;
+Keep the greeting warm, professional, and under 50 words.";
 
         prompt_client
             .save_prompt(
@@ -53,7 +53,7 @@ Keep the greeting warm, professional, and under 50 words."#;
             )
             .await?;
         self.created_prompts
-            .push("rust_customer_greeting".to_string());
+            .push("rust_customer_greeting".to_owned());
         println!("  Created 'rust_customer_greeting' prompt");
 
         // Verify by retrieving
@@ -65,7 +65,7 @@ Keep the greeting warm, professional, and under 50 words."#;
 
         // Create order inquiry prompt
         println!("\nCreating order inquiry prompt...");
-        let order_prompt = r#"You are a helpful customer service agent for TechMart.
+        let order_prompt = "You are a helpful customer service agent for TechMart.
 
 Customer Information:
 - Name: ${customer_name}
@@ -76,7 +76,7 @@ Customer Information:
 Customer Query: ${query}
 
 Provide a clear, empathetic response about their order.
-Include relevant details and next steps if applicable."#;
+Include relevant details and next steps if applicable.";
 
         prompt_client
             .save_prompt(
@@ -85,12 +85,12 @@ Include relevant details and next steps if applicable."#;
                 order_prompt,
             )
             .await?;
-        self.created_prompts.push("rust_order_inquiry".to_string());
+        self.created_prompts.push("rust_order_inquiry".to_owned());
         println!("  Created 'rust_order_inquiry' prompt");
 
         // Create return request prompt
         println!("\nCreating return request prompt...");
-        let return_prompt = r#"You are processing a return request for TechMart.
+        let return_prompt = "You are processing a return request for TechMart.
 
 Product: ${product_name}
 Purchase Date: ${purchase_date}
@@ -104,7 +104,7 @@ Evaluate the return request and provide:
 2. Next steps for the customer
 3. Expected timeline
 
-Be helpful and understanding while following company policy."#;
+Be helpful and understanding while following company policy.";
 
         prompt_client
             .save_prompt(
@@ -113,7 +113,7 @@ Be helpful and understanding while following company policy."#;
                 return_prompt,
             )
             .await?;
-        self.created_prompts.push("rust_return_request".to_string());
+        self.created_prompts.push("rust_return_request".to_owned());
         println!("  Created 'rust_return_request' prompt");
 
         println!("\n  Chapter 1 Complete: Basic prompts created!");
@@ -215,11 +215,11 @@ Be helpful and understanding while following company policy."#;
 
         // Create FAQ prompt with explicit version 1
         println!("Creating FAQ response prompt - Version 1...");
-        let faq_v1 = r#"Answer the customer's frequently asked question.
+        let faq_v1 = "Answer the customer's frequently asked question.
 
 Question: ${question}
 
-Provide a clear, concise answer."#;
+Provide a clear, concise answer.";
 
         prompt_client
             .save_prompt_with_options(
@@ -231,12 +231,12 @@ Provide a clear, concise answer."#;
                 false,
             )
             .await?;
-        self.created_prompts.push("rust_faq_response".to_string());
+        self.created_prompts.push("rust_faq_response".to_owned());
         println!("  Created FAQ response v1");
 
         // Create version 2 with improvements
         println!("\nCreating improved Version 2...");
-        let faq_v2 = r#"You are a knowledgeable TechMart support agent answering FAQs.
+        let faq_v2 = "You are a knowledgeable TechMart support agent answering FAQs.
 
 Category: ${category}
 Question: ${question}
@@ -246,7 +246,7 @@ Instructions:
 - Provide accurate information
 - Keep answer under 150 words
 - Include relevant links if applicable
-- Be friendly and helpful"#;
+- Be friendly and helpful";
 
         prompt_client
             .save_prompt_with_options(
@@ -262,7 +262,7 @@ Instructions:
 
         // Demonstrate auto-increment feature
         println!("\nUsing auto-increment for minor update...");
-        let faq_v3 = r#"You are a knowledgeable TechMart support agent answering FAQs.
+        let faq_v3 = "You are a knowledgeable TechMart support agent answering FAQs.
 
 Category: ${category}
 Question: ${question}
@@ -274,7 +274,7 @@ Instructions:
 - Prioritize based on urgency level
 - Keep answer under 150 words
 - Include relevant links if applicable
-- Be friendly and helpful"#;
+- Be friendly and helpful";
 
         prompt_client
             .save_prompt_with_options(
@@ -290,15 +290,15 @@ Instructions:
 
         // Create prompt with model associations
         println!("\nCreating prompt with specific model associations...");
-        let formal_greeting = r#"Dear ${customer_name},
+        let formal_greeting = "Dear ${customer_name},
 
 Thank you for contacting TechMart support.
 
 We appreciate your ${customer_tier} membership and are here to assist you.
 
-How may we help you today?"#;
+How may we help you today?";
 
-        let models = vec!["openai:gpt-4".to_string(), "openai:gpt-4o".to_string()];
+        let models = vec!["openai:gpt-4".to_owned(), "openai:gpt-4o".to_owned()];
 
         prompt_client
             .save_prompt_with_options(
@@ -310,8 +310,7 @@ How may we help you today?"#;
                 false,
             )
             .await?;
-        self.created_prompts
-            .push("rust_greeting_formal".to_string());
+        self.created_prompts.push("rust_greeting_formal".to_owned());
         println!("  Created formal greeting with model associations");
 
         // Tag versions for tracking
@@ -355,17 +354,17 @@ How may we help you today?"#;
 
         let test_cases = [
             HashMap::from([
-                ("customer_name".to_string(), serde_json::json!("John Smith")),
-                ("customer_tier".to_string(), serde_json::json!("Premium")),
-                ("time_of_day".to_string(), serde_json::json!("morning")),
+                ("customer_name".to_owned(), serde_json::json!("John Smith")),
+                ("customer_tier".to_owned(), serde_json::json!("Premium")),
+                ("time_of_day".to_owned(), serde_json::json!("morning")),
             ]),
             HashMap::from([
                 (
-                    "customer_name".to_string(),
+                    "customer_name".to_owned(),
                     serde_json::json!("Sarah Johnson"),
                 ),
-                ("customer_tier".to_string(), serde_json::json!("Standard")),
-                ("time_of_day".to_string(), serde_json::json!("evening")),
+                ("customer_tier".to_owned(), serde_json::json!("Standard")),
+                ("time_of_day".to_owned(), serde_json::json!("evening")),
             ]),
         ];
 
@@ -396,10 +395,10 @@ How may we help you today?"#;
                     } else {
                         response
                     };
-                    println!("    Response: {}\n", preview);
+                    println!("    Response: {preview}\n");
                 }
                 Err(e) => {
-                    println!("    Test skipped (AI integration required): {}\n", e);
+                    println!("    Test skipped (AI integration required): {e}\n");
                 }
             }
         }
@@ -409,15 +408,15 @@ How may we help you today?"#;
 
         let order_template = prompt_client.get_prompt("rust_order_inquiry").await?;
         let order_test = HashMap::from([
-            ("customer_name".to_string(), serde_json::json!("Alex Chen")),
-            ("order_id".to_string(), serde_json::json!("ORD-2024-001234")),
-            ("order_status".to_string(), serde_json::json!("In Transit")),
+            ("customer_name".to_owned(), serde_json::json!("Alex Chen")),
+            ("order_id".to_owned(), serde_json::json!("ORD-2024-001234")),
+            ("order_status".to_owned(), serde_json::json!("In Transit")),
             (
-                "delivery_date".to_string(),
+                "delivery_date".to_owned(),
                 serde_json::json!("December 28, 2024"),
             ),
             (
-                "query".to_string(),
+                "query".to_owned(),
                 serde_json::json!("When will my order arrive? I need it for a gift."),
             ),
         ]);
@@ -425,7 +424,7 @@ How may we help you today?"#;
         let temperature_tests = vec![("Conservative", 0.3), ("Balanced", 0.7), ("Creative", 0.9)];
 
         for (name, temp) in temperature_tests {
-            println!("\n  Testing with {} temperature ({}):", name, temp);
+            println!("\n  Testing with {name} temperature ({temp}):");
             match prompt_client
                 .test_prompt(
                     &order_template.template,
@@ -444,10 +443,10 @@ How may we help you today?"#;
                     } else {
                         response
                     };
-                    println!("    Response preview: {}", preview);
+                    println!("    Response preview: {preview}");
                 }
                 Err(e) => {
-                    println!("    Test skipped (AI integration required): {}", e);
+                    println!("    Test skipped (AI integration required): {e}");
                 }
             }
         }
@@ -467,8 +466,8 @@ How may we help you today?"#;
 
         for prompt_name in &self.created_prompts {
             match prompt_client.delete_prompt(prompt_name).await {
-                Ok(_) => println!("  Deleted: {}", prompt_name),
-                Err(e) => println!("  Could not delete {}: {}", prompt_name, e),
+                Ok(()) => println!("  Deleted: {prompt_name}"),
+                Err(e) => println!("  Could not delete {prompt_name}: {e}"),
             }
         }
 
@@ -506,17 +505,17 @@ async fn main() -> anyhow::Result<()> {
     let mut journey = PromptJourney::new()?;
 
     match journey.run().await {
-        Ok(_) => {
+        Ok(()) => {
             // Cleanup on success
             if let Err(e) = journey.cleanup().await {
-                eprintln!("Cleanup warning: {}", e);
+                eprintln!("Cleanup warning: {e}");
             }
         }
         Err(e) => {
-            eprintln!("Journey failed: {}", e);
+            eprintln!("Journey failed: {e}");
             // Cleanup on failure
             if let Err(cleanup_err) = journey.cleanup().await {
-                eprintln!("Cleanup warning: {}", cleanup_err);
+                eprintln!("Cleanup warning: {cleanup_err}");
             }
             return Err(e);
         }

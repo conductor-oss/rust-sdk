@@ -12,13 +12,13 @@ use crate::configuration::Configuration;
 use crate::error::{ConductorError, Result};
 use crate::http::metrics::HttpMetricsObserver;
 
-/// Token response from authentication endpoint
+/// Token response from authentication endpoint.
 #[derive(Debug, serde::Deserialize)]
 struct TokenResponse {
     token: String,
 }
 
-/// Maximum consecutive auth failures before stopping retry attempts
+/// Maximum consecutive auth failures before stopping retry attempts.
 const MAX_AUTH_FAILURES: u32 = 5;
 
 /// Pairs a resolved request path with a bounded-cardinality metric template.
@@ -41,6 +41,7 @@ pub struct ApiPath<'a> {
 
 impl<'a> ApiPath<'a> {
     /// Use when the resolved path differs from the metric template.
+    #[must_use]
     pub fn templated(path: &'a str, template: &'a str) -> Self {
         Self {
             path,
@@ -58,7 +59,7 @@ impl<'a> From<&'a str> for ApiPath<'a> {
     }
 }
 
-/// HTTP API client for Conductor server
+/// HTTP API client for Conductor server.
 ///
 /// Thread-safe and cloneable. Multiple clones share the same connection pool
 /// and authentication state.
@@ -74,7 +75,7 @@ impl<'a> From<&'a str> for ApiPath<'a> {
 /// # Environment Variables
 ///
 /// Configure via environment variables or `.env` file:
-/// - `CONDUCTOR_SERVER_URL`: Server API URL (default: http://localhost:8080/api)
+/// - `CONDUCTOR_SERVER_URL`: Server API URL (default: <http://localhost:8080/api>)
 /// - `CONDUCTOR_AUTH_KEY`: Authentication key ID (Orkes Conductor)
 /// - `CONDUCTOR_AUTH_SECRET`: Authentication secret (Orkes Conductor)
 /// - `CONDUCTOR_AUTH_TOKEN_TTL_MINS`: Token TTL in minutes (default: 45)
@@ -85,13 +86,13 @@ pub struct ApiClient {
     client: Client,
     config: Arc<RwLock<Configuration>>,
     base_url: String,
-    /// Track consecutive auth failures for backoff
+    /// Track consecutive auth failures for backoff.
     auth_failures: Arc<RwLock<u32>>,
-    /// Last time we attempted token refresh (for backoff)
+    /// Last time we attempted token refresh (for backoff).
     last_refresh_attempt: Arc<RwLock<Option<Instant>>>,
-    /// Mutex to ensure only one token refresh happens at a time
+    /// Mutex to ensure only one token refresh happens at a time.
     token_refresh_lock: Arc<Mutex<()>>,
-    /// Cached result of OSS detection (None = not yet probed)
+    /// Cached result of OSS detection (None = not yet probed).
     is_oss: Arc<RwLock<Option<bool>>>,
     /// HTTP metrics observer. `None` when the client is created standalone
     /// (without a `TaskHandler`). `Some` after [`set_http_observer`](Self::set_http_observer).
@@ -99,11 +100,16 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
-    /// Create a new API client
+    /// Create a new API client.
     ///
     /// The client will automatically handle authentication if credentials are
     /// configured via `CONDUCTOR_AUTH_KEY` and `CONDUCTOR_AUTH_SECRET` environment
     /// variables, or via `Configuration::with_auth()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the underlying `reqwest` client fails to build
+    /// (e.g. TLS backend initialization failure) -- this doesn't make any network request.
     pub fn new(config: Configuration) -> Result<Self> {
         let client = Client::builder()
             .timeout(config.timeout)
@@ -111,7 +117,7 @@ impl ApiClient {
             .pool_max_idle_per_host(10)
             .build()?;
 
-        let base_url = config.server_api_url.trim_end_matches('/').to_string();
+        let base_url = config.server_api_url.trim_end_matches('/').to_owned();
 
         Ok(Self {
             client,
@@ -125,7 +131,8 @@ impl ApiClient {
         })
     }
 
-    /// Get the base URL
+    /// Get the base URL.
+    #[must_use]
     pub fn base_url(&self) -> &str {
         &self.base_url
     }
@@ -202,19 +209,33 @@ impl ApiClient {
         result.map_err(ConductorError::Http)
     }
 
-    /// GET request
-    pub async fn get<T: DeserializeOwned>(&self, path: impl Into<ApiPath<'_>>) -> Result<T> {
+    /// GET request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    pub async fn get<T>(&self, path: impl Into<ApiPath<'_>>) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
         let p = path.into();
         self.request::<(), T>(reqwest::Method::GET, p.path, p.metric_uri, None)
             .await
     }
 
-    /// GET request with query parameters
-    pub async fn get_with_params<T: DeserializeOwned>(
+    /// GET request with query parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    pub async fn get_with_params<T>(
         &self,
         path: impl Into<ApiPath<'_>>,
         params: &[(&str, &str)],
-    ) -> Result<T> {
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
@@ -228,23 +249,123 @@ impl ApiClient {
         self.handle_response(response).await
     }
 
-    /// POST request
-    pub async fn post<B: Serialize + ?Sized, T: DeserializeOwned>(
+    /// GET request that returns the raw, unbuffered [`Response`] instead of deserializing it.
+    ///
+    /// For endpoints whose body is consumed incrementally (e.g. Server-Sent Events) rather than
+    /// parsed as a single JSON document. Applies the same auth-header/refresh handling as
+    /// [`get`](Self::get), but does not retry on 401 — a streaming caller has already begun
+    /// reading the body by the time a status past the headers would be observed, so there is no
+    /// safe point to re-issue the request transparently.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn get_stream(&self, path: impl Into<ApiPath<'_>>) -> Result<Response> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
+
+        let mut request = self.client.get(&url);
+        request = self.add_auth_header(request).await?;
+
+        let response = self
+            .send_observed("GET", p.path, p.metric_uri, request)
+            .await?;
+        let status = response.status();
+
+        if status.is_success() {
+            Ok(response)
+        } else {
+            Err(self.handle_error_response(response).await)
+        }
+    }
+
+    /// GET request returning the raw response body as bytes, instead of deserializing it as
+    /// JSON.
+    ///
+    /// For binary (non-JSON) payloads, e.g. protobuf file contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn get_bytes(&self, path: impl Into<ApiPath<'_>>) -> Result<Vec<u8>> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
+
+        let mut request = self.client.get(&url);
+        request = self.add_auth_header(request).await?;
+
+        let response = self
+            .send_observed("GET", p.path, p.metric_uri, request)
+            .await?;
+        let status = response.status();
+
+        if status.is_success() {
+            Ok(response
+                .bytes()
+                .await
+                .map_err(ConductorError::Http)?
+                .to_vec())
+        } else {
+            Err(self.handle_error_response(response).await)
+        }
+    }
+
+    /// POST request with a raw binary body and no response body.
+    ///
+    /// For binary (non-JSON) payloads, e.g. protobuf file contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn post_bytes_no_response(
         &self,
         path: impl Into<ApiPath<'_>>,
-        body: &B,
-    ) -> Result<T> {
+        body: Vec<u8>,
+    ) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
+
+        let mut request = self.client.post(&url);
+        request = self.add_auth_header(request).await?;
+        request = request.body(body);
+        request = request.header("Content-Type", "application/octet-stream");
+
+        let response = self
+            .send_observed("POST", p.path, p.metric_uri, request)
+            .await?;
+        let status = response.status();
+
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(self.handle_error_response(response).await)
+        }
+    }
+
+    /// POST request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    pub async fn post<B, T>(&self, path: impl Into<ApiPath<'_>>, body: &B) -> Result<T>
+    where
+        B: Serialize + ?Sized,
+        T: DeserializeOwned,
+    {
         let p = path.into();
         self.request_with_body(reqwest::Method::POST, p.path, p.metric_uri, body)
             .await
     }
 
-    /// POST request returning raw text
-    pub async fn post_text<B: Serialize>(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-        body: &B,
-    ) -> Result<String> {
+    /// POST request returning raw text.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    pub async fn post_text<B>(&self, path: impl Into<ApiPath<'_>>, body: &B) -> Result<String>
+    where
+        B: Serialize,
+    {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
@@ -264,25 +385,40 @@ impl ApiClient {
         }
     }
 
-    /// PUT request
-    pub async fn put<B: Serialize + ?Sized, T: DeserializeOwned>(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-        body: &B,
-    ) -> Result<T> {
+    /// PUT request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    pub async fn put<B, T>(&self, path: impl Into<ApiPath<'_>>, body: &B) -> Result<T>
+    where
+        B: Serialize + ?Sized,
+        T: DeserializeOwned,
+    {
         let p = path.into();
         self.request_with_body(reqwest::Method::PUT, p.path, p.metric_uri, body)
             .await
     }
 
-    /// DELETE request
-    pub async fn delete<T: DeserializeOwned>(&self, path: impl Into<ApiPath<'_>>) -> Result<T> {
+    /// DELETE request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn delete<T>(&self, path: impl Into<ApiPath<'_>>) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
         let p = path.into();
         self.request::<(), T>(reqwest::Method::DELETE, p.path, p.metric_uri, None)
             .await
     }
 
-    /// DELETE request with no response body
+    /// DELETE request with no response body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_no_content(&self, path: impl Into<ApiPath<'_>>) -> Result<()> {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
@@ -302,12 +438,15 @@ impl ApiClient {
         }
     }
 
-    /// DELETE request with body
-    pub async fn delete_with_body<B: Serialize + ?Sized>(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-        body: &B,
-    ) -> Result<()> {
+    /// DELETE request with body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    pub async fn delete_with_body<B>(&self, path: impl Into<ApiPath<'_>>, body: &B) -> Result<()>
+    where
+        B: Serialize + ?Sized,
+    {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
@@ -327,7 +466,11 @@ impl ApiClient {
         }
     }
 
-    /// DELETE request with query parameters
+    /// DELETE request with query parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn delete_with_params(
         &self,
         path: impl Into<ApiPath<'_>>,
@@ -352,12 +495,15 @@ impl ApiClient {
         }
     }
 
-    /// POST request with no response
-    pub async fn post_no_response<B: Serialize + ?Sized>(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-        body: &B,
-    ) -> Result<()> {
+    /// POST request with no response.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn post_no_response<B>(&self, path: impl Into<ApiPath<'_>>, body: &B) -> Result<()>
+    where
+        B: Serialize + ?Sized,
+    {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
@@ -377,11 +523,15 @@ impl ApiClient {
         }
     }
 
-    /// POST request with no body
-    pub async fn post_no_body<T: DeserializeOwned>(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-    ) -> Result<T> {
+    /// POST request with no body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    pub async fn post_no_body<T>(&self, path: impl Into<ApiPath<'_>>) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
@@ -394,7 +544,11 @@ impl ApiClient {
         self.handle_response(response).await
     }
 
-    /// POST request with no body and no response
+    /// POST request with no body and no response.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn post_no_body_no_response(&self, path: impl Into<ApiPath<'_>>) -> Result<()> {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
@@ -414,12 +568,15 @@ impl ApiClient {
         }
     }
 
-    /// PUT request with no response
-    pub async fn put_no_response<B: Serialize + ?Sized>(
-        &self,
-        path: impl Into<ApiPath<'_>>,
-        body: &B,
-    ) -> Result<()> {
+    /// PUT request with no response.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn put_no_response<B>(&self, path: impl Into<ApiPath<'_>>, body: &B) -> Result<()>
+    where
+        B: Serialize + ?Sized,
+    {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
@@ -439,14 +596,18 @@ impl ApiClient {
         }
     }
 
-    /// PUT request with raw text body
+    /// PUT request with raw text body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn put_raw(&self, path: impl Into<ApiPath<'_>>, body: &str) -> Result<()> {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
         let mut request = self.client.put(&url);
         request = self.add_auth_header(request).await?;
-        request = request.body(body.to_string());
+        request = request.body(body.to_owned());
         request = request.header("Content-Type", "text/plain");
 
         let response = self
@@ -461,13 +622,21 @@ impl ApiClient {
         }
     }
 
-    /// POST request with JSON body and query parameters
-    pub async fn post_with_params<B: Serialize + ?Sized, T: DeserializeOwned>(
+    /// POST request with JSON body and query parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
+    pub async fn post_with_params<B, T>(
         &self,
         path: impl Into<ApiPath<'_>>,
         body: &B,
         params: &[(&str, &str)],
-    ) -> Result<T> {
+    ) -> Result<T>
+    where
+        B: Serialize + ?Sized,
+        T: DeserializeOwned,
+    {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
 
@@ -482,7 +651,11 @@ impl ApiClient {
         self.handle_response(response).await
     }
 
-    /// POST request with raw text body and query parameters
+    /// POST request with raw text body and query parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn post_raw_with_params(
         &self,
         path: impl Into<ApiPath<'_>>,
@@ -495,7 +668,7 @@ impl ApiClient {
         let mut request = self.client.post(&url);
         request = self.add_auth_header(request).await?;
         request = request.query(params);
-        request = request.body(body.to_string());
+        request = request.body(body.to_owned());
         request = request.header("Content-Type", "text/plain");
 
         let response = self
@@ -510,7 +683,11 @@ impl ApiClient {
         }
     }
 
-    /// PUT request with raw text body and query parameters
+    /// PUT request with raw text body and query parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn put_raw_with_params(
         &self,
         path: impl Into<ApiPath<'_>>,
@@ -523,7 +700,7 @@ impl ApiClient {
         let mut request = self.client.put(&url);
         request = self.add_auth_header(request).await?;
         request = request.query(params);
-        request = request.body(body.to_string());
+        request = request.body(body.to_owned());
         request = request.header("Content-Type", "text/plain");
 
         let response = self
@@ -538,7 +715,11 @@ impl ApiClient {
         }
     }
 
-    /// GET request with no response
+    /// GET request with no response.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn get_no_response(&self, path: impl Into<ApiPath<'_>>) -> Result<()> {
         let p = path.into();
         let url = format!("{}{}", self.base_url, p.path);
@@ -558,16 +739,20 @@ impl ApiClient {
         }
     }
 
-    /// Generic request method (no body) with automatic 401 retry
-    async fn request<B: Serialize, T: DeserializeOwned>(
+    /// Generic request method (no body) with automatic 401 retry.
+    async fn request<B, T>(
         &self,
         method: reqwest::Method,
         path: &str,
         metric_uri: &str,
         body: Option<&B>,
-    ) -> Result<T> {
+    ) -> Result<T>
+    where
+        B: Serialize,
+        T: DeserializeOwned,
+    {
         let url = format!("{}{}", self.base_url, path);
-        let method_str = method.as_str().to_string();
+        let method_str = method.as_str().to_owned();
 
         let mut request = self.client.request(method.clone(), &url);
         request = self.add_auth_header(request).await?;
@@ -603,16 +788,20 @@ impl ApiClient {
         self.handle_response(response).await
     }
 
-    /// Generic request method with body (supports slices) with automatic 401 retry
-    async fn request_with_body<B: Serialize + ?Sized, T: DeserializeOwned>(
+    /// Generic request method with body (supports slices) with automatic 401 retry.
+    async fn request_with_body<B, T>(
         &self,
         method: reqwest::Method,
         path: &str,
         metric_uri: &str,
         body: &B,
-    ) -> Result<T> {
+    ) -> Result<T>
+    where
+        B: Serialize + ?Sized,
+        T: DeserializeOwned,
+    {
         let url = format!("{}{}", self.base_url, path);
-        let method_str = method.as_str().to_string();
+        let method_str = method.as_str().to_owned();
 
         let mut request = self.client.request(method.clone(), &url);
         request = self.add_auth_header(request).await?;
@@ -642,8 +831,11 @@ impl ApiClient {
         self.handle_response(response).await
     }
 
-    /// Handle successful response, deserializing the body
-    async fn handle_response<T: DeserializeOwned>(&self, response: Response) -> Result<T> {
+    /// Handle successful response, deserializing the body.
+    async fn handle_response<T>(&self, response: Response) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
         let status = response.status();
 
         if status.is_success() {
@@ -667,12 +859,12 @@ impl ApiClient {
         }
     }
 
-    /// Check if a 401 response indicates an expired/invalid token that should trigger retry
+    /// Check if a 401 response indicates an expired/invalid token that should trigger retry.
     fn is_token_expired_error(&self, status: StatusCode) -> bool {
         status == StatusCode::UNAUTHORIZED
     }
 
-    /// Handle error response
+    /// Handle error response.
     async fn handle_error_response(&self, response: Response) -> ConductorError {
         let status = response.status();
         let status_code = status.as_u16();
@@ -687,19 +879,17 @@ impl ApiClient {
         let message = response
             .text()
             .await
-            .unwrap_or_else(|_| "Unknown error".to_string());
+            .unwrap_or_else(|_| "Unknown error".to_owned());
 
         match status {
-            StatusCode::UNAUTHORIZED => ConductorError::auth(format!("Unauthorized: {}", message)),
-            StatusCode::NOT_FOUND => ConductorError::api(format!("Not found: {}", message), None),
-            StatusCode::BAD_REQUEST => {
-                ConductorError::api(format!("Bad request: {}", message), None)
-            }
+            StatusCode::UNAUTHORIZED => ConductorError::auth(format!("Unauthorized: {message}")),
+            StatusCode::NOT_FOUND => ConductorError::api(format!("Not found: {message}"), None),
+            StatusCode::BAD_REQUEST => ConductorError::api(format!("Bad request: {message}"), None),
             _ => ConductorError::server(status_code, message),
         }
     }
 
-    /// Add authentication header to request
+    /// Add authentication header to request.
     ///
     /// Uses a mutex to ensure only one token refresh happens at a time,
     /// preventing thundering herd on token expiration. Also proactively
@@ -768,7 +958,7 @@ impl ApiClient {
         Ok(request)
     }
 
-    /// Refresh authentication token
+    /// Refresh authentication token.
     ///
     /// Handles several scenarios:
     /// - Success: Updates token and resets failure counter
@@ -797,8 +987,7 @@ impl ApiClient {
                 "Token refresh has failed too many times. Please check your CONDUCTOR_AUTH_KEY and CONDUCTOR_AUTH_SECRET."
             );
             return Err(ConductorError::auth(format!(
-                "Token refresh failed {} times. Check your authentication credentials.",
-                failures
+                "Token refresh failed {failures} times. Check your authentication credentials."
             )));
         }
 
@@ -806,11 +995,11 @@ impl ApiClient {
         if failures > 0 {
             // Check time since last attempt
             if let Some(last_attempt) = *self.last_refresh_attempt.read().await {
-                let backoff = Duration::from_secs(2u64.pow(failures.min(5)));
+                let backoff = Duration::from_secs(2_u64.pow(failures.min(5)));
                 let elapsed = last_attempt.elapsed();
 
                 if elapsed < backoff {
-                    let remaining = backoff - elapsed;
+                    let remaining = backoff.checked_sub(elapsed).unwrap_or_default();
                     warn!(
                         failures = failures,
                         backoff_secs = backoff.as_secs(),
@@ -893,16 +1082,19 @@ impl ApiClient {
             *self.auth_failures.write().await += 1;
             error!(status = %status, message = %message, "Failed to refresh token");
             Err(ConductorError::auth(format!(
-                "Failed to get token: {} - {}",
-                status, message
+                "Failed to get token: {status} - {message}"
             )))
         }
     }
 
-    /// Force refresh the authentication token
+    /// Force refresh the authentication token.
     ///
     /// Called when a request fails with 401, indicating the token may have
     /// been invalidated server-side before TTL expiration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn force_refresh_token(&self) -> Result<()> {
         // Clear current token to force refresh
         {
@@ -937,7 +1129,7 @@ impl ApiClient {
         };
 
         info!(
-            "Server detection: {} (POST {} → {})",
+            "Server detection: {} (POST {} \u{2192} {})",
             if is_oss { "OSS" } else { "Enterprise" },
             url,
             if is_oss { "404" } else { "non-404" }
@@ -947,7 +1139,7 @@ impl ApiClient {
         is_oss
     }
 
-    /// Get configuration (for reading settings)
+    /// Get configuration (for reading settings).
     pub async fn get_config(&self) -> Configuration {
         self.config.read().await.clone()
     }

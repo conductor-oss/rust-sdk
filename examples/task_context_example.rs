@@ -183,7 +183,7 @@ async fn main() -> Result<()> {
         // Get any previous output that might have been set
         let previous_state: String = task
             .get_input("state")
-            .unwrap_or_else(|| "start".to_string());
+            .unwrap_or_else(|| "start".to_owned());
 
         info!(
             "[Conditional Worker] Poll {} - State: {}",

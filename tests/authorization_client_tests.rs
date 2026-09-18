@@ -31,14 +31,14 @@ async fn test_create_and_get_application() {
                 Ok(retrieved) => {
                     assert_eq!(retrieved.name, app_name);
                 }
-                Err(e) => eprintln!("Warning: get_application failed: {:?}", e),
+                Err(e) => eprintln!("Warning: get_application failed: {e:?}"),
             }
 
             // Delete application
             auth.delete_application(&app.id).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: create_application failed: {:?}", e);
+            eprintln!("Warning: create_application failed: {e:?}");
         }
     }
 }
@@ -55,7 +55,7 @@ async fn test_list_applications() {
             println!("Found {} applications", apps.len());
         }
         Err(e) => {
-            eprintln!("Warning: list_applications failed: {:?}", e);
+            eprintln!("Warning: list_applications failed: {e:?}");
         }
     }
 }
@@ -84,7 +84,7 @@ async fn test_create_access_key() {
                         Ok(keys) => {
                             assert!(!keys.is_empty());
                         }
-                        Err(e) => eprintln!("Warning: get_access_keys failed: {:?}", e),
+                        Err(e) => eprintln!("Warning: get_access_keys failed: {e:?}"),
                     }
 
                     // Toggle access key status
@@ -95,14 +95,14 @@ async fn test_create_access_key() {
                     // Delete access key
                     auth.delete_access_key(&app.id, &access_key.id).await.ok();
                 }
-                Err(e) => eprintln!("Warning: create_access_key failed: {:?}", e),
+                Err(e) => eprintln!("Warning: create_access_key failed: {e:?}"),
             }
 
             // Delete application
             auth.delete_application(&app.id).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: create_application failed: {:?}", e);
+            eprintln!("Warning: create_application failed: {e:?}");
         }
     }
 }
@@ -131,14 +131,14 @@ async fn test_upsert_and_get_user() {
                 Ok(retrieved) => {
                     assert_eq!(retrieved.id, user_id);
                 }
-                Err(e) => eprintln!("Warning: get_user failed: {:?}", e),
+                Err(e) => eprintln!("Warning: get_user failed: {e:?}"),
             }
 
             // Delete user
             auth.delete_user(&user_id).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: upsert_user failed: {:?}", e);
+            eprintln!("Warning: upsert_user failed: {e:?}");
         }
     }
 }
@@ -155,7 +155,7 @@ async fn test_list_users() {
             println!("Found {} users", users.len());
         }
         Err(e) => {
-            eprintln!("Warning: list_users failed: {:?}", e);
+            eprintln!("Warning: list_users failed: {e:?}");
         }
     }
 }
@@ -185,14 +185,14 @@ async fn test_upsert_and_get_group() {
                 Ok(retrieved) => {
                     assert_eq!(retrieved.id, group_id);
                 }
-                Err(e) => eprintln!("Warning: get_group failed: {:?}", e),
+                Err(e) => eprintln!("Warning: get_group failed: {e:?}"),
             }
 
             // Delete group
             auth.delete_group(&group_id).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: upsert_group failed: {:?}", e);
+            eprintln!("Warning: upsert_group failed: {e:?}");
         }
     }
 }
@@ -209,7 +209,7 @@ async fn test_list_groups() {
             println!("Found {} groups", groups.len());
         }
         Err(e) => {
-            eprintln!("Warning: list_groups failed: {:?}", e);
+            eprintln!("Warning: list_groups failed: {e:?}");
         }
     }
 }
@@ -230,7 +230,7 @@ async fn test_grant_and_remove_permissions() {
             println!("Found {} permissions", perms.len());
         }
         Err(e) => {
-            eprintln!("Warning: get_granted_permissions failed: {:?}", e);
+            eprintln!("Warning: get_granted_permissions failed: {e:?}");
         }
     }
 }
@@ -247,7 +247,7 @@ async fn test_check_permissions() {
             println!("Found {} group permissions", perms.len());
         }
         Err(e) => {
-            eprintln!("Warning: get_granted_permissions_for_group failed: {:?}", e);
+            eprintln!("Warning: get_granted_permissions_for_group failed: {e:?}");
         }
     }
 }
@@ -268,7 +268,7 @@ async fn test_create_and_get_role() {
             println!("Found {} custom roles", roles.len());
         }
         Err(e) => {
-            eprintln!("Warning: list_custom_roles failed: {:?}", e);
+            eprintln!("Warning: list_custom_roles failed: {e:?}");
         }
     }
 }
@@ -285,7 +285,7 @@ async fn test_list_all_roles() {
             println!("Found {} permission types", perms.len());
         }
         Err(e) => {
-            eprintln!("Warning: list_available_permissions failed: {:?}", e);
+            eprintln!("Warning: list_available_permissions failed: {e:?}");
         }
     }
 }

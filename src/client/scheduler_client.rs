@@ -7,34 +7,47 @@ use crate::models::{
     MetadataTag, SaveScheduleRequest, SearchResultWorkflowScheduleExecution, WorkflowSchedule,
 };
 
-/// Client for managing workflow schedules
+/// Client for managing workflow schedules.
 #[derive(Clone)]
 pub struct SchedulerClient {
     api: ApiClient,
 }
 
 impl SchedulerClient {
-    /// Create a new scheduler client
+    /// Create a new scheduler client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self { api }
     }
 
-    /// Save (create or update) a schedule
+    /// Save (create or update) a schedule.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn save_schedule(&self, request: &SaveScheduleRequest) -> Result<()> {
         self.api
             .post_no_response("/scheduler/schedules", request)
             .await
     }
 
-    /// Get a schedule by name
+    /// Get a schedule by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_schedule(&self, name: &str) -> Result<WorkflowSchedule> {
-        let path = format!("/scheduler/schedules/{}", name);
+        let path = format!("/scheduler/schedules/{name}");
         self.api
             .get(ApiPath::templated(&path, "/scheduler/schedules/{name}"))
             .await
     }
 
-    /// Get all schedules, optionally filtered by workflow name
+    /// Get all schedules, optionally filtered by workflow name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_all_schedules(
         &self,
         workflow_name: Option<&str>,
@@ -48,7 +61,11 @@ impl SchedulerClient {
         }
     }
 
-    /// Get next few schedule execution times for a cron expression
+    /// Get next few schedule execution times for a cron expression.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_next_few_schedule_execution_times(
         &self,
         cron_expression: &str,
@@ -56,7 +73,7 @@ impl SchedulerClient {
         schedule_end_time: Option<i64>,
         limit: Option<i32>,
     ) -> Result<Vec<i64>> {
-        let mut params: Vec<(&str, String)> = vec![("cronExpression", cron_expression.to_string())];
+        let mut params: Vec<(&str, String)> = vec![("cronExpression", cron_expression.to_owned())];
 
         if let Some(start) = schedule_start_time {
             params.push(("scheduleStartTime", start.to_string()));
@@ -74,17 +91,25 @@ impl SchedulerClient {
             .await
     }
 
-    /// Delete a schedule
+    /// Delete a schedule.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_schedule(&self, name: &str) -> Result<()> {
-        let path = format!("/scheduler/schedules/{}", name);
+        let path = format!("/scheduler/schedules/{name}");
         self.api
             .delete_no_content(ApiPath::templated(&path, "/scheduler/schedules/{name}"))
             .await
     }
 
-    /// Pause a schedule
+    /// Pause a schedule.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn pause_schedule(&self, name: &str) -> Result<()> {
-        let path = format!("/scheduler/schedules/{}/pause", name);
+        let path = format!("/scheduler/schedules/{name}/pause");
         self.api
             .get_no_response(ApiPath::templated(
                 &path,
@@ -93,14 +118,22 @@ impl SchedulerClient {
             .await
     }
 
-    /// Pause all schedules
+    /// Pause all schedules.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn pause_all_schedules(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/pause").await
     }
 
-    /// Resume a schedule
+    /// Resume a schedule.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn resume_schedule(&self, name: &str) -> Result<()> {
-        let path = format!("/scheduler/schedules/{}/resume", name);
+        let path = format!("/scheduler/schedules/{name}/resume");
         self.api
             .get_no_response(ApiPath::templated(
                 &path,
@@ -109,12 +142,20 @@ impl SchedulerClient {
             .await
     }
 
-    /// Resume all schedules
+    /// Resume all schedules.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn resume_all_schedules(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/resume").await
     }
 
-    /// Search schedule executions
+    /// Search schedule executions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn search_schedule_executions(
         &self,
         start: Option<i32>,
@@ -132,13 +173,13 @@ impl SchedulerClient {
             params.push(("size", s.to_string()));
         }
         if let Some(s) = sort {
-            params.push(("sort", s.to_string()));
+            params.push(("sort", s.to_owned()));
         }
         if let Some(ft) = free_text {
-            params.push(("freeText", ft.to_string()));
+            params.push(("freeText", ft.to_owned()));
         }
         if let Some(q) = query {
-            params.push(("query", q.to_string()));
+            params.push(("query", q.to_owned()));
         }
 
         let params_ref: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -147,14 +188,22 @@ impl SchedulerClient {
             .await
     }
 
-    /// Requeue all execution records
+    /// Requeue all execution records.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn requeue_all_execution_records(&self) -> Result<()> {
         self.api.get_no_response("/scheduler/admin/requeue").await
     }
 
-    /// Set tags for a schedule
+    /// Set tags for a schedule.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn set_scheduler_tags(&self, tags: &[MetadataTag], name: &str) -> Result<()> {
-        let path = format!("/scheduler/schedules/{}/tags", name);
+        let path = format!("/scheduler/schedules/{name}/tags");
         self.api
             .put_no_response(
                 ApiPath::templated(&path, "/scheduler/schedules/{name}/tags"),
@@ -163,9 +212,13 @@ impl SchedulerClient {
             .await
     }
 
-    /// Get tags for a schedule
+    /// Get tags for a schedule.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_scheduler_tags(&self, name: &str) -> Result<Vec<MetadataTag>> {
-        let path = format!("/scheduler/schedules/{}/tags", name);
+        let path = format!("/scheduler/schedules/{name}/tags");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -174,9 +227,13 @@ impl SchedulerClient {
             .await
     }
 
-    /// Delete tags from a schedule
+    /// Delete tags from a schedule.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn delete_scheduler_tags(&self, tags: &[MetadataTag], name: &str) -> Result<()> {
-        let path = format!("/scheduler/schedules/{}/tags", name);
+        let path = format!("/scheduler/schedules/{name}/tags");
         self.api
             .delete_with_body(
                 ApiPath::templated(&path, "/scheduler/schedules/{name}/tags"),

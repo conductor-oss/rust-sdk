@@ -55,8 +55,8 @@ async fn main() -> anyhow::Result<()> {
     .with_input_param("chunkSize", 1024)
     .with_input_param("chunkOverlap", 128)
     .with_metadata(HashMap::from([
-        ("source".to_string(), "${workflow.input.source}".to_string()),
-        ("title".to_string(), "${workflow.input.title}".to_string()),
+        ("source".to_owned(), "${workflow.input.source}".to_owned()),
+        ("title".to_owned(), "${workflow.input.title}".to_owned()),
     ]));
 
     // Step 2: Wait for vector DB to commit (eventual consistency)
@@ -100,11 +100,11 @@ async fn main() -> anyhow::Result<()> {
         .with_task(search_task)
         .with_task(answer_task)
         .with_input_parameters(vec![
-            "text".to_string(),
-            "doc_id".to_string(),
-            "source".to_string(),
-            "title".to_string(),
-            "question".to_string(),
+            "text".to_owned(),
+            "doc_id".to_owned(),
+            "source".to_owned(),
+            "title".to_owned(),
+            "question".to_owned(),
         ])
         .with_output_param("indexing_status", "${index_text_ref.output}")
         .with_output_param("retrieved_context", "${search_index_ref.output.result}")
@@ -126,7 +126,7 @@ async fn main() -> anyhow::Result<()> {
     metadata_client
         .register_or_update_workflow_def(&workflow, true)
         .await?;
-    println!("  Workflow registered: {}", workflow_name);
+    println!("  Workflow registered: {workflow_name}");
 
     // ==========================================================================
     // Display Configuration Details
@@ -136,18 +136,18 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", "=".repeat(80));
     println!();
     println!("Vector Database:");
-    println!("  Integration: {}", VECTOR_DB);
-    println!("  Index: {}", VECTOR_INDEX);
-    println!("  Namespace: {}", NAMESPACE);
+    println!("  Integration: {VECTOR_DB}");
+    println!("  Index: {VECTOR_INDEX}");
+    println!("  Namespace: {NAMESPACE}");
     println!();
     println!("Embeddings:");
-    println!("  Provider: {}", EMBEDDING_PROVIDER);
-    println!("  Model: {}", EMBEDDING_MODEL);
-    println!("  Dimensions: {}", EMBEDDING_DIMENSIONS);
+    println!("  Provider: {EMBEDDING_PROVIDER}");
+    println!("  Model: {EMBEDDING_MODEL}");
+    println!("  Dimensions: {EMBEDDING_DIMENSIONS}");
     println!();
     println!("LLM:");
-    println!("  Provider: {}", LLM_PROVIDER);
-    println!("  Model: {}", LLM_MODEL);
+    println!("  Provider: {LLM_PROVIDER}");
+    println!("  Model: {LLM_MODEL}");
     println!();
 
     // ==========================================================================
@@ -159,7 +159,7 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     // Sample document to index
-    let sample_text = r#"
+    let sample_text = "
 Conductor is a workflow orchestration engine that helps you manage complex workflows.
 Key features include:
 - Workflow as code: Define workflows in JSON or using SDKs
@@ -171,7 +171,7 @@ Key features include:
 
 Conductor supports various task types including HTTP, Lambda, Kafka, and custom workers.
 It's used by companies like Netflix, Orkes, and many others for workflow orchestration.
-"#;
+";
 
     println!("Sample Input:");
     println!("  Document: {} chars", sample_text.len());
@@ -192,15 +192,15 @@ It's used by companies like Netflix, Orkes, and many others for workflow orchest
 
     match workflow_client.start_workflow(&request).await {
         Ok(workflow_id) => {
-            println!("  Workflow started: {}", workflow_id);
+            println!("  Workflow started: {workflow_id}");
             println!();
             println!("  View execution at:");
 
             // Extract UI host from config
             let server_url = std::env::var("CONDUCTOR_SERVER_URL")
-                .unwrap_or_else(|_| "http://localhost:8080/api".to_string());
+                .unwrap_or_else(|_| "http://localhost:8080/api".to_owned());
             let ui_url = server_url.replace("/api", "");
-            println!("  {}/execution/{}", ui_url, workflow_id);
+            println!("  {ui_url}/execution/{workflow_id}");
             println!();
 
             // Poll for completion
@@ -219,7 +219,7 @@ It's used by companies like Netflix, Orkes, and many others for workflow orchest
                 match workflow_client.get_workflow(&workflow_id, true).await {
                     Ok(wf) => {
                         let status = wf.status;
-                        print!("\r  Status: {:?}    ", status);
+                        print!("\r  Status: {status:?}    ");
 
                         if status == WorkflowStatus::Completed {
                             println!();
@@ -264,27 +264,27 @@ It's used by companies like Netflix, Orkes, and many others for workflow orchest
                                 | WorkflowStatus::TimedOut
                         ) {
                             println!();
-                            println!("  Workflow failed: {:?}", status);
+                            println!("  Workflow failed: {status:?}");
                             if let Some(reason) = wf.reason_for_incompletion {
-                                println!("  Reason: {}", reason);
+                                println!("  Reason: {reason}");
                             }
                             break;
                         }
                     }
                     Err(e) => {
-                        println!("  Error checking status: {}", e);
+                        println!("  Error checking status: {e}");
                         break;
                     }
                 }
             }
         }
         Err(e) => {
-            println!("  Could not start workflow: {}", e);
+            println!("  Could not start workflow: {e}");
             println!();
             println!("  This is expected if AI integrations are not configured.");
             println!("  Configure the following in your Conductor server:");
-            println!("    - Vector DB: {} (e.g., pgvector)", VECTOR_DB);
-            println!("    - LLM Provider: {} with API key", LLM_PROVIDER);
+            println!("    - Vector DB: {VECTOR_DB} (e.g., pgvector)");
+            println!("    - LLM Provider: {LLM_PROVIDER} with API key");
         }
     }
 
@@ -297,8 +297,8 @@ It's used by companies like Netflix, Orkes, and many others for workflow orchest
     println!();
 
     match metadata_client.delete_workflow_def(workflow_name, 1).await {
-        Ok(_) => println!("  Deleted workflow: {}", workflow_name),
-        Err(e) => println!("  Could not delete workflow: {}", e),
+        Ok(()) => println!("  Deleted workflow: {workflow_name}"),
+        Err(e) => println!("  Could not delete workflow: {e}"),
     }
 
     println!();

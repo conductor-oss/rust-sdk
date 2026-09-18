@@ -6,12 +6,12 @@ use std::collections::HashMap;
 
 use super::Task;
 
-/// Module for flexible timestamp deserialization (handles both i64 and ISO date strings)
+/// Module for flexible timestamp deserialization (handles both i64 and ISO date strings).
 mod timestamp_deserializer {
     use chrono::{DateTime, Utc};
     use serde::{self, Deserialize, Deserializer};
 
-    /// Deserialize a timestamp that may be either i64 (epoch ms) or ISO 8601 string
+    /// Deserialize a timestamp that may be either i64 (epoch ms) or ISO 8601 string.
     pub fn deserialize<'de, D>(deserializer: D) -> Result<i64, D::Error>
     where
         D: Deserializer<'de>,
@@ -39,12 +39,12 @@ mod timestamp_deserializer {
     }
 }
 
-/// Module for flexible map deserialization (handles both maps and string representations)
+/// Module for flexible map deserialization (handles both maps and string representations).
 mod flexible_map_deserializer {
     use serde::{self, Deserialize, Deserializer};
     use std::collections::HashMap;
 
-    /// Deserialize a map that may be either a proper JSON map or a string representation
+    /// Deserialize a map that may be either a proper JSON map or a string representation.
     pub fn deserialize<'de, D>(
         deserializer: D,
     ) -> Result<HashMap<String, serde_json::Value>, D::Error>
@@ -55,7 +55,7 @@ mod flexible_map_deserializer {
         #[serde(untagged)]
         enum MapOrString {
             Map(HashMap<String, serde_json::Value>),
-            #[allow(dead_code)]
+            #[expect(dead_code)]
             String(String),
         }
 
@@ -70,12 +70,12 @@ mod flexible_map_deserializer {
     }
 }
 
-/// Module for flexible `Vec<Task>` deserialization (handles both arrays and string representations)
+/// Module for flexible `Vec<Task>` deserialization (handles both arrays and string representations).
 mod flexible_tasks_deserializer {
     use super::Task;
     use serde::{self, Deserialize, Deserializer};
 
-    /// Deserialize tasks that may be either a proper array or a string representation
+    /// Deserialize tasks that may be either a proper array or a string representation.
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<Task>, D::Error>
     where
         D: Deserializer<'de>,
@@ -84,7 +84,7 @@ mod flexible_tasks_deserializer {
         #[serde(untagged)]
         enum VecOrString {
             Vec(Vec<Task>),
-            #[allow(dead_code)]
+            #[expect(dead_code)]
             String(String),
         }
 
@@ -98,11 +98,11 @@ mod flexible_tasks_deserializer {
     }
 }
 
-/// Module for flexible `Vec<String>` deserialization (handles both arrays and string representations)
+/// Module for flexible `Vec<String>` deserialization (handles both arrays and string representations).
 mod flexible_string_vec_deserializer {
     use serde::{self, Deserialize, Deserializer};
 
-    /// Deserialize string vec that may be either a proper array or a string representation
+    /// Deserialize string vec that may be either a proper array or a string representation.
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
     where
         D: Deserializer<'de>,
@@ -128,12 +128,12 @@ mod flexible_string_vec_deserializer {
     }
 }
 
-/// Module for flexible HashMap<String, String> deserialization
+/// Module for flexible `HashMap`<String, String> deserialization.
 mod flexible_string_map_deserializer {
     use serde::{self, Deserialize, Deserializer};
     use std::collections::HashMap;
 
-    /// Deserialize string map that may be either a proper map or a string representation
+    /// Deserialize string map that may be either a proper map or a string representation.
     pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
     where
         D: Deserializer<'de>,
@@ -142,7 +142,7 @@ mod flexible_string_map_deserializer {
         #[serde(untagged)]
         enum MapOrString {
             Map(HashMap<String, String>),
-            #[allow(dead_code)]
+            #[expect(dead_code)]
             String(String),
         }
 
@@ -156,153 +156,154 @@ mod flexible_string_map_deserializer {
     }
 }
 
-/// Workflow execution status
+/// Workflow execution status.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WorkflowStatus {
-    /// Workflow is running
+    /// Workflow is running.
     #[default]
     Running,
-    /// Workflow completed successfully
+    /// Workflow completed successfully.
     Completed,
-    /// Workflow failed
+    /// Workflow failed.
     Failed,
-    /// Workflow timed out
+    /// Workflow timed out.
     TimedOut,
-    /// Workflow was terminated
+    /// Workflow was terminated.
     Terminated,
-    /// Workflow is paused
+    /// Workflow is paused.
     Paused,
 }
 
-/// A workflow execution instance
+/// A workflow execution instance.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Workflow {
-    /// Unique workflow ID
+    /// Unique workflow ID.
     #[serde(default)]
     pub workflow_id: String,
 
-    /// Workflow type/name
+    /// Workflow type/name.
     #[serde(default)]
     pub workflow_name: String,
 
-    /// Workflow version
+    /// Workflow version.
     #[serde(default)]
     pub workflow_version: i32,
 
-    /// Workflow status
+    /// Workflow status.
     #[serde(default)]
     pub status: WorkflowStatus,
 
-    /// Workflow input (may be empty if returned as string from search API)
+    /// Workflow input (may be empty if returned as string from search API).
     #[serde(default, deserialize_with = "flexible_map_deserializer::deserialize")]
     pub input: HashMap<String, serde_json::Value>,
 
-    /// Workflow output (may be empty if returned as string from search API)
+    /// Workflow output (may be empty if returned as string from search API).
     #[serde(default, deserialize_with = "flexible_map_deserializer::deserialize")]
     pub output: HashMap<String, serde_json::Value>,
 
-    /// Correlation ID
+    /// Correlation ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub correlation_id: Option<String>,
 
-    /// Tasks in this workflow execution (may be empty from search API)
+    /// Tasks in this workflow execution (may be empty from search API).
     #[serde(default, deserialize_with = "flexible_tasks_deserializer::deserialize")]
     pub tasks: Vec<Task>,
 
-    /// Parent workflow ID (if this is a subworkflow)
+    /// Parent workflow ID (if this is a subworkflow).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_workflow_id: Option<String>,
 
-    /// Parent workflow task ID
+    /// Parent workflow task ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_workflow_task_id: Option<String>,
 
-    /// Start time (epoch ms or ISO 8601 string)
+    /// Start time (epoch ms or ISO 8601 string).
     #[serde(default, deserialize_with = "timestamp_deserializer::deserialize")]
     pub start_time: i64,
 
-    /// End time (epoch ms or ISO 8601 string)
+    /// End time (epoch ms or ISO 8601 string).
     #[serde(default, deserialize_with = "timestamp_deserializer::deserialize")]
     pub end_time: i64,
 
-    /// Update time (epoch ms or ISO 8601 string)
+    /// Update time (epoch ms or ISO 8601 string).
     #[serde(default, deserialize_with = "timestamp_deserializer::deserialize")]
     pub update_time: i64,
 
-    /// Created time (epoch ms or ISO 8601 string)
+    /// Created time (epoch ms or ISO 8601 string).
     #[serde(default, deserialize_with = "timestamp_deserializer::deserialize")]
     pub create_time: i64,
 
-    /// Created by
+    /// Created by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
 
-    /// Updated by
+    /// Updated by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
 
-    /// Reason for incompletion (if failed/terminated)
+    /// Reason for incompletion (if failed/terminated).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason_for_incompletion: Option<String>,
 
-    /// Workflow variables
+    /// Workflow variables.
     #[serde(default, deserialize_with = "flexible_map_deserializer::deserialize")]
     pub variables: HashMap<String, serde_json::Value>,
 
-    /// External input payload storage path
+    /// External input payload storage path.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_input_payload_storage_path: Option<String>,
 
-    /// External output payload storage path
+    /// External output payload storage path.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_output_payload_storage_path: Option<String>,
 
-    /// Priority
+    /// Priority.
     #[serde(default)]
     pub priority: i32,
 
-    /// Owner app
+    /// Owner app.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub owner_app: Option<String>,
 
-    /// Task to domain mapping
+    /// Task to domain mapping.
     #[serde(
         default,
         deserialize_with = "flexible_string_map_deserializer::deserialize"
     )]
     pub task_to_domain: HashMap<String, String>,
 
-    /// Workflow definition
+    /// Workflow definition.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow_definition: Option<super::WorkflowDef>,
 
-    /// Failed reference task names
+    /// Failed reference task names.
     #[serde(
         default,
         deserialize_with = "flexible_string_vec_deserializer::deserialize"
     )]
     pub failed_reference_task_names: Vec<String>,
 
-    /// Failed task names
+    /// Failed task names.
     #[serde(
         default,
         deserialize_with = "flexible_string_vec_deserializer::deserialize"
     )]
     pub failed_task_names: Vec<String>,
 
-    /// Last retried time (epoch ms or ISO 8601 string)
+    /// Last retried time (epoch ms or ISO 8601 string).
     #[serde(default, deserialize_with = "timestamp_deserializer::deserialize")]
     pub last_retried_time: i64,
 
-    /// Event
+    /// Event.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event: Option<String>,
 }
 
 impl Workflow {
-    /// Check if workflow is terminal (completed, failed, terminated, timed out)
+    /// Check if workflow is terminal (completed, failed, terminated, timed out).
+    #[must_use]
     pub fn is_terminal(&self) -> bool {
         matches!(
             self.status,
@@ -313,24 +314,30 @@ impl Workflow {
         )
     }
 
-    /// Check if workflow is running (not terminal)
+    /// Check if workflow is running (not terminal).
+    #[must_use]
     pub fn is_running(&self) -> bool {
         !self.is_terminal()
     }
 
-    /// Check if workflow succeeded
+    /// Check if workflow succeeded.
+    #[must_use]
     pub fn is_successful(&self) -> bool {
         self.status == WorkflowStatus::Completed
     }
 
-    /// Get an output value
-    pub fn get_output<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
-        self.output
-            .get(key)
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    /// Get an output value.
+    #[must_use]
+    pub fn get_output<T>(&self, key: &str) -> Option<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let v = self.output.get(key)?;
+        serde_json::from_value(v.clone()).ok()
     }
 
-    /// Get output as string
+    /// Get output as string.
+    #[must_use]
     pub fn get_output_string(&self, key: &str) -> Option<String> {
         self.output.get(key).map(|v| {
             if let serde_json::Value::String(s) = v {
@@ -341,52 +348,55 @@ impl Workflow {
         })
     }
 
-    /// Get a variable value
-    pub fn get_variable<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
-        self.variables
-            .get(key)
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    /// Get a variable value.
+    #[must_use]
+    pub fn get_variable<T>(&self, key: &str) -> Option<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let v = self.variables.get(key)?;
+        serde_json::from_value(v.clone()).ok()
     }
 }
 
-/// Request to start a workflow
+/// Request to start a workflow.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartWorkflowRequest {
-    /// Workflow name
+    /// Workflow name.
     pub name: String,
 
-    /// Workflow version (optional, uses latest if not specified)
+    /// Workflow version (optional, uses latest if not specified).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<i32>,
 
-    /// Workflow input
+    /// Workflow input.
     #[serde(default)]
     pub input: HashMap<String, serde_json::Value>,
 
-    /// Correlation ID
+    /// Correlation ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub correlation_id: Option<String>,
 
-    /// Task to domain mapping
+    /// Task to domain mapping.
     #[serde(default)]
     pub task_to_domain: HashMap<String, String>,
 
-    /// Workflow definition (for dynamic workflows)
+    /// Workflow definition (for dynamic workflows).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow_def: Option<super::WorkflowDef>,
 
-    /// External input payload storage path
+    /// External input payload storage path.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_input_payload_storage_path: Option<String>,
 
-    /// Priority
+    /// Priority.
     #[serde(default)]
     pub priority: i32,
 }
 
 impl StartWorkflowRequest {
-    /// Create a new start workflow request
+    /// Create a new start workflow request.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -394,19 +404,22 @@ impl StartWorkflowRequest {
         }
     }
 
-    /// Set workflow version
+    /// Set workflow version.
+    #[must_use]
     pub fn with_version(mut self, version: i32) -> Self {
         self.version = Some(version);
         self
     }
 
-    /// Set workflow input
+    /// Set workflow input.
+    #[must_use]
     pub fn with_input(mut self, input: HashMap<String, serde_json::Value>) -> Self {
         self.input = input;
         self
     }
 
-    /// Add a single input value
+    /// Add a single input value.
+    #[must_use]
     pub fn with_input_value(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
         self.input.insert(
             key.into(),
@@ -415,25 +428,29 @@ impl StartWorkflowRequest {
         self
     }
 
-    /// Set correlation ID
+    /// Set correlation ID.
+    #[must_use]
     pub fn with_correlation_id(mut self, id: impl Into<String>) -> Self {
         self.correlation_id = Some(id.into());
         self
     }
 
-    /// Set priority
+    /// Set priority.
+    #[must_use]
     pub fn with_priority(mut self, priority: i32) -> Self {
         self.priority = priority;
         self
     }
 
-    /// Set task to domain mapping
+    /// Set task to domain mapping.
+    #[must_use]
     pub fn with_task_to_domain(mut self, mapping: HashMap<String, String>) -> Self {
         self.task_to_domain = mapping;
         self
     }
 
-    /// Set workflow definition (for dynamic workflows)
+    /// Set workflow definition (for dynamic workflows).
+    #[must_use]
     pub fn with_workflow_def(mut self, def: super::WorkflowDef) -> Self {
         self.workflow_def = Some(def);
         self
@@ -492,6 +509,6 @@ mod tests {
         assert_eq!(req.name, "my_workflow");
         assert_eq!(req.version, Some(1));
         assert!(req.input.contains_key("name"));
-        assert_eq!(req.correlation_id, Some("corr-123".to_string()));
+        assert_eq!(req.correlation_id, Some("corr-123".to_owned()));
     }
 }

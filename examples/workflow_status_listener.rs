@@ -55,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
     metadata_client
         .register_or_update_workflow_def(&workflow, true)
         .await?;
-    println!("  Workflow registered: {}", workflow_name);
+    println!("  Workflow registered: {workflow_name}");
 
     // Display status listener configuration
     println!("\n{}", "=".repeat(80));
@@ -86,15 +86,14 @@ async fn main() -> anyhow::Result<()> {
     println!(
         r#"  {{
     "workflowId": "abc123-def456",
-    "workflowName": "{}",
+    "workflowName": "{workflow_name}",
     "status": "COMPLETED",
     "startTime": 1703444400000,
     "endTime": 1703444401000,
     "input": {{}},
     "output": {{}},
     "reason": null
-  }}"#,
-        workflow_name
+  }}"#
     );
     println!();
 
@@ -157,16 +156,16 @@ async fn main() -> anyhow::Result<()> {
     println!("Cleaning up created resources...");
 
     match metadata_client.delete_workflow_def(workflow_name, 1).await {
-        Ok(_) => println!("  Deleted: {}", workflow_name),
-        Err(e) => println!("  Could not delete {}: {}", workflow_name, e),
+        Ok(()) => println!("  Deleted: {workflow_name}"),
+        Err(e) => println!("  Could not delete {workflow_name}: {e}"),
     }
 
     match metadata_client
         .delete_workflow_def("rust_task_status_audit_demo", 1)
         .await
     {
-        Ok(_) => println!("  Deleted: rust_task_status_audit_demo"),
-        Err(e) => println!("  Could not delete rust_task_status_audit_demo: {}", e),
+        Ok(()) => println!("  Deleted: rust_task_status_audit_demo"),
+        Err(e) => println!("  Could not delete rust_task_status_audit_demo: {e}"),
     }
 
     println!("\n  Status listener example completed!");

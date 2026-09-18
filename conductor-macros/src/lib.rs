@@ -338,3 +338,312 @@ fn generate_worker(args: WorkerArgs, input_fn: ItemFn) -> syn::Result<TokenStrea
 pub fn worker_task(args: TokenStream, input: TokenStream) -> TokenStream {
     worker(args, input)
 }
+
+/// Configuration options for the `#[tool]` attribute macro
+#[derive(Debug, FromMeta)]
+struct ToolArgs {
+    /// Tool name (defaults to function name)
+    #[darling(default)]
+    name: Option<String>,
+
+    /// Human-readable description of what the tool does (required)
+    description: String,
+
+    /// Names of credentials this tool declares it needs (optional)
+    #[darling(default)]
+    credentials: Option<Vec<syn::LitStr>>,
+
+    /// Whether invoking this tool requires human approval first (optional)
+    #[darling(default)]
+    approval_required: Option<bool>,
+}
+
+/// Marks an async function as a Conductor Agents tool.
+///
+/// Requires the `agents` Cargo feature. The function must be async and take either:
+///
+/// - **one parameter**: a struct implementing `JsonSchema + DeserializeOwned`, or
+/// - **two parameters**: that same args struct, followed by `&conductor::agents::Credentials`,
+///   for tools that declare `credentials = [...]` and need to read resolved values via
+///   `Credentials::get` (see `docs/agents/README.md`).
+///
+/// The args struct's JSON schema is generated automatically via
+/// `conductor::schema::generate_schema`.
+///
+/// # Usage
+///
+/// ## One parameter — no credentials needed
+///
+/// ```rust,ignore
+/// use conductor_macros::tool;
+/// use schemars::JsonSchema;
+/// use serde::Deserialize;
+///
+/// #[derive(Debug, Deserialize, JsonSchema)]
+/// struct GetWeatherArgs {
+///     city: String,
+/// }
+///
+/// #[tool(description = "Get current weather for a city")]
+/// async fn get_weather(args: GetWeatherArgs) -> conductor::error::Result<serde_json::Value> {
+///     Ok(serde_json::json!({ "city": args.city, "forecast": "sunny" }))
+/// }
+///
+/// // Generates:
+/// fn get_weather_tool() -> conductor::agents::ToolDef { /* ... */ }
+/// ```
+///
+/// ## Two parameters — declared credentials resolved by the server
+///
+/// ```rust,ignore
+/// use conductor::agents::Credentials;
+/// use conductor_macros::tool;
+/// use schemars::JsonSchema;
+/// use serde::Deserialize;
+///
+/// #[derive(Debug, Deserialize, JsonSchema)]
+/// struct SearchArgs {
+///     query: String,
+/// }
+///
+/// #[tool(description = "Search GitHub issues", credentials = ["GITHUB_TOKEN"])]
+/// async fn search_github(
+///     args: SearchArgs,
+///     creds: &Credentials,
+/// ) -> conductor::error::Result<serde_json::Value> {
+///     let token = creds.get("GITHUB_TOKEN")?;
+///     Ok(serde_json::json!({ "query": args.query, "token_present": !token.is_empty() }))
+/// }
+///
+/// // Generates:
+/// fn search_github_tool() -> conductor::agents::ToolDef { /* ... */ }
+/// ```
+#[proc_macro_attribute]
+pub fn tool(args: TokenStream, input: TokenStream) -> TokenStream {
+    let attr_args = match NestedMeta::parse_meta_list(args.into()) {
+        Ok(v) => v,
+        Err(e) => return TokenStream::from(darling::Error::from(e).write_errors()),
+    };
+    let args = match ToolArgs::from_list(&attr_args) {
+        Ok(v) => v,
+        Err(e) => return TokenStream::from(e.write_errors()),
+    };
+    let input_fn = parse_macro_input!(input as ItemFn);
+    match generate_tool(args, input_fn) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+fn generate_tool(args: ToolArgs, input_fn: ItemFn) -> syn::Result<TokenStream2> {
+    let fn_name = &input_fn.sig.ident;
+    let fn_vis = &input_fn.vis;
+    let fn_block = &input_fn.block;
+    let fn_inputs = &input_fn.sig.inputs;
+
+    if input_fn.sig.asyncness.is_none() {
+        return Err(syn::Error::new_spanned(
+            &input_fn.sig,
+            "tool function must be async",
+        ));
+    }
+
+    // Reject a `self` receiver anywhere in the parameter list, not just the first position.
+    for arg in fn_inputs {
+        if let FnArg::Receiver(r) = arg {
+            return Err(syn::Error::new_spanned(
+                r,
+                "tool functions cannot have a `self` parameter",
+            ));
+        }
+    }
+
+    if fn_inputs.is_empty() || fn_inputs.len() > 2 {
+        return Err(syn::Error::new_spanned(
+            fn_inputs,
+            "tool function must take one parameter (a struct implementing \
+             `JsonSchema + DeserializeOwned`) or two parameters (that struct, followed by \
+             `&conductor::agents::Credentials`)",
+        ));
+    }
+
+    let (arg_pat, arg_ty) = match &fn_inputs[0] {
+        FnArg::Typed(pat_type) => (pat_type.pat.clone(), pat_type.ty.clone()),
+        FnArg::Receiver(_) => unreachable!("receivers rejected above"),
+    };
+
+    let creds_param = if fn_inputs.len() == 2 {
+        let (creds_pat, creds_ty) = match &fn_inputs[1] {
+            FnArg::Typed(pat_type) => (pat_type.pat.clone(), pat_type.ty.clone()),
+            FnArg::Receiver(_) => unreachable!("receivers rejected above"),
+        };
+        if !is_credentials_ref_type(&creds_ty) {
+            let ty_str = quote!(#creds_ty).to_string();
+            return Err(syn::Error::new_spanned(
+                &creds_ty,
+                format!(
+                    "second tool function parameter must be `&conductor::agents::Credentials`, \
+                     found `{ty_str}`"
+                ),
+            ));
+        }
+        Some((creds_pat, creds_ty))
+    } else {
+        None
+    };
+
+    let tool_name = args.name.clone().unwrap_or_else(|| fn_name.to_string());
+    let description = &args.description;
+    let tool_fn_name = format_ident!("{}_tool", fn_name);
+
+    let approval_config = match args.approval_required {
+        Some(v) => quote! { let tool = tool.with_approval_required(#v); },
+        None => quote! {},
+    };
+    let credentials_config = match &args.credentials {
+        Some(names) => quote! { let tool = tool.with_credentials(vec![#(#names.to_string()),*]); },
+        None => quote! {},
+    };
+
+    let constructor = match &creds_param {
+        None => quote! {
+            let tool = ::conductor::agents::ToolDef::function::<#arg_ty, _, _>(
+                #tool_name,
+                #description,
+                ::conductor::schema::generate_schema::<#arg_ty>(true),
+                |#arg_pat: #arg_ty| async move #fn_block,
+            );
+        },
+        Some((creds_pat, creds_ty)) => quote! {
+            let tool = ::conductor::agents::ToolDef::function_with_credentials::<#arg_ty, _, _>(
+                #tool_name,
+                #description,
+                ::conductor::schema::generate_schema::<#arg_ty>(true),
+                |#arg_pat: #arg_ty, #creds_pat: #creds_ty| async move #fn_block,
+            );
+        },
+    };
+
+    let output = quote! {
+        /// Creates a `ToolDef` for the `#tool_name` tool.
+        ///
+        /// Generated by the `#[tool]` macro from the `#fn_name` function.
+        #fn_vis fn #tool_fn_name() -> ::conductor::agents::ToolDef {
+            #constructor
+            #approval_config
+            #credentials_config
+            tool
+        }
+    };
+    Ok(output)
+}
+
+/// True if `ty` is a shared reference whose referent's final path segment is `Credentials`
+/// (matches `&Credentials`, `&agents::Credentials`, `&conductor::agents::Credentials`, and any
+/// of those with an explicit lifetime) — mirrors the `#[worker]` macro's name-fragment matching
+/// for `Task`/`TaskContext` rather than requiring a fully-qualified path.
+fn is_credentials_ref_type(ty: &syn::Type) -> bool {
+    let syn::Type::Reference(r) = ty else {
+        return false;
+    };
+    if r.mutability.is_some() {
+        return false;
+    }
+    matches!(&*r.elem, syn::Type::Path(p) if p.path.segments.last().is_some_and(|s| s.ident == "Credentials"))
+}
+
+#[cfg(test)]
+mod tool_macro_tests {
+    use super::*;
+
+    fn tool_args(credentials: Option<Vec<&str>>) -> ToolArgs {
+        ToolArgs {
+            name: None,
+            description: "a test tool".to_string(),
+            credentials: credentials.map(|names| {
+                names
+                    .into_iter()
+                    .map(|n| syn::parse_str(&format!("\"{n}\"")).unwrap())
+                    .collect()
+            }),
+            approval_required: None,
+        }
+    }
+
+    #[test]
+    fn one_param_form_calls_tool_def_function() {
+        let input_fn: ItemFn = syn::parse_quote! {
+            async fn get_weather(args: GetWeatherArgs) -> conductor::error::Result<Value> {
+                Ok(Value::Null)
+            }
+        };
+        let tokens = generate_tool(tool_args(None), input_fn).unwrap();
+        let rendered = tokens.to_string();
+        assert!(rendered.contains("ToolDef :: function ::"));
+        assert!(!rendered.contains("function_with_credentials"));
+    }
+
+    #[test]
+    fn two_param_form_calls_tool_def_function_with_credentials() {
+        let input_fn: ItemFn = syn::parse_quote! {
+            async fn search_github(args: SearchArgs, creds: &Credentials) -> conductor::error::Result<Value> {
+                Ok(Value::Null)
+            }
+        };
+        let tokens = generate_tool(tool_args(Some(vec!["GITHUB_TOKEN"])), input_fn).unwrap();
+        let rendered = tokens.to_string();
+        assert!(rendered.contains("ToolDef :: function_with_credentials ::"));
+    }
+
+    #[test]
+    fn two_param_form_accepts_fully_qualified_credentials_type() {
+        let input_fn: ItemFn = syn::parse_quote! {
+            async fn search_github(args: SearchArgs, creds: &conductor::agents::Credentials) -> conductor::error::Result<Value> {
+                Ok(Value::Null)
+            }
+        };
+        assert!(generate_tool(tool_args(None), input_fn).is_ok());
+    }
+
+    #[test]
+    fn rejects_wrong_second_param_type() {
+        let input_fn: ItemFn = syn::parse_quote! {
+            async fn search_github(args: SearchArgs, extra: String) -> conductor::error::Result<Value> {
+                Ok(Value::Null)
+            }
+        };
+        let err = generate_tool(tool_args(None), input_fn).unwrap_err();
+        assert!(err.to_string().contains("Credentials"));
+    }
+
+    #[test]
+    fn rejects_three_params() {
+        let input_fn: ItemFn = syn::parse_quote! {
+            async fn too_many(args: SearchArgs, creds: &Credentials, extra: String) -> conductor::error::Result<Value> {
+                Ok(Value::Null)
+            }
+        };
+        assert!(generate_tool(tool_args(None), input_fn).is_err());
+    }
+
+    #[test]
+    fn rejects_zero_params() {
+        let input_fn: ItemFn = syn::parse_quote! {
+            async fn no_args() -> conductor::error::Result<Value> {
+                Ok(Value::Null)
+            }
+        };
+        assert!(generate_tool(tool_args(None), input_fn).is_err());
+    }
+
+    #[test]
+    fn rejects_self_receiver() {
+        let input_fn: ItemFn = syn::parse_quote! {
+            async fn method(&self, args: SearchArgs) -> conductor::error::Result<Value> {
+                Ok(Value::Null)
+            }
+        };
+        let err = generate_tool(tool_args(None), input_fn).unwrap_err();
+        assert!(err.to_string().contains("self"));
+    }
+}
