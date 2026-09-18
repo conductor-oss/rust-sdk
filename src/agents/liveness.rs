@@ -24,7 +24,7 @@
 //! `LocalLivenessCheck` (verifying a registered worker's subprocess is alive right after
 //! registration) and `WorkerRestarter` (SIGKILL + let a process supervisor respawn) aren't
 //! ported here at all -- both depend on python's one-OS-process-per-worker model, which this
-//! crate's tokio-task-per-worker model has no equivalent of. See `docs/agents/development-waves.md`'s
+//! crate's tokio-task-per-worker model has no equivalent of. See `docs/agents/README.md`'s
 //! Wave 8 for the follow-up items tracking those separately.
 
 use std::collections::HashSet;

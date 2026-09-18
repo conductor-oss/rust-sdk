@@ -11,7 +11,7 @@
 //! python's `_chain_callbacks_for_position` for the reference algorithm. This module defines
 //! only the hook contract ([`CallbackHandler`] + [`CallbackContext`]); the chaining/dispatch
 //! logic and the `AgentDef` registration point (`callbacks: Vec<Box<dyn CallbackHandler>>`) are
-//! deliberately left to a follow-up change — see `docs/agents/parity-plan.md`, which marks
+//! deliberately left to a follow-up change — see `docs/agents/README.md`, which marks
 //! `CallbackHandler` as a `<<trait>>` connected to `AgentDef` by an *open* circle (`o--`), not a
 //! filled one: a handler is a trait object registered by the caller at run time, not data that
 //! `AgentDef` owns and serializes into `agentConfig` the way `ToolDef` or `Guardrail` are.

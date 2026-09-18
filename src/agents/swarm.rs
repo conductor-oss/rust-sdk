@@ -16,8 +16,8 @@ use std::sync::Arc;
 /// is rule-driven, not model-driven. That's a real naming confusion in python's own codebase
 /// (readers reasonably expect `HandoffCondition` to configure `Strategy::HANDOFF`; it doesn't —
 /// it's swarm-only), and this port disambiguates it by giving the swarm-only, rule-driven type its
-/// own name instead of reproducing the collision. See `docs/agents/parity-plan.md` (search
-/// "`SwarmTransition`") for the worked example and the full rationale.
+/// own name instead of reproducing the collision. See `docs/agents/README.md`'s Strategy
+/// section for the worked example and the full rationale.
 ///
 /// Each variant carries a `target` — the name of the agent to hand off to — plus whatever that
 /// variant matches against:

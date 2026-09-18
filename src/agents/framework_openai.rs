@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 //! Concrete [`FrameworkAgent`] adapter for the `async-openai` crate (Wave 5 Phase 1 — see
-//! `docs/agents/parity-plan.md`'s "Frameworks" table). Gated behind the `openai-adapter` Cargo
+//! `docs/agents/README.md`'s "Frameworks" table). Gated behind the `openai-adapter` Cargo
 //! feature so plain consumers of this crate never pull in `async-openai`.
 //!
 //! `async-openai` has no single type that bundles a name, instructions, a model, and tool

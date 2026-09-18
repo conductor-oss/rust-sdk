@@ -5,7 +5,7 @@
 //!
 //! Wraps the byte stream returned by `crate::client::AgentClient::stream` (`GET
 //! /agent/stream/{execution_id}`, python-sdk's `stream_sse`) and turns it into a sequence of
-//! [`AgentEvent`]s. Per `docs/agents/parity-plan.md` §2, `execution_id` is mandatory on every
+//! [`AgentEvent`]s. Per `docs/agents/README.md`'s `AgentEvent` section, `execution_id` is mandatory on every
 //! variant — `Handoff`/`Sequential`/`Parallel` strategies put a pending `HUMAN` step in a nested
 //! sub-execution, and `approve`/`reject`/`respond` must target that inner id, not a caller-held
 //! top-level one, so there is no variant that can be constructed without one.
@@ -309,7 +309,7 @@ impl AgentStream {
     /// Fetch the next decoded event, or `None` once the stream has ended.
     ///
     /// Matches the `while let Some(event) = stream.next().await.transpose()?` usage shown in
-    /// `docs/agents/parity-plan.md` §2.
+    /// `docs/agents/README.md`'s worked examples.
     pub async fn next(&mut self) -> Option<Result<AgentEvent>> {
         loop {
             if let Some(data) = self.decoder.next_data() {

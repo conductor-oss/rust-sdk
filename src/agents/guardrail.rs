@@ -6,7 +6,7 @@
 //! Ports python-sdk's `conductor.ai.agents.guardrail` (`guardrail.py`). Guardrails compile to
 //! Conductor worker tasks positioned before ([`Position::Input`]) or after ([`Position::Output`])
 //! the `LlmChatComplete` task; on failure with [`OnFail::Retry`] the guardrail's message is
-//! appended to the conversation and the LLM is called again — see `rust-sdk/docs/agents/parity-plan.md`
+//! appended to the conversation and the LLM is called again — see `rust-sdk/docs/agents/README.md`
 //! (search "Guardrail") for where this sits in the overall `AgentDef` shape.
 //!
 //! ## Why this isn't a class hierarchy

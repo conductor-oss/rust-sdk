@@ -9,7 +9,7 @@
 //! the message-accumulation/trimming behavior only — persistence is the caller's/runtime's
 //! responsibility, not this struct's.
 //!
-//! Per `docs/agents/parity-plan.md`'s class diagram, [`AgentDef`](super::AgentDef) holds
+//! Per `docs/agents/README.md`'s class diagram, [`AgentDef`](super::AgentDef) holds
 //! `ConversationMemory` with an *open* circle (`o--`), not a filled one (`*--`): `AgentDef`
 //! doesn't own/construct this value the way it owns `Vec<ToolDef>` or `Vec<Guardrail>`. A
 //! `ConversationMemory` is mutable session state a caller builds up turn-by-turn (and may persist

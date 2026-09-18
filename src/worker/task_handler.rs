@@ -220,7 +220,7 @@ impl TaskHandler {
     /// [`TaskHandler::start`].
     ///
     /// Rust-native analog of python-sdk's `LocalLivenessCheck` -- **not** a literal port; see
-    /// this crate's `docs/agents/development-waves.md` (Wave 8) for why one wouldn't make sense.
+    /// this crate's `docs/agents/README.md` for why one wouldn't make sense.
     /// Python's workers run as OS subprocesses, so it verifies each expected worker has a live
     /// `pid` right after registration, guarding against `fork()` failing or an exception being
     /// swallowed during subprocess bootstrap. This crate's workers are `tokio::spawn`ed futures

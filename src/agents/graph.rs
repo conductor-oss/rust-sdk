@@ -28,7 +28,7 @@ use super::tool::ToolDef;
 /// a per-key reduce function) are not modeled here. `accumulated` is a plain last-write-wins map a
 /// caller populates however it sees fit between node executions; there is no `AgentRuntime` yet to
 /// drive that population automatically, and designing a reducer API ahead of that runtime existing
-/// would be speculative. See `docs/agents/framework-support.md`'s `GraphAgentDef` entry.
+/// would be speculative. See `docs/agents/README.md`'s `GraphAgentDef` entry.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GraphContext {
     /// Accumulated state published by nodes executed so far, keyed by whatever name the caller
@@ -176,7 +176,7 @@ impl std::fmt::Debug for ConditionalGraphEdge {
 /// - It is **explicitly authored, not extracted**. Unlike a hypothetical adapter that reads
 ///   structure out of a compiled `LangGraph` `StateGraph`, there is no bytecode/closure
 ///   introspection here (Rust has no analog for that even if it were desired — see
-///   `docs/agents/framework-support.md`'s Phase 2 entry) — a caller builds a `GraphAgentDef`
+///   `docs/agents/README.md`'s Phase 2 entry) — a caller builds a `GraphAgentDef`
 ///   directly, node by node, edge by edge.
 /// - **Wire compatibility with the Conductor server is an open follow-up, not an assumption.**
 ///   [`GraphAgentDef::serialize`] produces a plain, directly-structured JSON object (`name`,

@@ -602,7 +602,7 @@ fn serialize_tool_call(tool_call: &ToolCall) -> Value {
 /// sent as task-name references"). This crate has no `AgentRuntime` to register such a task
 /// against yet, so this mirrors the wire shape (same `taskName` convention) without the runtime
 /// registration side — that's out of scope here, tracked alongside the rest of the
-/// `AgentRuntime` follow-up (see `docs/agents/parity-plan.md`).
+/// `AgentRuntime` follow-up (see `docs/agents/README.md`).
 fn serialize_swarm_transition(transition: &SwarmTransition, agent_name: &str) -> Value {
     let mut map = Map::new();
 

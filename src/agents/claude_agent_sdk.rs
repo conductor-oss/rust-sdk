@@ -6,10 +6,10 @@
 //!
 //! # This is black-box passthrough — read this before wiring it into anything
 //!
-//! Per `docs/agents/parity-plan.md` §"Frameworks", the `claude` CLI's own execution loop
+//! Per `docs/agents/README.md` §"Frameworks", the `claude` CLI's own execution loop
 //! (planning, tool calls, sub-agent turns) is fundamentally opaque: there is no `AgentDef`/
 //! `FrameworkAgent` extraction path for it the way there is for `async-openai`. Quoting
-//! `docs/agents/framework-support.md` directly, because this is the one thing every caller of
+//! `docs/agents/README.md` directly, because this is the one thing every caller of
 //! this module needs to internalize: **"content run through `FrameworkAgent` extraction gets
 //! Conductor guardrails/termination; content run through a passthrough adapter does not, and
 //! never will unless the loop is unwrapped into a real Conductor task."** Everything the `claude`
@@ -19,8 +19,8 @@
 //!
 //! # What this module is
 //!
-//! Purely the transport layer described in `docs/agents/parity-plan.md`'s item 4
-//! ("Claude Agent SDK / CLI passthrough (subprocess + `stream-json` protocol)"):
+//! Purely the transport layer described in `docs/agents/README.md`'s "Claude Agent SDK —
+//! passthrough only" section (subprocess + `stream-json` protocol):
 //!
 //! 1. [`ClaudeAgentSdkOptions`] — a builder for the CLI flags this transport knows how to set.
 //! 2. [`build_args`] — a pure, unit-testable function that turns those options (plus a prompt and
@@ -65,7 +65,7 @@
 //! needs an API key (e.g. `ANTHROPIC_API_KEY`), resolve it the normal way (e.g.
 //! [`crate::agents::Credentials::get`]) and hand the resolved value to
 //! [`ClaudeAgentSdkOptions::with_env`], which is applied via `Command::env()` scoped to the
-//! spawned child only — exactly the pattern `docs/agents/parity-plan.md`'s `gh_create_issue`
+//! spawned child only — exactly the pattern `docs/agents/README.md`'s `gh_create_issue`
 //! example uses for `gh`.
 //!
 //! # Not implemented here: spawning `claude` in tests

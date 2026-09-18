@@ -4,12 +4,12 @@
 //! `AgentRuntime` — the control-plane + local-worker composition root for agents.
 //!
 //! Kept as a single file (not split across per-agent submodules) per
-//! `docs/agents/development-waves.md`'s Wave 4 note: `AgentRuntime`'s lifecycle methods
+//! `docs/agents/README.md`'s note: `AgentRuntime`'s lifecycle methods
 //! (`compile`/`deploy`/`start`/`run`/`serve`/`shutdown`) share enough state (one [`AgentClient`],
 //! one [`TaskHandler`]) that splitting them across files would only add indirection.
 //!
 //! No new polling loop is introduced here — `serve` reuses the existing [`TaskHandler`] exactly
-//! as `docs/agents/rust-sdk-design.md`'s "composition over the existing worker framework"
+//! as `docs/agents/README.md`'s "composition over the existing worker framework"
 //! section describes: every locally-invoked [`ToolDef`] becomes an ordinary `impl Worker`
 //! registered on the same [`TaskHandler`] every other worker in this crate uses, so agent tool
 //! workers get pooling, panic isolation, retry-on-update, and graceful shutdown for free.
@@ -918,7 +918,7 @@ fn merge_start_input(payload: &mut Map<String, Value>, input: Value) {
 /// Owns one [`AgentClient`] (the `/agent/*` control-plane transport) and one [`TaskHandler`]
 /// (this crate's existing worker-polling machinery) — [`AgentRuntime::serve`] registers each
 /// [`AgentDef`]'s locally-invoked tools onto that same `TaskHandler` rather than running a second
-/// polling loop, per `docs/agents/rust-sdk-design.md`.
+/// polling loop, per `docs/agents/README.md`.
 pub struct AgentRuntime {
     agent_client: AgentClient,
     task_handler: TaskHandler,

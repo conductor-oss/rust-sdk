@@ -15,7 +15,7 @@ println!("{}", config.server_api_url);
 **Orkes:** use the tenant API endpoint and an application access key/secret pair.
 
 Never put credentials in workflow inputs, agent prompts, task output, or source control — see
-[SECURITY.md](SECURITY.md) and [docs/agents/secrets-and-credentials.md](docs/agents/secrets-and-credentials.md).
+[SECURITY.md](SECURITY.md) and [docs/agents/README.md](docs/agents/README.md).
 
 If requests fail, verify that the URL ends in `/api`, the server is reachable, and the
 credentials belong to that endpoint. Next: [SERVER_SETUP.md](SERVER_SETUP.md).

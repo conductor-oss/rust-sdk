@@ -11,7 +11,7 @@
 //! (`testing/strategy_validators.py`), the LLM-backed correctness eval runner
 //! (`testing/eval_runner.py`), and the pytest plugin (`testing/pytest_plugin.py` -- N/A as
 //! designed; this crate's equivalent is just `#[test]`/`cargo test`, no plugin needed). See
-//! `docs/agents/development-waves.md`'s Wave 8 for these as their own tracked follow-ups.
+//! `docs/agents/README.md`'s Testing section for these as their own tracked follow-ups.
 //!
 //! ## Narrower than python's version, and why
 //!

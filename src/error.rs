@@ -79,7 +79,7 @@ pub enum ConductorError {
 
     /// One or more declared credentials were not present in `Task.runtime_metadata`.
     ///
-    /// Per `docs/agents/secrets-and-credentials.md`, credential resolution fails closed: a
+    /// Per `docs/agents/README.md`, credential resolution fails closed: a
     /// name a tool/agent declared but that the server didn't attach to the polled `Task` is
     /// always an error, never a silent fallback to the process environment. Carries only the
     /// missing *names* — never a value — matching python-sdk's `CredentialNotFoundError`.
@@ -101,7 +101,7 @@ pub enum ConductorError {
     /// [`crate::agents::AgentHandle::join`] detected a task stuck `SCHEDULED` with no worker
     /// ever polling it, past the configured stall threshold -- matching python-sdk's
     /// `WorkerStallError` (`runtime/_liveness.py`), with `StallPolicy::Raise` selected. See
-    /// [`StalledTaskInfo`] and `docs/agents/development-waves.md`'s Wave 8 notes on why this is
+    /// [`StalledTaskInfo`] and `docs/agents/README.md`'s liveness notes on why this is
     /// a narrower check than python's domain-scoped one (rust has no per-execution worker
     /// domain to scope by).
     #[cfg(feature = "agents")]
@@ -117,7 +117,7 @@ pub enum ConductorError {
 
 /// One `SCHEDULED` task that has been queued past the stall threshold with `poll_count == 0`
 /// -- i.e. no worker has ever polled for it. Carried by
-/// [`ConductorError::WorkerStall`]. See `docs/agents/development-waves.md`'s Wave 8.
+/// [`ConductorError::WorkerStall`]. See `docs/agents/README.md`'s liveness notes.
 #[cfg(feature = "agents")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct StalledTaskInfo {

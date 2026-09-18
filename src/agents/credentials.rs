@@ -3,8 +3,8 @@
 
 //! Resolved tool/agent credentials, read inside a tool body.
 //!
-//! See `docs/agents/secrets-and-credentials.md` and `docs/agents/parity-plan.md` for the full
-//! design; this module implements only the "Consume" step of that contract:
+//! See `docs/agents/README.md` for the full design; this module implements only the
+//! "Consume" step of that contract:
 //!
 //! 1. **Declare** — a tool/agent lists credential *names* (`ToolDef::credentials` /
 //!    `AgentDef::credentials`). Not implemented by this module.
@@ -33,7 +33,7 @@ use crate::models::Task;
 /// [`Task`]'s `runtime_metadata` for one poll.
 ///
 /// Cheap to construct and clone — `Arc<HashMap<String, String>>` under the hood, per
-/// `docs/agents/secrets-and-credentials.md` — because nothing shared is ever mutated: each poll
+/// `docs/agents/README.md` — because nothing shared is ever mutated: each poll
 /// builds its own `Credentials` from its own `Task`, so concurrent tool executions never
 /// contend with each other the way python-sdk's process-wide `inject_via_env()` lock does.
 ///

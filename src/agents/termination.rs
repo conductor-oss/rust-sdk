@@ -7,7 +7,7 @@ use serde_json::Value;
 /// Composable rule that decides when an agent should stop.
 ///
 /// Ports python-sdk's `conductor.ai.agents.termination` module — see
-/// `rust-sdk/docs/agents/parity-plan.md` (search "`TerminationCondition`") for where this sits in
+/// `rust-sdk/docs/agents/README.md` (search "`TerminationCondition`") for where this sits in
 /// the overall `AgentDef` shape. Python models this as a small class hierarchy: an abstract
 /// `TerminationCondition` base with concrete `TextMentionTermination`, `StopMessageTermination`,
 /// `MaxMessageTermination`, `TokenUsageTermination` leaves, plus private `_AndTermination` /

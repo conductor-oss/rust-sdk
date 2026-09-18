@@ -18,7 +18,7 @@ Agent tools declare required credentials by *name*; the server delivers resolved
 `Task::runtime_metadata` for the specific poll. Missing a declared credential fails the task
 before the tool body runs (`ConductorError::CredentialNotFound`) — there is no fallback to
 process environment variables. See
-[docs/agents/secrets-and-credentials.md](docs/agents/secrets-and-credentials.md) for the full
+[docs/agents/README.md](docs/agents/README.md) for the full
 design (declare/register/resolve/deliver/consume contract) and
 [docs/agents/README.md](docs/agents/README.md) for how it's wired into `AgentDef`/`ToolDef`.
 
@@ -26,4 +26,4 @@ design (declare/register/resolve/deliver/consume contract) and
 
 - **[src/client/secret_client.rs](src/client/secret_client.rs)**
 - **[src/agents/credentials.rs](src/agents/credentials.rs)**
-- **[docs/agents/secrets-and-credentials.md](docs/agents/secrets-and-credentials.md)**
+- **[docs/agents/README.md](docs/agents/README.md)**

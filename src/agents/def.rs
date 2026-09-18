@@ -786,7 +786,7 @@ impl AgentDef {
     /// [`AgentDef::with_tool_credentials`]) -> register (stamped onto `TaskDef.runtime_metadata`
     /// at registration time) -> the server resolves and delivers values back on the polled `Task`
     /// -> consume via [`Credentials::from_task`](super::Credentials::from_task) inside a tool
-    /// body. See `docs/agents/secrets-and-credentials.md` for the full contract.
+    /// body. See `docs/agents/README.md` for the full contract.
     #[must_use]
     pub fn with_credentials(mut self, credentials: Vec<String>) -> Self {
         self.credentials = credentials;
@@ -794,7 +794,7 @@ impl AgentDef {
     }
 
     /// Set the declared credential names on a single already-added tool by name — the
-    /// non-literal-name convenience described in `docs/agents/parity-plan.md`'s tool-credential
+    /// non-literal-name convenience described in `docs/agents/README.md`'s tool-credential
     /// flow, equivalent to having built that tool with its own `.with_credentials(...)` up front.
     ///
     /// Errors if no tool named `tool_name` has been added yet (via [`AgentDef::with_tool`] /

@@ -183,7 +183,7 @@ pub struct Task {
     /// Server-resolved runtime metadata attached to this specific poll, keyed by name.
     ///
     /// This is the delivery half of the Agents credential contract (see
-    /// `rust-sdk/docs/agents/secrets-and-credentials.md`): a tool/agent declares credential
+    /// `rust-sdk/docs/agents/README.md`): a tool/agent declares credential
     /// *names* it needs, the server resolves each name against its own secret store, and
     /// attaches the resolved values here — never persisted to `input_data`, never a separate
     /// fetch call, never cached by the SDK beyond this `Task`. Read via

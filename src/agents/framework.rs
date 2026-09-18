@@ -8,15 +8,15 @@ use super::tool::ToolDef;
 
 /// Generic adapter interface for an agent construct authored against someone else's agent SDK
 /// (an `openai-agents` `Agent`, a `LangGraph` graph, a Claude Agent SDK session, ...) — see
-/// `docs/agents/parity-plan.md`'s "Frameworks" section for the phasing across frameworks. A type
+/// `docs/agents/README.md`'s "Frameworks" section for the phasing across frameworks. A type
 /// implementing this trait exposes just enough of its own shape (name, instructions/system
 /// prompt, model, tool definitions) for this crate to build an [`AgentDef`] from it, without this
 /// crate depending on the source framework's crate at all — `super::framework_openai` is the
 /// one concrete, feature-gated adapter that currently exists (for `async-openai`'s tool shape);
 /// nothing here depends on it.
 ///
-/// `docs/agents/parity-plan.md` and `docs/agents/development-waves.md` describe this Wave 5 item
-/// as "`From<T> for AgentDef`". Two things about that phrasing don't survive contact with the
+/// `docs/agents/README.md` describes this item as "`From<T> for AgentDef`". Two things
+/// about that phrasing don't survive contact with the
 /// actual type system, both worth spelling out so nobody "fixes" this back to match the docs:
 ///
 /// 1. The conversion can't be infallible. [`AgentDef::new`] validates `name` against a regex and

@@ -93,7 +93,7 @@ impl ToolType {
 /// python's single mutable `ctx.state` dict gets from being the same object before and after
 /// the call, done here with an explicit, thread-safe handle instead of relying on shared
 /// ambient state (matching this crate's existing, deliberate departure from python's
-/// process-wide `contextvars` approach for credentials — see `docs/agents/secrets-and-credentials.md`).
+/// process-wide `contextvars` approach for credentials — see `docs/agents/README.md`).
 #[derive(Debug, Clone, Default)]
 pub struct ToolContext {
     pub session_id: String,
@@ -260,7 +260,7 @@ impl ToolDef {
 
     /// A locally-invoked function tool whose handler also receives the resolved [`Credentials`]
     /// for this call — the entry point the `#[tool(credentials = [...])]` macro targets when a
-    /// second `&Credentials` parameter is present (see `docs/agents/secrets-and-credentials.md`).
+    /// second `&Credentials` parameter is present (see `docs/agents/README.md`).
     /// `input_schema` still only describes `T`'s shape; `Credentials` is threaded in separately
     /// at call time, not part of the JSON arguments.
     pub fn function_with_credentials<T, F, Fut>(
@@ -918,7 +918,7 @@ impl ToolDef {
     /// stamps them onto `TaskDef.runtime_metadata`, the server resolves and delivers values back
     /// on the polled `Task`, and a handler built via [`ToolDef::function_with_credentials`] reads
     /// them out of the `&Credentials` it's called with (see
-    /// `docs/agents/secrets-and-credentials.md`). Also required (not merely declared) by
+    /// `docs/agents/README.md`). Also required (not merely declared) by
     /// [`ToolDef::http`] / [`ToolDef::mcp`]'s `${NAME}` placeholder validation.
     #[must_use]
     pub fn with_credentials(mut self, credentials: Vec<String>) -> Self {

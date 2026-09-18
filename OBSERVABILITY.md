@@ -26,7 +26,7 @@ agent execution is a Conductor workflow like any other.
 
 Avoid logging credentials or unredacted sensitive data — `Credentials`'s `Debug`/`Display` impls
 intentionally show only credential *names*, never values (see
-[docs/agents/secrets-and-credentials.md](docs/agents/secrets-and-credentials.md)).
+[docs/agents/README.md](docs/agents/README.md)).
 
 ## Related Documentation
 
