@@ -6,46 +6,19 @@ use crate::error::Result;
 use super::def::AgentDef;
 use super::tool::ToolDef;
 
-/// Generic adapter interface for an agent construct authored against someone else's agent SDK
-/// (an `openai-agents` `Agent`, a `LangGraph` graph, a Claude Agent SDK session, ...) — see
-/// `docs/agents/README.md`'s "Frameworks" section for the phasing across frameworks. A type
-/// implementing this trait exposes just enough of its own shape (name, instructions/system
-/// prompt, model, tool definitions) for this crate to build an [`AgentDef`] from it, without this
-/// crate depending on the source framework's crate at all — `super::framework_openai` is the
-/// one concrete, feature-gated adapter that currently exists (for `async-openai`'s tool shape);
-/// nothing here depends on it.
+/// Adapter interface for an agent construct authored against another agent SDK. A type
+/// implementing this trait exposes its name, instructions, model, and tool definitions so this
+/// crate can build an [`AgentDef`] from it via [`FrameworkAgent::try_into_agent_def`], without
+/// depending on the source framework's crate.
 ///
-/// `docs/agents/README.md` describes this item as "`From<T> for AgentDef`". Two things
-/// about that phrasing don't survive contact with the
-/// actual type system, both worth spelling out so nobody "fixes" this back to match the docs:
-///
-/// 1. The conversion can't be infallible. [`AgentDef::new`] validates `name` against a regex and
-///    returns `Result<AgentDef>` (see `src/agents/def.rs`), so building an `AgentDef` from a
-///    `FrameworkAgent` is fallible in exactly the same way — a source agent with a name that
-///    doesn't match `^[a-zA-Z_][a-zA-Z0-9_-]*$` must be rejectable, not panic-on-construct.
-/// 2. The conversion can't be a blanket `std::convert::TryFrom` impl either, for a reason that
-///    has nothing to do with this crate's design: `core` already provides
-///    `impl<T, U: Into<T>> TryFrom<U> for T`, which — because `AgentDef: Into<AgentDef>` via the
-///    reflexive `impl<T> From<T> for T` — already covers `TryFrom<AgentDef> for AgentDef`. Adding
-///    `impl<T: FrameworkAgent> TryFrom<T> for AgentDef` on top is rejected by rustc (E0119,
-///    conflicting implementations) because the compiler can't prove no type could ever implement
-///    both `FrameworkAgent` and (transitively) `Into<AgentDef>` at once — this is a general
-///    limitation of writing a marker-trait-bounded blanket `TryFrom` impl for a local
-///    non-`Copy`/non-generic-parameter type, not something specific to `FrameworkAgent`.
-///
-/// [`FrameworkAgent::try_into_agent_def`] is the fallible conversion instead — a default trait
-/// method, so every implementor gets it for free exactly like a blanket impl would provide, just
-/// under a name `std::convert::TryFrom` isn't available for here.
-///
-/// Only name, instructions, model, and tool definitions are extracted here — the narrow slice of
-/// `AgentDef` every source framework can plausibly express. A `FrameworkAgent` impl for a richer
-/// source type (e.g. one with its own guardrail/termination/sub-agent concepts) should document,
-/// on the impl itself, any source-side concept that has no `AgentDef` equivalent and is therefore
-/// dropped during conversion — never drop a concept silently.
+/// Only name, instructions, model, and tool definitions are extracted — the narrow slice of
+/// `AgentDef` every source framework can plausibly express. An impl for a richer source type
+/// should document any source-side concept with no `AgentDef` equivalent that gets dropped
+/// during conversion — never drop a concept silently.
 pub trait FrameworkAgent {
     /// The agent's name. Passed to [`AgentDef::new`], which validates it against
-    /// `^[a-zA-Z_][a-zA-Z0-9_-]*$` — a source name that fails this check surfaces as an `Err`
-    /// from [`FrameworkAgent::try_into_agent_def`], not a panic.
+    /// `^[a-zA-Z_][a-zA-Z0-9_-]*$` — a name that fails this check surfaces as an `Err` from
+    /// [`FrameworkAgent::try_into_agent_def`], not a panic.
     fn name(&self) -> String;
 
     /// The agent's instructions / system prompt, if any.
@@ -65,8 +38,7 @@ pub trait FrameworkAgent {
         Vec::new()
     }
 
-    /// Converts this framework-authored agent into an [`AgentDef`] — see the trait doc comment
-    /// for why this is a default method rather than a `std::convert::TryFrom` impl.
+    /// Converts this framework-authored agent into an [`AgentDef`].
     ///
     /// # Errors
     ///

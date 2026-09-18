@@ -3,31 +3,17 @@
 
 //! Typed plan builders for `Strategy::PlanExecute`.
 //!
-//! Ports python-sdk's `conductor.ai.agents.plans` (`plans.py`) field-for-field. These types
-//! produce the JSON shape PAC (the server's `PLAN_AND_COMPILE` task) consumes — construct a
-//! [`Plan`] in Rust instead of hand-building the JSON, then hand its [`Plan::to_value`] to
-//! [`AgentRuntime::start`](super::runtime::AgentRuntime::start) as the `static_plan` field to
-//! skip the planner LLM and run a fully deterministic pipeline (`runtime.run(harness,
-//! plan=plan)` in python).
+//! These types produce the JSON shape PAC (the server's `PLAN_AND_COMPILE` task) consumes —
+//! construct a [`Plan`] in Rust instead of hand-building the JSON, then hand its
+//! [`Plan::to_value`] to [`AgentRuntime::start`](super::runtime::AgentRuntime::start) as the
+//! `static_plan` field to skip the planner LLM and run a fully deterministic pipeline.
 //!
-//! ## `Ref` — simpler here than in python, same wire shape
+//! Embed a [`Ref`] anywhere a [`serde_json::Value`] is expected via [`Ref::to_value`] (or
+//! `From<Ref> for Value`), e.g. `json!({"document": my_ref.to_value()})`.
 //!
-//! Python's `_serialize_value` recursively walks arbitrary `dict`/`list`/`tuple` trees looking
-//! for embedded [`Ref`] markers to replace with their `{"$ref": "<step_id>"}` wire form, because
-//! python's `Any`-typed `args`/`context` fields can hold a `Ref` at any nesting depth. Rust's
-//! `args`/`context` fields are plain [`serde_json::Value`] instead — no parallel tree-walking
-//! type is needed, because [`Ref`] converts directly to a [`Value`] (`Ref::to_value`, and
-//! `From<Ref> for Value`), so a caller embeds one anywhere a `Value` is expected using ordinary
-//! `serde_json::json!` nesting: `json!({"document": my_ref.to_value()})`. Same wire output as
-//! python's walker produces, without needing to reproduce the walk.
-//!
-//! ## One place this is a Rust-native improvement, not just a port
-//!
-//! Python's `Op`/`Generate` mutual exclusivity (`args` XOR `generate`) is a runtime
-//! `__post_init__` check (`ValueError` if both or neither are set). [`Op`] models this as an
-//! enum ([`OpBody::Args`]/[`OpBody::Generate`]) instead, so the invalid state is unrepresentable
-//! rather than merely rejected — [`Op::with_args`]/[`Op::with_generate`] are the only
-//! constructors, and each fully determines `body`.
+//! [`Op`]'s `args`/`generate` are mutually exclusive, modeled as an enum
+//! ([`OpBody::Args`]/[`OpBody::Generate`]) so the invalid state is unrepresentable —
+//! [`Op::with_args`]/[`Op::with_generate`] are the only constructors.
 
 use serde_json::{Map, Value};
 
@@ -39,11 +25,9 @@ use super::tool::ToolDef;
 /// A reference to a prior step's whole output.
 ///
 /// Use anywhere a literal value would go in an [`Op`]'s args or a [`Generate`]'s context to
-/// wire one step's output into another step's input — no JSON path, no field selection, the
-/// whole result map becomes the value at that position. The referenced step must be declared in
-/// this step's `depends_on` and must exist in the plan; the server rejects the plan at compile
-/// time otherwise (no silent broken refs) — this type does not re-validate that here, matching
-/// python (which also defers that check to the server).
+/// wire one step's output into another step's input — the whole result map becomes the value
+/// at that position. The referenced step must be declared in this step's `depends_on`; the
+/// server rejects the plan at compile time otherwise.
 ///
 /// For a parallel step, `Ref("a")` is the array of that step's branch results.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,7 +62,7 @@ impl From<Ref> for Value {
 /// string can't capture.
 ///
 /// Exactly one of `text`/`url` is ever set — enforced by construction ([`Context::text`]/
-/// [`Context::url`] are the only constructors), unlike python's runtime `__post_init__` check.
+/// [`Context::url`] are the only constructors).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Context {
     text: Option<String>,
@@ -113,9 +97,7 @@ impl Context {
     }
 
     /// HTTP headers for a `url` context. May contain `${CRED_NAME}` placeholders that resolve
-    /// against the agent's credential store at request time — same auth pipeline as an HTTP
-    /// tool's headers. Ignored for a `text` context (matches python: only serialized when `url`
-    /// is set).
+    /// against the agent's credential store at request time. Ignored for a `text` context.
     #[must_use]
     pub fn with_headers(mut self, headers: std::collections::HashMap<String, String>) -> Self {
         self.headers = headers;
@@ -137,9 +119,8 @@ impl Context {
         self
     }
 
-    /// Wire form, matching python's `Context.to_dict` exactly (including that `headers`/
-    /// `required`/`maxBytes` are only emitted for a `url` context, and `maxBytes` only when it
-    /// differs from the default).
+    /// Wire form. `headers`/`required`/`maxBytes` are only emitted for a `url` context, and
+    /// `maxBytes` only when it differs from the default.
     #[must_use]
     pub fn to_value(&self) -> Value {
         let mut map = Map::new();
@@ -225,8 +206,7 @@ impl Generate {
     }
 }
 
-/// [`Op`]'s body — exactly one of a literal arg map or LLM-generated args. See the module doc
-/// for why this is an enum rather than python's runtime-checked `Optional` pair.
+/// [`Op`]'s body — exactly one of a literal arg map or LLM-generated args.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpBody {
     /// Literal arg map for a deterministic call. May embed [`Ref`] values anywhere via
@@ -416,7 +396,7 @@ impl Action {
 ///
 /// Construct in Rust and pass [`Plan::to_value`] as the `static_plan` field to
 /// [`AgentRuntime::start`](super::runtime::AgentRuntime::start) to skip the planner LLM and run
-/// a fully deterministic pipeline (matches python's `runtime.run(harness, plan=plan)`).
+/// a fully deterministic pipeline.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Plan {
     pub steps: Vec<Step>,
@@ -454,8 +434,8 @@ impl Plan {
         self
     }
 
-    /// Wire form the server's `static_plan` field consumes, matching python's `Plan.to_dict`
-    /// exactly (including which empty collections are omitted vs. always present).
+    /// Wire form the server's `static_plan` field consumes. Empty `validation`/`on_success`/
+    /// `on_failure` collections are omitted; `steps` is always present.
     pub fn to_value(&self) -> Value {
         let mut map = Map::new();
         map.insert(
@@ -484,8 +464,7 @@ impl Plan {
     }
 }
 
-/// Options for [`plan_execute`], beyond the required `name`/`tools`. Mirrors the keyword-only
-/// parameters on python's `plan_execute()` function.
+/// Options for [`plan_execute`], beyond the required `name`/`tools`.
 #[derive(Debug, Clone, Default)]
 pub struct PlanExecuteOptions {
     /// Domain-level guidance for the planner. The server auto-appends a `## Available tools`
@@ -506,13 +485,13 @@ pub struct PlanExecuteOptions {
 }
 
 /// Construct a `Strategy::PlanExecute` harness in one call — wraps the boilerplate of building
-/// a planner sub-agent, an optional fallback sub-agent, and the parent coordinator. Matches
-/// python's `plan_execute()` function exactly, including its sub-agent naming convention
-/// (`{name}_planner`, `{name}_fallback`).
+/// a planner sub-agent, an optional fallback sub-agent, and the parent coordinator. Sub-agents
+/// are named `{name}_planner`/`{name}_fallback`.
 ///
 /// # Errors
 ///
-/// Returns [`crate::error::ConductorError::Agent`] if `name` (or the derived `{name}_planner`/`{name}_fallback` names) is empty or invalid -- see [`AgentDef::new`].
+/// Returns [`crate::error::ConductorError::Agent`] if `name` (or a derived sub-agent name) is
+/// empty or invalid.
 pub fn plan_execute(
     name: impl Into<String>,
     tools: Vec<ToolDef>,

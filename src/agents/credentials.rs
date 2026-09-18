@@ -3,25 +3,10 @@
 
 //! Resolved tool/agent credentials, read inside a tool body.
 //!
-//! See `docs/agents/README.md` for the full design; this module implements only the
-//! "Consume" step of that contract:
-//!
-//! 1. **Declare** — a tool/agent lists credential *names* (`ToolDef::credentials` /
-//!    `AgentDef::credentials`). Not implemented by this module.
-//! 2. **Register** — the SDK stamps those names onto `TaskDef.runtime_metadata` at registration
-//!    time. Not implemented by this module.
-//! 3. **Resolve** — the Conductor server resolves each name against its own secret store.
-//!    Server-side, opaque to the SDK.
-//! 4. **Deliver** — the server attaches resolved values to [`crate::models::Task::runtime_metadata`]
-//!    on the specific `Task` handed to a poll.
-//! 5. **Consume** — *this module*: [`Credentials::from_task`] builds a read-only view over that
-//!    map, and [`Credentials::get`] reads it, failing closed
-//!    (`ConductorError::CredentialNotFound`) on a declared name the server didn't attach.
-//!
-//! Credentials never flow through env vars, `.env` files, or an OS keyring inside the SDK — the
-//! Conductor server is the only source of truth. There is deliberately no method here that
-//! returns every resolved value at once (e.g. no `to_hashmap`/`values()`), so a value can only
-//! ever leave this type through a caller naming the exact credential it declared.
+//! [`Credentials::from_task`] builds a read-only view over the values the Conductor server
+//! attached to a [`crate::models::Task`]'s `runtime_metadata`; [`Credentials::get`] reads it,
+//! failing closed on a declared name the server didn't attach. Credentials never fall back to
+//! env vars, and there's no accessor that returns every value at once.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -32,33 +17,22 @@ use crate::models::Task;
 /// Read-only view over the credential values the Conductor server resolved and attached to a
 /// [`Task`]'s `runtime_metadata` for one poll.
 ///
-/// Cheap to construct and clone — `Arc<HashMap<String, String>>` under the hood, per
-/// `docs/agents/README.md` — because nothing shared is ever mutated: each poll
-/// builds its own `Credentials` from its own `Task`, so concurrent tool executions never
-/// contend with each other the way python-sdk's process-wide `inject_via_env()` lock does.
-///
-/// `Debug`/`Display` show only the credential *names* this view holds, never the values, and
-/// there is no accessor that exposes the full underlying map — matching the redaction
-/// discipline the design doc calls out explicitly.
+/// Cheap to clone (`Arc<HashMap<String, String>>` under the hood). `Debug`/`Display` show only
+/// the credential *names* this view holds, never the values, and there is no accessor that
+/// exposes the full underlying map.
 #[derive(Clone, Default)]
 pub struct Credentials(Arc<HashMap<String, String>>);
 
 impl Credentials {
     /// Build a `Credentials` view from the resolved values the server attached to
-    /// `task.runtime_metadata`.
-    ///
-    /// This is the only constructor a worker needs: build one fresh per poll from the `Task`
-    /// handed to that poll, then pass `&Credentials` into the tool body.
+    /// `task.runtime_metadata`. Build one fresh per poll from the `Task` handed to that poll.
     #[must_use]
     pub fn from_task(task: &Task) -> Self {
         Self(Arc::new(task.runtime_metadata.clone()))
     }
 
-    /// Build a `Credentials` view directly from a resolved-name-to-value map.
-    ///
-    /// Lower-level than [`Credentials::from_task`] — mainly useful for tests and for the
-    /// task-local ambient-accessor path described (but not implemented) in the design doc,
-    /// where a `Task` isn't necessarily in hand at the construction site.
+    /// Build a `Credentials` view directly from a resolved-name-to-value map. Mainly useful for
+    /// tests, or when a `Task` isn't in hand at the construction site.
     #[must_use]
     pub fn new(values: HashMap<String, String>) -> Self {
         Self(Arc::new(values))
@@ -66,18 +40,12 @@ impl Credentials {
 
     /// Look up a resolved credential value by its declared name.
     ///
-    /// Fails closed: a `name` not present in the underlying map is always
-    /// `Err(ConductorError::CredentialNotFound(vec![name.to_string()]))`, never a fallback to
-    /// `std::env::var()` and never a silent `None`. This matches python-sdk's `get_secret()`
-    /// (`conductor.ai.agents.runtime.credentials.accessor`), which raises
-    /// `CredentialNotFoundError` on exactly the same two cases python distinguishes (no context
-    /// established at all, or context established but missing this name) — this type only has
-    /// one case because a `Credentials` that exists at all is, by construction, already "in
-    /// context".
+    /// Fails closed: a `name` not present in the underlying map is always an error, never a
+    /// fallback to `std::env::var()` and never a silent `None`.
     ///
     /// # Errors
     ///
-    /// Returns [`crate::error::ConductorError::CredentialNotFound`] if `name` isn't present -- see above for exactly which cases that covers.
+    /// Returns [`crate::error::ConductorError::CredentialNotFound`] if `name` isn't present.
     pub fn get(&self, name: &str) -> Result<&str> {
         self.0
             .get(name)
@@ -91,8 +59,7 @@ impl Credentials {
         self.0.contains_key(name)
     }
 
-    /// The credential names held by this view, in arbitrary order. Names only — never values —
-    /// so this is safe to log or include in a diagnostic.
+    /// The credential names held by this view, in arbitrary order. Safe to log.
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.0.keys().map(String::as_str)
     }

@@ -1,29 +1,23 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! `JupyterCodeExecutor` — stateful code execution against a real Jupyter kernel. Ports
-//! python-sdk's `JupyterCodeExecutor` (`code_executor.py`). Feature-gated behind `jupyter`
-//! (not bundled into the base `agents` feature — see `Cargo.toml`'s comment on why).
+//! `JupyterCodeExecutor` — stateful code execution against a real Jupyter kernel.
+//! Feature-gated behind the `jupyter` Cargo feature.
 //!
-//! # Unverified against a live kernel — read this before relying on it
+//! # Caveat
 //!
-//! There is no `jupyter_client`/`ipykernel` installation available in this crate's development
-//! environment, so — unlike every other module ported this session — the actual kernel
-//! round-trip here (spawn a kernel process, connect over `ZeroMQ`, execute code, read back
-//! results) has **not** been exercised against a real kernel. This was implemented directly
-//! from the public Jupyter wire protocol specification and python-sdk's `JupyterCodeExecutor`/
-//! `jupyter_client` as reference, and the parts that don't need a live kernel — kernelspec
-//! lookup, connection-file shape, HMAC-SHA256 message signing, message framing/parsing — are
-//! covered by unit tests below. The socket-level round trip is not. Treat this as a best-effort
-//! port pending real-world verification, not a validated implementation.
+//! The socket-level kernel round trip (spawn, connect over ZeroMQ, execute, read back results)
+//! has not been exercised against a real kernel; only kernelspec lookup, connection-file shape,
+//! HMAC-SHA256 signing, and message framing/parsing are covered by tests. Treat this as
+//! best-effort pending real-world verification.
 //!
-//! # Wire protocol, briefly
+//! # Wire protocol
 //!
-//! A Jupyter kernel exposes 5 `ZeroMQ` sockets (shell/iopub/stdin/control/heartbeat); this client
-//! only uses shell (DEALER, for `execute_request`) and iopub (SUB, for streamed output). Every
-//! message is a multipart `ZeroMQ` message: `[b"<IDS|MSG>", hmac_signature, header_json,
-//! parent_header_json, metadata_json, content_json]`, where the signature is an HMAC-SHA256
-//! (or empty, if the connection file's `key` is empty) over the four JSON frames using that key.
+//! A Jupyter kernel exposes 5 `ZeroMQ` sockets; this client uses only shell (DEALER, for
+//! `execute_request`) and iopub (SUB, for streamed output). Each message is a multipart
+//! `ZeroMQ` message `[b"<IDS|MSG>", hmac_signature, header_json, parent_header_json,
+//! metadata_json, content_json]`, signed with HMAC-SHA256 over the four JSON frames (empty
+//! signature if the connection file's `key` is empty).
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -57,9 +51,8 @@ fn to_hex(bytes: &[u8]) -> String {
     })
 }
 
-/// HMAC-SHA256 signature over the four JSON frames, matching the Jupyter wire protocol's
-/// `hmac-sha256` signature scheme. An empty `key` means "unsigned" (an empty signature string),
-/// matching `jupyter_client`'s own behavior for a connection file with `"key": ""`.
+/// HMAC-SHA256 signature over the four JSON frames, per the Jupyter wire protocol's
+/// `hmac-sha256` scheme. An empty `key` means "unsigned" and returns an empty signature string.
 fn sign(key: &str, parts: [&[u8]; 4]) -> String {
     if key.is_empty() {
         return String::new();
@@ -75,16 +68,13 @@ fn sign(key: &str, parts: [&[u8]; 4]) -> String {
     to_hex(&mac.finalize().into_bytes())
 }
 
-/// A Jupyter kernelspec's launch command, matching what `jupyter_client.KernelManager` reads
-/// from a `kernel.json` file.
+/// A Jupyter kernelspec's launch command, read from a `kernel.json` file.
 #[derive(Debug, Clone, PartialEq)]
 struct KernelSpec {
     argv: Vec<String>,
 }
 
-/// Standard Jupyter kernelspec search directories, matching `jupyter --paths`'s `data` dirs
-/// across platforms (a fixed, best-effort list — this crate has no `jupyter_core`-equivalent
-/// path-resolution logic, so platform-specific env vars like `JUPYTER_PATH` are not consulted).
+/// Standard Jupyter kernelspec search directories across platforms (a fixed, best-effort list).
 fn kernelspec_search_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(jupyter_path) = std::env::var("JUPYTER_PATH") {
@@ -145,8 +135,8 @@ fn free_port() -> std::io::Result<u16> {
     Ok(listener.local_addr()?.port())
 }
 
-/// A kernel connection file's contents, matching `jupyter_client`'s connection-file JSON shape
-/// exactly (`shell_port`, `iopub_port`, ..., `key`, `signature_scheme`, `kernel_name`).
+/// A kernel connection file's contents (`shell_port`, `iopub_port`, ..., `key`,
+/// `signature_scheme`, `kernel_name`).
 #[derive(Debug, Clone)]
 struct ConnectionInfo {
     shell_port: u16,
@@ -248,8 +238,7 @@ fn encode_message(key: &str, message: &Value) -> Result<ZmqMessage> {
 
 /// Decode a received multipart message, scanning for the `<IDS|MSG>` delimiter rather than
 /// assuming a fixed frame count — a DEALER/SUB socket may or may not see a leading
-/// ROUTER-identity frame depending on the kernel's socket types, matching how `jupyter_client`
-/// itself locates the delimiter defensively rather than indexing frames directly.
+/// ROUTER-identity frame first.
 fn decode_message(raw: ZmqMessage) -> Option<DecodedMessage> {
     let frames = raw.into_vec();
     let delimiter_idx = frames.iter().position(|f| f.as_ref() == DELIMITER)?;
@@ -363,9 +352,8 @@ impl JupyterConnection {
     }
 
     /// Poll iopub until the kernel reports `idle` for this request or `timeout_duration`
-    /// elapses. Returns `(output, error, timed_out_with_nothing_captured)` — matching python's
-    /// `except Exception: if not outputs and not errors: <timed_out>` fallback: a timeout after
-    /// *some* output was already captured still returns that output normally.
+    /// elapses. Returns `(output, error, timed_out_with_nothing_captured)` — a timeout after
+    /// some output was already captured still returns that output normally.
     async fn poll_until_idle(
         &mut self,
         msg_id: &str,
@@ -448,9 +436,8 @@ struct KernelState {
 }
 
 /// Execute code in a real Jupyter kernel, maintaining kernel state (variables/imports) across
-/// calls — matching python's `JupyterCodeExecutor`. See the module doc for what is and isn't
-/// verified. Requires a Jupyter kernelspec (e.g. `ipykernel`'s `python3`) discoverable on the
-/// standard kernelspec search paths.
+/// calls. See the module doc for what is and isn't verified. Requires a Jupyter kernelspec
+/// (e.g. `ipykernel`'s `python3`) discoverable on the standard kernelspec search paths.
 pub struct JupyterCodeExecutor {
     pub kernel_name: String,
     pub timeout_seconds: u64,
@@ -488,10 +475,8 @@ impl JupyterCodeExecutor {
         let connection = ConnectionInfo::generate()?;
         let process = spawn_kernel(&spec, &connection, &self.kernel_name)?;
 
-        // A fixed grace period for the kernel to bind its sockets before we connect — this
-        // crate does not implement the `kernel_info_request`/reply readiness handshake
-        // `jupyter_client.wait_for_ready` uses, so unlike python this is a guess, not a real
-        // wait. See the module doc: this whole path is unverified against a live kernel.
+        // Fixed grace period for the kernel to bind its sockets before we connect; not a real
+        // readiness handshake. See the module doc: this path is unverified against a live kernel.
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         let mut connection = JupyterConnection::connect(&connection).await?;
@@ -510,7 +495,7 @@ impl JupyterCodeExecutor {
         Ok(())
     }
 
-    /// Shut down the kernel process, if one was started — matches python's `shutdown()`.
+    /// Shut down the kernel process, if one was started.
     pub async fn shutdown(&self) {
         let mut guard = self.state.lock().await;
         guard.take();

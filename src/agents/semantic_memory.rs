@@ -3,24 +3,10 @@
 
 //! Semantic memory — long-term, similarity-based recall across agent sessions.
 //!
-//! Ports python-sdk's `conductor.ai.agents.semantic_memory` module. Like [`super::memory`]'s
-//! `ConversationMemory`, this is a standalone, opt-in type: grepping python-sdk confirms nothing
-//! in `agent.py`/`runtime.py` references `SemanticMemory`, so there is no `AgentDef` field or
-//! `AgentRuntime` wiring to port here — only the type itself, for callers who want it.
-//!
-//! ## Deliberate differences from python
-//!
-//! - **Memory IDs**: python hashes `content + time.time()` with SHA-256 and truncates to 16 hex
-//!   chars when no ID is supplied. This crate has no `sha2` dependency, and the ID is never a
-//!   wire-format value (it never crosses the Conductor server boundary), so a random `UUIDv4`
-//!   (already a dependency, used elsewhere in this crate) truncated to 16 hex chars is used
-//!   instead — same shape (16 lowercase hex chars), different generation mechanism, since
-//!   collision-resistance is what actually matters here, not reproducibility.
-//! - **Store ordering**: python's `InMemoryStore` is a `dict` keyed by ID, and `CPython` dicts
-//!   preserve insertion order, including keeping an existing key's original position when its
-//!   value is overwritten. [`InMemoryStore`] here uses a `Vec<MemoryEntry>` with the same
-//!   overwrite-in-place-else-append rule, matching that ordering behavior exactly rather than
-//!   using a `HashMap`, whose iteration order is unspecified.
+//! This is a standalone, opt-in type: it is not wired into [`super::AgentDef`] or
+//! `AgentRuntime`; callers use it directly to build/search memories. Memory IDs, when not
+//! supplied, are a random UUIDv4 truncated to 16 hex characters. [`InMemoryStore`] preserves
+//! insertion order, overwriting an existing ID in place rather than moving it.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -29,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 use uuid::Uuid;
 
-/// A single memory entry, matching python's `MemoryEntry` dataclass field-for-field.
+/// A single memory entry.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MemoryEntry {
     pub id: String,
@@ -41,8 +27,7 @@ pub struct MemoryEntry {
 
 impl MemoryEntry {
     /// Build a new entry with just its content set; `id`/`created_at` are assigned by whichever
-    /// [`MemoryStore`] the entry is added to, matching python's `MemoryEntry(content=...)` plus
-    /// `InMemoryStore.add`'s fill-in-if-empty behavior.
+    /// [`MemoryStore`] the entry is added to.
     pub fn new(content: impl Into<String>) -> Self {
         Self {
             content: content.into(),
@@ -51,9 +36,8 @@ impl MemoryEntry {
     }
 }
 
-/// Abstract memory storage backend, matching python's `MemoryStore` ABC. Implement this to
-/// integrate with an external vector database instead of the in-process [`InMemoryStore`]
-/// default.
+/// Abstract memory storage backend. Implement this to integrate with an external vector
+/// database instead of the in-process [`InMemoryStore`] default.
 pub trait MemoryStore: Send + Sync {
     /// Store an entry, filling in `id`/`created_at` if unset, and return the (possibly
     /// generated) ID.
@@ -68,9 +52,9 @@ pub trait MemoryStore: Send + Sync {
     fn list_all(&self) -> Vec<MemoryEntry>;
 }
 
-/// Simple in-process store using keyword-overlap (Jaccard) similarity, matching python's
-/// `InMemoryStore` exactly. A lightweight fallback for when no real vector database is wired up;
-/// production use should implement [`MemoryStore`] against one instead.
+/// Simple in-process store using keyword-overlap (Jaccard) similarity. A lightweight fallback
+/// for when no real vector database is wired up; production use should implement
+/// [`MemoryStore`] against one instead.
 #[derive(Debug, Default)]
 pub struct InMemoryStore {
     memories: Vec<MemoryEntry>,
@@ -167,10 +151,9 @@ impl MemoryStore for InMemoryStore {
     }
 }
 
-/// High-level semantic memory for agents, matching python's `SemanticMemory`. Manages
-/// similarity-based retrieval over a pluggable [`MemoryStore`]; not currently wired into
-/// [`super::AgentDef`] (see module doc) — callers use this directly to build/search memories and
-/// inject the result into their own prompts.
+/// High-level semantic memory for agents. Manages similarity-based retrieval over a pluggable
+/// [`MemoryStore`]; callers use this directly to build/search memories and inject the result
+/// into their own prompts.
 pub struct SemanticMemory {
     store: Box<dyn MemoryStore>,
     max_results: usize,
@@ -194,8 +177,7 @@ impl Default for SemanticMemory {
 }
 
 impl SemanticMemory {
-    /// New memory backed by the default [`InMemoryStore`], `max_results` 5, no session scoping —
-    /// matching python's constructor defaults.
+    /// New memory backed by the default [`InMemoryStore`], `max_results` 5, no session scoping.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -227,7 +209,7 @@ impl SemanticMemory {
     }
 
     /// Add a memory, stamping `session_id` into its metadata when this instance is
-    /// session-scoped, matching python's `add`.
+    /// session-scoped.
     pub fn add(
         &mut self,
         content: impl Into<String>,
@@ -278,7 +260,7 @@ impl SemanticMemory {
     }
 
     /// Relevant memories formatted for injection into a prompt, or an empty string when none
-    /// match — matching python's `get_context`.
+    /// match.
     #[must_use]
     pub fn get_context(&self, query: &str) -> String {
         let memories = self.search(query, None);

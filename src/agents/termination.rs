@@ -6,29 +6,14 @@ use serde_json::Value;
 
 /// Composable rule that decides when an agent should stop.
 ///
-/// Ports python-sdk's `conductor.ai.agents.termination` module — see
-/// `rust-sdk/docs/agents/README.md` (search "`TerminationCondition`") for where this sits in
-/// the overall `AgentDef` shape. Python models this as a small class hierarchy: an abstract
-/// `TerminationCondition` base with concrete `TextMentionTermination`, `StopMessageTermination`,
-/// `MaxMessageTermination`, `TokenUsageTermination` leaves, plus private `_AndTermination` /
-/// `_OrTermination` combinators built via the `&` and `|` operators. This crate collapses that
-/// hierarchy into a single recursive enum instead, matching the parity-plan's class diagram
-/// exactly (`TerminationCondition "1" o-- "0..*" TerminationCondition` — `And`/`Or` hold other
-/// `TerminationCondition`s, recursively) — there's no trait to implement, just data.
+/// A recursive enum: `And`/`Or` variants hold other `TerminationCondition`s. The server compiles
+/// each condition into a Conductor worker task participating in the agent's `DoWhile` loop;
+/// [`TerminationCondition::should_terminate`] evaluates a condition locally, used by the
+/// `{agent_name}_termination` worker [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve)
+/// registers.
 ///
-/// Serializes into the same `TerminationConfig` JSON shape python's
-/// `AgentConfigSerializer._serialize_termination` produces (see
-/// [`TerminationCondition::type_str`] for the exact `"type"` discriminant values) — the server
-/// compiles each condition into a Conductor worker task participating in the agent's `DoWhile`
-/// loop. [`TerminationCondition::should_terminate`] is this crate's client-side twin of python's
-/// `should_terminate(context)` method on every subclass — used by the `{agent_name}_termination`
-/// worker [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) registers to answer that
-/// compiled task locally instead of leaving the condition unevaluated.
-///
-/// Construct via the associated functions below (mirroring python's constructors) and combine
-/// with `&` / `|`, which mirror python's `__and__` / `__or__` operator overloads exactly,
-/// including the flattening behavior — `a & b & c` produces one three-element `And`, never a
-/// nested `And(And(a, b), c)`:
+/// Combine conditions with `&` / `|`, which flatten automatically — `a & b & c` produces one
+/// three-element `And`, never a nested `And(And(a, b), c)`:
 ///
 /// ```
 /// use conductor::agents::TerminationCondition;
@@ -42,8 +27,7 @@ pub enum TerminationCondition {
     /// Terminate when the LLM output contains `text` as a substring.
     ///
     /// Case-insensitive unless constructed via
-    /// [`TerminationCondition::text_mention_case_sensitive`] — matches python's
-    /// `TextMentionTermination(text, case_sensitive=False)` default.
+    /// [`TerminationCondition::text_mention_case_sensitive`].
     TextMention { text: String, case_sensitive: bool },
 
     /// Terminate when the LLM output, after stripping surrounding whitespace, exactly equals
@@ -51,15 +35,13 @@ pub enum TerminationCondition {
     /// search.
     StopMessage { stop_message: String },
 
-    /// Terminate once the conversation reaches `max_messages` messages (all roles counted,
-    /// matching python's `MaxMessageTermination`).
+    /// Terminate once the conversation reaches `max_messages` messages (all roles counted).
     MaxMessage { max_messages: u32 },
 
     /// Terminate once cumulative token usage crosses any of the configured budgets.
     ///
     /// At least one of the three must be `Some` — enforced by
-    /// [`TerminationCondition::token_usage`] at construction time, matching the `ValueError`
-    /// python's `TokenUsageTermination.__init__` raises when all three are `None`.
+    /// [`TerminationCondition::token_usage`] at construction time.
     TokenUsage {
         max_total_tokens: Option<u32>,
         max_prompt_tokens: Option<u32>,
@@ -67,20 +49,20 @@ pub enum TerminationCondition {
     },
 
     /// AND combinator — terminates only once every child condition triggers. Built by
-    /// [`TerminationCondition::and`] or the `&` operator; matches python's `_AndTermination`.
+    /// [`TerminationCondition::and`] or the `&` operator.
     And {
         conditions: Vec<TerminationCondition>,
     },
 
     /// OR combinator — terminates as soon as any child condition triggers. Built by
-    /// [`TerminationCondition::or`] or the `|` operator; matches python's `_OrTermination`.
+    /// [`TerminationCondition::or`] or the `|` operator.
     Or {
         conditions: Vec<TerminationCondition>,
     },
 }
 
 impl TerminationCondition {
-    /// Case-insensitive substring match (python's default: `case_sensitive=False`).
+    /// Case-insensitive substring match.
     pub fn text_mention(text: impl Into<String>) -> Self {
         TerminationCondition::TextMention {
             text: text.into(),
@@ -96,23 +78,21 @@ impl TerminationCondition {
         }
     }
 
-    /// Exact-match stop signal. Python defaults `stop_message` to `"TERMINATE"`; since Rust has
-    /// no default-argument syntax, use [`TerminationCondition::stop_message_default`] for that
-    /// case instead of repeating the literal at every call site.
+    /// Exact-match stop signal. Use [`TerminationCondition::stop_message_default`] for the
+    /// common `"TERMINATE"` case.
     pub fn stop_message(stop_message: impl Into<String>) -> Self {
         TerminationCondition::StopMessage {
             stop_message: stop_message.into(),
         }
     }
 
-    /// `stop_message("TERMINATE")` — matches python's `StopMessageTermination()` default.
+    /// `stop_message("TERMINATE")`.
     #[must_use]
     pub fn stop_message_default() -> Self {
         Self::stop_message("TERMINATE")
     }
 
-    /// Terminate after `max_messages` messages. Rejects `max_messages < 1`, matching python's
-    /// `ValueError("max_messages must be >= 1")`.
+    /// Terminate after `max_messages` messages. Rejects `max_messages < 1`.
     ///
     /// # Errors
     ///
@@ -124,8 +104,7 @@ impl TerminationCondition {
         Ok(TerminationCondition::MaxMessage { max_messages })
     }
 
-    /// Terminate once total token usage (prompt + completion) reaches `max_total_tokens` — the
-    /// common case from python's `TokenUsageTermination(max_total_tokens=...)` example.
+    /// Terminate once total token usage (prompt + completion) reaches `max_total_tokens`.
     /// Infallible: a single `Some` limit always satisfies
     /// [`TerminationCondition::token_usage`]'s "at least one limit" requirement.
     #[must_use]
@@ -138,8 +117,7 @@ impl TerminationCondition {
     }
 
     /// Terminate once cumulative token usage crosses any of the given budgets. At least one of
-    /// the three must be `Some` — matches the `ValueError` python's
-    /// `TokenUsageTermination.__init__` raises when all three are `None`.
+    /// the three must be `Some`.
     ///
     /// # Errors
     ///
@@ -165,9 +143,8 @@ impl TerminationCondition {
     }
 
     /// Explicit AND combinator over an arbitrary number of conditions. Prefer the `&` operator
-    /// (see [`TerminationCondition`]'s docs) for the common two-condition case — this exists for
-    /// building an `And` directly from a `Vec`, matching the `"0..*"` cardinality in the
-    /// parity-plan's class diagram.
+    /// for the common two-condition case; this exists for building an `And` directly from a
+    /// `Vec`.
     #[must_use]
     pub fn and(conditions: Vec<TerminationCondition>) -> Self {
         TerminationCondition::And { conditions }
@@ -180,8 +157,7 @@ impl TerminationCondition {
         TerminationCondition::Or { conditions }
     }
 
-    /// Wire-format discriminant, matching the `"type"` value python's
-    /// `AgentConfigSerializer._serialize_termination` emits for each variant exactly.
+    /// Wire-format discriminant for the `"type"` field.
     #[must_use]
     pub fn type_str(&self) -> &'static str {
         match self {
@@ -198,9 +174,8 @@ impl TerminationCondition {
 impl std::ops::BitAnd for TerminationCondition {
     type Output = TerminationCondition;
 
-    /// Combine with AND — both must trigger to terminate. Mirrors python's `__and__`, including
-    /// the flattening: an existing `And` on either side gets its conditions spliced in rather
-    /// than nested, so `a & b & c` is one `And` of three, not `And(And(a, b), c)`.
+    /// Combine with AND — both must trigger to terminate. Flattens: an existing `And` on either
+    /// side gets its conditions spliced in rather than nested.
     fn bitand(self, rhs: TerminationCondition) -> TerminationCondition {
         let mut conditions = match self {
             TerminationCondition::And { conditions } => conditions,
@@ -219,8 +194,8 @@ impl std::ops::BitAnd for TerminationCondition {
 impl std::ops::BitOr for TerminationCondition {
     type Output = TerminationCondition;
 
-    /// Combine with OR — either one triggers termination. Mirrors python's `__or__`, with the
-    /// same flattening behavior as `TerminationCondition`'s `BitAnd` impl.
+    /// Combine with OR — either one triggers termination. Flattens the same way as the `BitAnd`
+    /// impl.
     fn bitor(self, rhs: TerminationCondition) -> TerminationCondition {
         let mut conditions = match self {
             TerminationCondition::Or { conditions } => conditions,
@@ -236,8 +211,7 @@ impl std::ops::BitOr for TerminationCondition {
     }
 }
 
-/// Result of evaluating a [`TerminationCondition`] against a runtime context. Mirrors python's
-/// `TerminationResult` dataclass.
+/// Result of evaluating a [`TerminationCondition`] against a runtime context.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TerminationOutcome {
     pub should_terminate: bool,
@@ -263,10 +237,9 @@ impl TerminationOutcome {
 impl TerminationCondition {
     /// Evaluate this condition against a runtime context shaped `{"result": <text>, "messages":
     /// [...], "iteration": <n>, "token_usage": {"total_tokens": ..., "prompt_tokens": ...,
-    /// "completion_tokens": ...}}` — matches python's `TerminationCondition.should_terminate`
-    /// field-for-field, including [`TerminationCondition::MaxMessage`]'s fallback to `iteration`
-    /// when `messages` is empty/absent, and [`TerminationCondition::And`]'s `" AND "`-joined
-    /// multi-reason string (python: `" AND ".join(reasons)`).
+    /// "completion_tokens": ...}}`. [`TerminationCondition::MaxMessage`] falls back to
+    /// `iteration` when `messages` is empty/absent; [`TerminationCondition::And`] joins reasons
+    /// with `" AND "`.
     ///
     /// Used by the `{agent_name}_termination` worker
     /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) registers.
@@ -589,10 +562,8 @@ mod tests {
         );
     }
 
-    /// Nested And/Or composition: (`TextMention` OR `StopMessage`) AND `MaxMessage` — exercises the
-    /// recursive `TerminationCondition "1" o-- "0..*" TerminationCondition` shape from the
-    /// parity-plan's class diagram directly (an `And` whose child is itself an `Or`), rather than
-    /// relying on operator-flattening to build it.
+    /// Nested And/Or composition: (`TextMention` OR `StopMessage`) AND `MaxMessage`, built
+    /// directly rather than via operator-flattening.
     #[test]
     fn test_nested_and_or_composition() {
         let inner_or = TerminationCondition::or(vec![

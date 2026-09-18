@@ -3,13 +3,8 @@
 
 //! Cron schedules for agents, wired through [`super::AgentRuntime::deploy_with_schedules`].
 //!
-//! Ports python's `conductor.client.ai.schedule` -- [`Schedule`] (what a caller declares) and
-//! [`ScheduleInfo`] (what the server reports back), plus the tri-state reconciliation semantics
-//! `deploy(..., schedules=...)` uses. One deliberate simplification vs. python: python's mapping
-//! helpers (`_read`/`_DICT_KEY_MAP`) exist only to tolerate duck-typed `SchedulerClient`
-//! implementations that might hand back either a typed model or a raw camelCase dict -- this
-//! crate has exactly one concrete [`crate::models::WorkflowSchedule`] shape, so that whole layer
-//! collapses into a single, direct field-by-field mapping ([`ScheduleInfo::from_workflow_schedule`]).
+//! [`Schedule`] is what a caller declares; [`ScheduleInfo`] is what the server reports back.
+//! [`reconcile`] applies the tri-state semantics `deploy_with_schedules` documents.
 
 use std::collections::{HashMap, HashSet};
 
@@ -23,8 +18,7 @@ use crate::models::{SaveScheduleRequest, WorkflowSchedule};
 /// [`super::AgentRuntime::deploy_with_schedules`].
 ///
 /// `name` is a short identifier, unique per agent -- the wire-level schedule name the server
-/// actually stores is `"{agent_name}-{name}"` (see [`wire_name`]), so the same short name can be
-/// reused across different agents without colliding.
+/// actually stores is `"{agent_name}-{name}"` (see [`wire_name`]).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schedule {
     /// Short identifier, unique per agent.
@@ -48,9 +42,8 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    /// Create a new schedule. `name` and `cron` are required and validated immediately (matching
-    /// python's frozen-dataclass `__post_init__`); every other field defaults and is set via the
-    /// `with_*` builders below.
+    /// Create a new schedule. `name` and `cron` are required and validated immediately; every
+    /// other field defaults and is set via the `with_*` builders below.
     ///
     /// # Errors
     ///
@@ -126,10 +119,7 @@ impl Schedule {
         self
     }
 
-    /// Checked once both `start_at`/`end_at` might be set -- deferred out of `with_start_at`/
-    /// `with_end_at` themselves, since those are ordinary infallible chain builders (this
-    /// crate's convention, unlike python's constructor-time check) and either one may be set
-    /// before the other.
+    /// Checks that `start_at < end_at` when both are set.
     fn validate(&self) -> Result<()> {
         if let (Some(start), Some(end)) = (self.start_at, self.end_at) {
             if start >= end {
@@ -183,9 +173,7 @@ pub struct ScheduleInfo {
 }
 
 impl ScheduleInfo {
-    /// Build a [`ScheduleInfo`] from the server's [`WorkflowSchedule`] shape. `agent_name` is
-    /// passed in rather than derived, since the caller (e.g. [`list_schedules`]) already knows
-    /// it from having asked the server to filter by it.
+    /// Build a [`ScheduleInfo`] from the server's [`WorkflowSchedule`] shape.
     #[must_use]
     pub fn from_workflow_schedule(ws: &WorkflowSchedule, agent_name: &str) -> Self {
         let input = ws

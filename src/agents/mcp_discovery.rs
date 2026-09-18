@@ -2,28 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 //! MCP tool discovery — discovers individual tools from a live MCP server at compile time.
-//! Ports python-sdk's `runtime/mcp_discovery.py`.
 //!
-//! ## Not wired into anything — matching python exactly, not a gap
-//!
-//! Confirmed by reading python-sdk directly: `discover_mcp_tools`/`expand_mcp_tool_def` are
-//! defined in `mcp_discovery.py` but a repo-wide `grep` turns up zero call sites for either
-//! anywhere else in python-sdk — not in `runtime.py`, not in any example. The parity audit's
-//! original finding characterizing this as "Python runs a `LIST_MCP_TOOLS` system task at
-//! compile time and expands one `mcp_tool()` call into N real per-tool schemas... Rust's
-//! `ToolDef::mcp()` always produces one static, opaque tool definition" overstated python's
-//! *actual* behavior: `mcp_tool()` itself only ever builds the same static, unexpanded
-//! `{"server_url", "headers"?, "tool_names"?, "max_tools"}` config both SDKs are *meant* to
-//! produce identically. `mcp_discovery.py` is real, working, but dead code on the python side
-//! too — a capability nothing currently calls. This module ports that same capability (a caller
-//! can invoke [`discover_mcp_tools`]/[`expand_mcp_tool_def`] explicitly before handing tools to
-//! [`super::AgentDef::with_tool`]), not a live pipeline wired into [`super::AgentRuntime`].
-//!
-//! One real, narrower gap this module's own tests didn't catch, since they never called
-//! [`super::tool::ToolDef::mcp`] directly: that constructor didn't set `max_tools`/`tool_names`
-//! on the wire at all until a live playback-verification pass (`sdk_playback_04_http_and_mcp_tools`)
-//! found the server's own compiler falls back to a *different*, lower default (32, not python's
-//! 64) when the key is absent — fixed directly in `ToolDef::mcp`.
+//! Not wired into the runtime automatically: call [`discover_mcp_tools`]/[`expand_mcp_tool_def`]
+//! explicitly before handing tools to [`super::AgentDef::with_tool`].
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -37,8 +18,7 @@ use crate::models::{StartWorkflowRequest, WorkflowDef, WorkflowTask};
 
 use super::tool::{ToolDef, ToolType};
 
-/// One tool descriptor returned by a `LIST_MCP_TOOLS` task, matching python's discovered-tool
-/// dict shape (`{"name", "description", "inputSchema"}`).
+/// One tool descriptor returned by a `LIST_MCP_TOOLS` task.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiscoveredMcpTool {
     pub name: String,
@@ -114,12 +94,10 @@ async fn fetch_mcp_tools(
         .collect())
 }
 
-/// Discover tools from an MCP server via a `LIST_MCP_TOOLS` task, matching python's
-/// `discover_mcp_tools`: builds a minimal one-task ephemeral workflow, executes it
-/// synchronously, and returns the discovered tool list. Results are cached per `server_url` —
-/// call [`clear_mcp_discovery_cache`] to force a re-fetch. Returns an empty list on any failure
-/// (network error, workflow failure, timeout) — a graceful fallback matching python's own
-/// broad `except Exception: return []`, not an error a caller needs to handle.
+/// Discover tools from an MCP server via a `LIST_MCP_TOOLS` task: builds a minimal one-task
+/// ephemeral workflow, executes it synchronously, and returns the discovered tool list. Results
+/// are cached per `server_url` — call [`clear_mcp_discovery_cache`] to force a re-fetch. Returns
+/// an empty list on any failure (network error, workflow failure, timeout) rather than an error.
 pub async fn discover_mcp_tools(
     workflow_client: &WorkflowClient,
     server_url: &str,
@@ -144,8 +122,7 @@ pub async fn discover_mcp_tools(
     discovered
 }
 
-/// Clear the MCP discovery cache, matching python's `clear_discovery_cache` — useful in tests
-/// or when an MCP server's tools change.
+/// Clear the MCP discovery cache — useful in tests or when an MCP server's tools change.
 pub fn clear_mcp_discovery_cache() {
     DISCOVERY_CACHE
         .lock()
@@ -154,11 +131,9 @@ pub fn clear_mcp_discovery_cache() {
 }
 
 /// Expand a single MCP [`ToolDef`] (from [`ToolDef::mcp`]) into one [`ToolDef`] per discovered
-/// tool, matching python's `expand_mcp_tool_def`: each carries the correct name/description/
-/// input schema while inheriting the original `server_url`/`headers`/`max_tools` config. Honors
-/// a `tool_names` whitelist if the original tool's config set one. Falls back to `[mcp_td]`
-/// unchanged if nothing was discovered or everything was filtered out — same graceful-fallback
-/// contract as python.
+/// tool, each inheriting the original `server_url`/`headers`/`max_tools` config. Honors a
+/// `tool_names` whitelist if the original tool's config set one. Falls back to `[mcp_td]`
+/// unchanged if nothing was discovered or everything was filtered out.
 #[must_use]
 pub fn expand_mcp_tool_def(mcp_td: &ToolDef, discovered: &[DiscoveredMcpTool]) -> Vec<ToolDef> {
     if discovered.is_empty() {

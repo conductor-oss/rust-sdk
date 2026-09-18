@@ -3,72 +3,20 @@
 
 //! Composable lifecycle hooks for agent execution.
 //!
-//! Ports python-sdk's `CallbackHandler` (`conductor.ai.agents.callback`) — a base class with six
-//! overridable hook methods (`on_agent_start` / `on_agent_end`, `on_model_start` /
-//! `on_model_end`, `on_tool_start` / `on_tool_end`) that fire around agent, model, and tool
-//! lifecycle events. Multiple handlers are meant to chain on the same agent, running in
-//! registration order with "first non-empty result wins" short-circuit semantics — see
-//! python's `_chain_callbacks_for_position` for the reference algorithm. This module defines
-//! only the hook contract ([`CallbackHandler`] + [`CallbackContext`]); the chaining/dispatch
-//! logic and the `AgentDef` registration point (`callbacks: Vec<Box<dyn CallbackHandler>>`) are
-//! deliberately left to a follow-up change — see `docs/agents/README.md`, which marks
-//! `CallbackHandler` as a `<<trait>>` connected to `AgentDef` by an *open* circle (`o--`), not a
-//! filled one: a handler is a trait object registered by the caller at run time, not data that
-//! `AgentDef` owns and serializes into `agentConfig` the way `ToolDef` or `Guardrail` are.
-//!
-//! ## Why a trait, not a boxed `Fn` like [`ToolHandler`](super::tool::ToolHandler)
-//!
-//! `ToolDef` uses `ToolHandler`, a single `Arc<dyn Fn(Value) -> Fut>` type alias, because a tool
-//! has exactly one call shape: arguments in, result out. A callback handler instead exposes six
-//! independent, individually-overridable hook points that all share the same "no-op unless
-//! overridden" default — python expresses that with a base class carrying six default methods
-//! subclasses selectively override. A single `Fn` alias can't represent six independently
-//! optional entry points behind one registration slot; a trait with defaulted methods can, and
-//! that is exactly what `parity-plan.md`'s class diagram calls for (`<<trait>>`), so this module
-//! follows the diagram rather than the `tool.rs` precedent.
-//!
-//! ## Why `async_trait`, not a plain sync trait
-//!
-//! Python's hook methods are plain `def` (synchronous) — invoked from a sync chaining helper.
-//! This crate's [`Worker`](crate::worker::Worker) trait, the closest existing precedent for "a
-//! trait a caller implements and this crate stores as a boxed trait object," is instead defined
-//! with `#[async_trait]` (`async-trait` is already a workspace dependency — see `Cargo.toml`)
-//! precisely because handlers registered into an async runtime may need to do async work of
-//! their own (write to a metrics store, call an audit-log service, etc.) without blocking the
-//! executor thread. `CallbackHandler` follows that same convention rather than python's
-//! synchronous one: matching `Worker`'s established async-trait shape in this codebase takes
-//! priority over matching python's sync methods verbatim, since the wire/behavioral contract
-//! (six named hooks, `Option` return, chain-until-non-empty semantics) is what parity actually
-//! requires — *how* a Rust caller is allowed to implement a hook body is not.
-//!
-//! ## Hook contract
-//!
-//! Every hook takes a [`CallbackContext`] — an arbitrary keyword-style JSON payload standing in
-//! for python's `**kwargs: Any` (each hook position receives a different, evolving field set on
-//! the server side: `on_model_start` gets `messages`, `on_model_end` gets `llm_result`, and so
-//! on — see python's `CallbackEntry.__call__`) — and returns `Option<Value>`:
-//! - `None` means "continue to the next handler in the chain" (python: return nothing / `None`).
-//! - `Some(value)` means "short-circuit the remaining handlers in the chain and use `value` as
-//!   the override" (python: return a non-empty `dict`). A future dispatcher should treat
-//!   `Some(Value::Null)` the same as `None` if it ever arises, matching python's "non-empty
-//!   dict" check rather than a bare truthiness check on `Option`.
-//!
-//! All six methods default to returning `None`, so an implementor overrides only the hooks it
-//! cares about — matching python's base-class behavior exactly.
+//! [`CallbackHandler`] defines six overridable hooks — `on_agent_start`/`on_agent_end`,
+//! `on_model_start`/`on_model_end`, `on_tool_start`/`on_tool_end` — fired around agent, model,
+//! and tool lifecycle events. Each hook takes a [`CallbackContext`] and returns `Option<Value>`:
+//! `None` defers to the next handler in a chain, `Some(value)` short-circuits it. All hooks
+//! default to `None`. This module defines only the hook contract; chaining/dispatch and
+//! registration on `AgentDef` are handled elsewhere.
 
 use async_trait::async_trait;
 use serde_json::{Map, Value};
 
-/// Arbitrary keyword-style payload passed to a [`CallbackHandler`] hook.
+/// Arbitrary JSON payload passed to a [`CallbackHandler`] hook.
 ///
-/// Stands in for python's `**kwargs: Any`: each hook position is passed a different set of
-/// fields by the server/runtime (e.g. `on_model_start` receives `messages`, `on_model_end`
-/// receives `llm_result` — see python-sdk's `CallbackEntry.__call__` in
-/// `conductor/ai/agents/runtime/_worker_entries.py`), and that field set is expected to evolve
-/// independently per position. Rust has no `**kwargs` equivalent, so this wraps the same
-/// "arbitrary JSON object" shape python passes rather than giving each hook its own strongly
-/// typed parameter struct — keeping the [`CallbackHandler`] trait's six method signatures stable
-/// as server-side fields are added.
+/// Each hook position receives a different field set (e.g. `on_model_start` gets `messages`,
+/// `on_model_end` gets `llm_result`).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CallbackContext {
     fields: Map<String, Value>,
@@ -109,46 +57,41 @@ impl From<Map<String, Value>> for CallbackContext {
 
 /// Composable lifecycle hook for agent execution.
 ///
-/// See the module-level docs for why this is a trait (rather than a boxed `Fn` like
-/// [`ToolHandler`](super::tool::ToolHandler)), why it's async (matching
-/// [`Worker`](crate::worker::Worker)'s convention rather than python's synchronous methods), and
-/// the chain-until-non-empty semantics a future dispatcher is expected to implement around it.
-///
 /// Implementors override only the hooks they care about; all six default to `None` ("do
-/// nothing, defer to the next handler"), matching python-sdk's `CallbackHandler` base class.
+/// nothing, defer to the next handler").
 #[async_trait]
 pub trait CallbackHandler: Send + Sync {
-    /// Called before the agent begins processing (python: `on_agent_start`).
+    /// Called before the agent begins processing.
     async fn on_agent_start(&self, ctx: &CallbackContext) -> Option<Value> {
         let _ = ctx;
         None
     }
 
-    /// Called after the agent finishes processing (python: `on_agent_end`).
+    /// Called after the agent finishes processing.
     async fn on_agent_end(&self, ctx: &CallbackContext) -> Option<Value> {
         let _ = ctx;
         None
     }
 
-    /// Called before each LLM call (python: `on_model_start`).
+    /// Called before each LLM call.
     async fn on_model_start(&self, ctx: &CallbackContext) -> Option<Value> {
         let _ = ctx;
         None
     }
 
-    /// Called after each LLM call (python: `on_model_end`).
+    /// Called after each LLM call.
     async fn on_model_end(&self, ctx: &CallbackContext) -> Option<Value> {
         let _ = ctx;
         None
     }
 
-    /// Called before each tool execution (python: `on_tool_start`).
+    /// Called before each tool execution.
     async fn on_tool_start(&self, ctx: &CallbackContext) -> Option<Value> {
         let _ = ctx;
         None
     }
 
-    /// Called after each tool execution (python: `on_tool_end`).
+    /// Called after each tool execution.
     async fn on_tool_end(&self, ctx: &CallbackContext) -> Option<Value> {
         let _ = ctx;
         None
@@ -160,8 +103,7 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    /// Default-only handler: overrides nothing, so every hook must resolve to `None` via the
-    /// trait's default bodies (matching python's un-overridden base-class methods).
+    /// Handler that overrides nothing; every hook resolves via the trait defaults.
     struct NoopHandler;
 
     #[async_trait]
@@ -179,9 +121,8 @@ mod tests {
         assert_eq!(handler.on_tool_end(&ctx).await, None);
     }
 
-    /// Mock handler exercising every one of the six hooks, recording call order and returning a
-    /// distinct short-circuit value from each so a test can assert both "was called" and
-    /// "returned what it should."
+    /// Mock handler exercising all six hooks, recording call order and returning a distinct
+    /// value from each.
     struct RecordingHandler {
         calls: Mutex<Vec<&'static str>>,
     }
@@ -297,9 +238,8 @@ mod tests {
         );
     }
 
-    /// A boxed trait object is the intended storage shape (`Vec<Box<dyn CallbackHandler>>` on a
-    /// future `AgentDef.callbacks` field) — confirm the trait stays object-safe with
-    /// `#[async_trait]` and that dispatch through the trait object works.
+    /// Confirms the trait stays object-safe with `#[async_trait]` and dispatches through a
+    /// boxed trait object.
     #[tokio::test]
     async fn test_usable_as_boxed_trait_object() {
         let handlers: Vec<Box<dyn CallbackHandler>> =

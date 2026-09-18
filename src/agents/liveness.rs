@@ -1,31 +1,11 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Worker stall detection for [`super::AgentHandle::join`] -- ports the server-side half of
-//! python-sdk's `runtime/_liveness.py` (`ServerLivenessMonitor`).
+//! Worker stall detection for [`super::AgentHandle::join`].
 //!
-//! ## What's ported, and what isn't
-//!
-//! Python's `ServerLivenessMonitor` watches for `SCHEDULED` tasks with `pollCount == 0` *in the
-//! execution's own worker domain* -- each stateful agent execution gets a random per-execution
-//! domain (`run_id`) so its local tool workers only ever see tasks meant for that specific
-//! execution. This crate's `AgentRuntime`/`TaskHandler` has no equivalent per-execution domain
-//! concept at all: `AgentRuntime::serve`/`register_agent_workers` registers workers keyed only
-//! by task-type name, shared across every concurrent execution of the same agent. There is
-//! therefore no "our domain" to scope the check to here.
-//!
-//! What this module ports instead: a workflow-scoped check -- any `SCHEDULED` task in *this
-//! execution's* workflow that's been queued past the stall threshold with zero polls. This is
-//! strictly more general than python's domain-scoped check (it also catches a stall in a task
-//! this handle's own runtime was never going to serve in the first place), so a positive here
-//! is a reliable signal that *some* worker is missing, even though it can't always say the
-//! stall is specifically about *your* local tool workers the way python's can.
-//!
-//! `LocalLivenessCheck` (verifying a registered worker's subprocess is alive right after
-//! registration) and `WorkerRestarter` (SIGKILL + let a process supervisor respawn) aren't
-//! ported here at all -- both depend on python's one-OS-process-per-worker model, which this
-//! crate's tokio-task-per-worker model has no equivalent of. See `docs/agents/README.md`'s
-//! Wave 8 for the follow-up items tracking those separately.
+//! Scans a workflow for `SCHEDULED` tasks with zero polls that have sat past a stall threshold.
+//! The check is workflow-scoped: a positive is a reliable signal that some worker is missing,
+//! but it can't pin the stall to a specific local worker.
 
 use std::collections::HashSet;
 
@@ -35,19 +15,17 @@ use crate::models::{TaskStatus, Workflow};
 /// What [`super::AgentHandle::join`] does when it detects a new stall.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum StallPolicy {
-    /// Log a `tracing::warn!` and keep waiting -- the default. A stall is a strong signal
-    /// something is wrong, but `join()` staying up gives a caller-supplied `timeout` (if any)
-    /// the chance to be the thing that actually gives up.
+    /// Log a `tracing::warn!` and keep waiting -- the default. A caller-supplied `timeout` on
+    /// `join()`, if any, still applies.
     #[default]
     Warn,
-    /// Return `Err(`[`crate::error::ConductorError::WorkerStall`]`)` immediately on the first
-    /// newly-detected stall, instead of continuing to wait.
+    /// Return `Err(`[`crate::error::ConductorError::WorkerStall`]`)` on the first newly-detected
+    /// stall, instead of continuing to wait.
     Raise,
 }
 
 /// Scan `workflow`'s tasks for ones stuck `SCHEDULED` with no poller for at least
-/// `stall_seconds`, skipping any `task_id` already present in `seen` (so a stall already
-/// reported once isn't reported again on the next tick). Newly-found stalls are added to
+/// `stall_seconds`, skipping any `task_id` already in `seen`. Newly-found stalls are added to
 /// `seen` before returning.
 pub(super) fn find_new_stalls(
     workflow: &Workflow,

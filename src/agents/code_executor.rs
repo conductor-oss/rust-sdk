@@ -1,21 +1,11 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Code executors — sandboxed environments for running LLM-generated code. Ports python-sdk's
-//! `code_executor.py`.
+//! Code executors — sandboxed environments for running LLM-generated code.
 //!
 //! - [`LocalCodeExecutor`] — runs code in a local subprocess (no sandbox).
 //! - [`DockerCodeExecutor`] — runs code inside a Docker container.
 //! - [`ServerlessCodeExecutor`] — POSTs code to a remote execution HTTP endpoint.
-//!
-//! **Not ported: `JupyterCodeExecutor`.** Python's version talks to a real Jupyter kernel over
-//! `jupyter_client`'s `ZeroMQ` wire protocol, maintaining kernel state (variables/imports) across
-//! calls — itself an optional, `jupyter_client`-gated capability in python (raises `ImportError`
-//! with an install hint if that package is missing). Reproducing this would mean implementing
-//! the Jupyter messaging protocol over `ZeroMQ` from scratch; no existing crate in this workspace
-//! provides it, and there is no partial version of "stateful kernel execution" worth shipping.
-//! Deferred entirely rather than half-modeled, matching this crate's practice elsewhere (e.g.
-//! MCP dynamic discovery, router/handoff/swarm-transfer worker registration).
 
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -27,7 +17,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 use uuid::Uuid;
 
-/// The result of a code execution, matching python's `ExecutionResult` dataclass.
+/// The result of a code execution.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ExecutionResult {
     pub output: String,
@@ -37,20 +27,18 @@ pub struct ExecutionResult {
 }
 
 impl ExecutionResult {
-    /// `true` if the execution succeeded (exit code 0, no timeout) — matches python's
-    /// `ExecutionResult.success` property.
+    /// `true` if the execution succeeded (exit code 0, no timeout).
     #[must_use]
     pub fn success(&self) -> bool {
         self.exit_code == 0 && !self.timed_out
     }
 }
 
-/// A sandboxed code execution environment, matching python's `CodeExecutor` ABC.
+/// A sandboxed code execution environment.
 #[async_trait]
 pub trait CodeExecutor: Send + Sync {
-    /// Execute `code` and return the result. Never expected to panic/error out of band —
-    /// failures (bad interpreter, timeout, nonzero exit) are reported *through*
-    /// [`ExecutionResult`], matching python's contract.
+    /// Execute `code` and return the result. Failures (bad interpreter, timeout, nonzero exit)
+    /// are reported through the returned [`ExecutionResult`], not as an error.
     async fn execute(&self, code: &str) -> ExecutionResult;
 
     /// The configured language, e.g. `"python"`.
@@ -81,9 +69,8 @@ fn local_file_extension(language: &str) -> &'static str {
     }
 }
 
-/// Execute code in a local subprocess — no sandboxing, matching python's `LocalCodeExecutor`.
-/// The code runs with the same permissions as this process; use [`DockerCodeExecutor`] for
-/// untrusted code.
+/// Execute code in a local subprocess — no sandboxing. The code runs with the same permissions
+/// as this process; use [`DockerCodeExecutor`] for untrusted code.
 #[derive(Debug, Clone)]
 pub struct LocalCodeExecutor {
     pub language: String,
@@ -151,8 +138,7 @@ impl CodeExecutor for LocalCodeExecutor {
 
         let result = match timeout(Duration::from_secs(self.timeout_seconds), cmd.output()).await {
             Ok(Ok(output)) => ExecutionResult {
-                // Normalize \r\n -> \n, matching python subprocess text-mode's
-                // universal-newlines behavior (the child's own CRT emits \r\n on Windows).
+                // Normalize \r\n -> \n (Windows child processes may emit \r\n).
                 output: String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"),
                 error: String::from_utf8_lossy(&output.stderr).replace("\r\n", "\n"),
                 exit_code: output.status.code().unwrap_or(-1),
@@ -189,9 +175,8 @@ impl CodeExecutor for LocalCodeExecutor {
     }
 }
 
-/// Execute code inside a Docker container, matching python's `DockerCodeExecutor`. Provides
-/// isolation (no host filesystem/network access by default). Requires Docker installed and the
-/// daemon running.
+/// Execute code inside a Docker container. Provides isolation (no host filesystem/network
+/// access by default). Requires Docker installed and the daemon running.
 #[derive(Debug, Clone)]
 pub struct DockerCodeExecutor {
     pub image: String,
@@ -286,11 +271,10 @@ impl CodeExecutor for DockerCodeExecutor {
         cmd.arg(&self.image).arg(interpreter).arg("-c").arg(code);
         cmd.stdin(Stdio::null());
 
-        // Extra 10s for container startup, matching python.
+        // Extra 10s for container startup.
         match timeout(Duration::from_secs(self.timeout_seconds + 10), cmd.output()).await {
             Ok(Ok(output)) => ExecutionResult {
-                // Normalize \r\n -> \n, matching python subprocess text-mode's
-                // universal-newlines behavior (the child's own CRT emits \r\n on Windows).
+                // Normalize \r\n -> \n (Windows child processes may emit \r\n).
                 output: String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"),
                 error: String::from_utf8_lossy(&output.stderr).replace("\r\n", "\n"),
                 exit_code: output.status.code().unwrap_or(-1),
@@ -324,14 +308,9 @@ impl CodeExecutor for DockerCodeExecutor {
     }
 }
 
-/// Execute code via a remote HTTP execution service, matching python's
-/// `ServerlessCodeExecutor`'s default `_send_request` implementation (POSTs
-/// `{"code","language","timeout"}` as JSON, expects a `{"output"/"stdout", "error"/"stderr",
-/// "exit_code"}`-shaped JSON response).
-///
-/// Python's version is an extensible base class meant to be subclassed for custom protocols;
-/// Rust has no such inheritance mechanism. Callers who need a different wire protocol should
-/// implement [`CodeExecutor`] directly instead of trying to override a method on this struct.
+/// Execute code via a remote HTTP execution service. POSTs `{"code","language","timeout"}` as
+/// JSON and expects a `{"output"/"stdout", "error"/"stderr", "exit_code"}`-shaped JSON response.
+/// Implement [`CodeExecutor`] directly for a different wire protocol.
 #[derive(Debug, Clone)]
 pub struct ServerlessCodeExecutor {
     pub endpoint: String,

@@ -1,45 +1,24 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Runtime result/status types for agent executions — mirrors python-sdk's
-//! `conductor.ai.agents.result.AgentStatus`/`AgentResult` field-for-field (see `result.py`),
-//! since those are the source of truth here, not a Rust-native redesign.
+//! Runtime result/status types for agent executions.
 //!
-//! Two things about python's actual shape that are easy to get wrong by guessing from the type
-//! names alone (confirmed by reading `result.py` and `runtime.py`'s `get_status`, not inferred):
-//!
-//! - The polling snapshot (`AgentStatus`) has **no status enum at all** — it's a raw `status:
-//!   str` passed through verbatim from the server's `GET /agent/{executionId}/status` response,
-//!   plus `is_complete`/`is_running`/`is_waiting` booleans (`isComplete`/`isRunning`/
-//!   `isWaiting` on the wire) and `reason` (from the wire's `reasonForIncompletion` — **not**
-//!   `error`; the server never sends a field literally named `error` on this endpoint).
-//! - The terminal result's `error` is derived, not read from a dedicated wire field: python sets
-//!   it to `status.reason` only `if status.status in ("FAILED", "TERMINATED")`, and leaves it
-//!   `None` for every other terminal status (including `TIMED_OUT` — that asymmetry is python's
-//!   behavior, reproduced here rather than "fixed", since python is the source of truth).
-//!
-//! Deliberately out of scope here (python's `AgentResult` also has `correlation_id`, `messages`,
-//! `token_usage`, `finish_reason`, `sub_results`, `events` — none of which this crate has an
-//! extraction path for yet, e.g. no `_extract_token_usage` equivalent). Adding those fields with
-//! no way to populate them would just be dead weight; they belong with whatever future work
-//! ports that extraction logic. `tool_calls` is the one exception: [`super::testing::mock_run`]
-//! populates it directly from a scripted event sequence rather than extracting it from a live
-//! response, so it's real on a mock-built result even though it's still always empty on one
-//! built via [`AgentResult::from_status`].
+//! `AgentStatus::status` is a raw string passed through verbatim from the server's
+//! `GET /agent/{executionId}/status` response, not parsed into an enum. `AgentResult::error` is
+//! derived, not read from a dedicated wire field: it's set to the status's `reason` only when
+//! `status` is `"FAILED"` or `"TERMINATED"`, and stays `None` for every other terminal status
+//! (including `"TIMED_OUT"`).
 
 use serde_json::Value;
 
 /// Snapshot of an agent execution's status, as returned by `GET /agent/{executionId}/status`.
 ///
-/// Mirrors python-sdk's `AgentStatus` dataclass (`result.py`) field-for-field. Built via
-/// [`AgentStatus::from_response`] rather than a strict `#[derive(Deserialize)]` — python's
-/// `get_status()` reads each field with `data.get(key, default)`, tolerating a missing or
-/// differently-shaped field instead of failing the whole parse, and this does the same.
+/// Built via [`AgentStatus::from_response`], which tolerates missing or differently-shaped
+/// fields rather than failing the whole parse.
 #[derive(Debug, Clone)]
 pub struct AgentStatus {
-    /// The execution this status describes. Supplied by the caller (who already knows it),
-    /// not read from the response body — matching python, which never relies on the server
-    /// echoing `executionId` back on this endpoint.
+    /// The execution this status describes. Supplied by the caller, not read from the
+    /// response body.
     pub execution_id: String,
 
     /// `true` once the workflow has reached a terminal state (from the wire's `isComplete`).
@@ -58,8 +37,7 @@ pub struct AgentStatus {
 
     /// Raw Conductor workflow status string (e.g. `"RUNNING"`, `"COMPLETED"`, `"FAILED"`,
     /// `"TERMINATED"`, `"TIMED_OUT"`) — passed through as-is, not parsed into an enum. Defaults
-    /// to `"UNKNOWN"` if the response has no `status` field, matching python's
-    /// `data.get("status", "UNKNOWN")`.
+    /// to `"UNKNOWN"` if the response has no `status` field.
     pub status: String,
 
     /// Failure/incompletion reason, from the wire's `reasonForIncompletion`. `None` while
@@ -101,8 +79,7 @@ impl AgentStatus {
         }
     }
 
-    /// `true` once this snapshot is terminal — mirrors python's `_poll_status_until_complete`,
-    /// which stops polling on `status.is_complete`.
+    /// `true` once this snapshot is terminal.
     #[must_use]
     pub fn is_terminal(&self) -> bool {
         self.is_complete
@@ -110,10 +87,7 @@ impl AgentStatus {
 }
 
 /// One tool invocation observed during an agent execution: the tool name, the arguments it was
-/// called with, and its result (`None` if the call never got a result, e.g. the mocked/real
-/// execution ended before one arrived). Mirrors the shape of python-sdk's `AgentResult.tool_calls`
-/// dict entries (`{"name": ..., "args": ..., "result": ...}`), as a proper type instead of an
-/// untyped dict-of-dicts.
+/// called with, and its result (`None` if the call never got a result).
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCallRecord {
@@ -127,12 +101,8 @@ pub struct ToolCallRecord {
 
 /// Terminal outcome of an agent execution, returned by `AgentRuntime::run`/`AgentHandle::join`.
 ///
-/// Mirrors the subset of python-sdk's `AgentResult` dataclass this crate can actually populate
-/// today — see the module doc for what's deliberately not ported yet. `tool_calls` is one
-/// exception, added for [`super::testing::mock_run`]: it's always empty on a result built via
-/// [`AgentResult::from_status`] (there's still no extraction path from a live `/status` poll,
-/// same caveat as every other deliberately-omitted field the module doc lists), but real,
-/// scripted data on a result [`super::testing::mock_run`] builds.
+/// `tool_calls` is always empty on a result built via [`AgentResult::from_status`]; it's
+/// populated on results built by [`super::testing::mock_run`].
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentResult {
@@ -143,25 +113,21 @@ pub struct AgentResult {
     pub output: Value,
 
     /// Raw terminal workflow status string (e.g. `"COMPLETED"`, `"FAILED"`, `"TERMINATED"`,
-    /// `"TIMED_OUT"`) — same non-enum treatment as [`AgentStatus::status`], for the same reason:
-    /// python assigns the raw string straight through without validating it against its
-    /// `Status` enum.
+    /// `"TIMED_OUT"`), passed through as-is.
     pub status: String,
 
-    /// Error message, present when [`AgentResult::is_failed`] and `status` is specifically
-    /// `"FAILED"` or `"TERMINATED"`. `None` for `"TIMED_OUT"` too — matching python's exact
-    /// `if status.status in ("FAILED", "TERMINATED")` check, not "fixed" to also cover timeout.
+    /// Error message, set when `status` is `"FAILED"` or `"TERMINATED"`. Left `None` for
+    /// `"TIMED_OUT"`.
     pub error: Option<String>,
 
-    /// Tool calls observed during the run, in call order. See the struct doc for why this is
-    /// always empty outside [`super::testing::mock_run`] today.
+    /// Tool calls observed during the run, in call order. Always empty outside
+    /// [`super::testing::mock_run`].
     #[serde(default)]
     pub tool_calls: Vec<ToolCallRecord>,
 }
 
 impl AgentResult {
-    /// Build from a terminal [`AgentStatus`] — mirrors python's `AgentResult(status=status.status,
-    /// error=status.reason if status.status in ("FAILED", "TERMINATED") else None, ...)`.
+    /// Build from a terminal [`AgentStatus`].
     #[must_use]
     pub fn from_status(status: AgentStatus) -> Self {
         let error = match status.status.as_str() {
@@ -177,15 +143,13 @@ impl AgentResult {
         }
     }
 
-    /// `true` iff the execution completed successfully. Mirrors python's
-    /// `AgentResult.is_success`.
+    /// `true` iff the execution completed successfully.
     #[must_use]
     pub fn is_success(&self) -> bool {
         self.status == "COMPLETED"
     }
 
-    /// `true` iff the execution ended in failure, termination, or timeout. Mirrors python's
-    /// `AgentResult.is_failed`.
+    /// `true` iff the execution ended in failure, termination, or timeout.
     #[must_use]
     pub fn is_failed(&self) -> bool {
         matches!(self.status.as_str(), "FAILED" | "TERMINATED" | "TIMED_OUT")
@@ -266,8 +230,8 @@ mod tests {
 
     #[test]
     fn test_from_response_does_not_read_execution_id_from_body() {
-        // Matches python: execution_id always comes from the caller-supplied parameter, never
-        // from the response body, even if the body happens to carry a (possibly different) one.
+        // execution_id always comes from the caller-supplied parameter, never from the response
+        // body, even if the body happens to carry a (possibly different) one.
         let status =
             AgentStatus::from_response("exec-caller-supplied", &json!({"executionId": "other"}));
         assert_eq!(status.execution_id, "exec-caller-supplied");
@@ -311,11 +275,8 @@ mod tests {
         assert!(result.is_failed());
     }
 
-    /// Regression test for a real python-sdk asymmetry, reproduced deliberately: `TIMED_OUT`
-    /// does NOT surface `reason` as `error`, even though it's just as much a reason-bearing
-    /// terminal failure as `FAILED`/`TERMINATED`. Python's own `if status.status in ("FAILED",
-    /// "TERMINATED")` check simply omits it — don't silently "fix" this on the Rust side, since
-    /// that would make the two SDKs disagree on a real execution's `AgentResult.error`.
+    /// Regression test: `TIMED_OUT` does not surface `reason` as `error`, even though it's a
+    /// reason-bearing terminal failure like `FAILED`/`TERMINATED`.
     #[test]
     fn test_agent_result_does_not_surface_error_for_timed_out_status() {
         let status = AgentStatus::from_response(

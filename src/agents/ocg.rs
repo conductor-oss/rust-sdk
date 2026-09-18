@@ -1,23 +1,20 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! OCG (Open Context Graph) retrieval sub-agent — ports python-sdk's `ocg.py`.
+//! OCG (Open Context Graph) retrieval sub-agent.
 //!
 //! OCG is a retrieval engine over a knowledge graph of entities (messages, channels, people)
-//! linked by claims and relationships. This module is the canonical definition of the OCG
-//! integration on the Rust side too: system prompt, tool schemas, and endpoint routing all live
-//! here. Every tool compiles to a plain Conductor HTTP task with URI templating (see
-//! [`super::tool::ToolDef::http_templated`]) — there is no OCG-specific server code, and none is
-//! needed here either.
+//! linked by claims and relationships. Every tool compiles to a plain Conductor HTTP task with
+//! URI templating (see [`super::tool::ToolDef::http_templated`]) — there is no OCG-specific
+//! server code.
 //!
-//! `url` is required for [`ocg_tools`]/[`ocg_agent`] — every OCG tool set binds the instance it
-//! talks to; there is no server-side default. `credential` names an entry in the server's
-//! credential store — the secret itself never appears in Rust code or serialized configs.
+//! `url` is required for [`ocg_tools`]/[`ocg_agent`] — there is no server-side default.
+//! `credential` names an entry in the server's credential store; the secret itself never
+//! appears in Rust code or serialized configs.
 //!
-//! Agents bound to **different** OCG instances must have **distinct** names: inline
-//! `agent_tool` child workflows are registered by agent name, so two differently-configured
-//! agents sharing a name would overwrite each other's workflow definition — matches python's
-//! module warning exactly.
+//! Agents bound to different OCG instances must have distinct names: inline `agent_tool` child
+//! workflows are registered by agent name, so two differently-configured agents sharing a name
+//! would overwrite each other's workflow definition.
 
 use std::collections::HashMap;
 
@@ -28,9 +25,8 @@ use crate::error::Result;
 use super::def::AgentDef;
 use super::tool::ToolDef;
 
-/// `${workflow.input.__today__}` is substituted by Conductor when the LLM task is scheduled —
-/// the `agent_tool` dispatch script injects `__today__` with the current UTC date on every
-/// call, so relative-date queries anchor on the real current date instead of one baked in here.
+/// `${workflow.input.__today__}` is substituted by Conductor with the current UTC date when
+/// the LLM task is scheduled, so relative-date queries anchor on the real current date.
 pub const OCG_SYSTEM_PROMPT: &str = "\
 Today's date is ${workflow.input.__today__} (UTC). DEFAULT: do NOT set
 start_time or end_time \u{2014} OMIT BOTH ENTIRELY. Searching the full history is
@@ -320,8 +316,7 @@ fn memory_delete_tool_spec() -> OcgToolSpec {
     }
 }
 
-/// Which OCG tool groups to include, matching python's `ocg_tools`/`ocg_agent`
-/// `query`/`entities`/`memory` keyword switches. All default to `true`.
+/// Which OCG tool groups to include. All default to `true`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OcgToolSelection {
     /// Include `ocg_query`.
@@ -342,14 +337,11 @@ impl Default for OcgToolSelection {
     }
 }
 
-/// Build the raw OCG [`ToolDef`] list for a custom retrieval agent, matching python's
-/// `ocg_tools()`. Each tool is a plain Conductor HTTP task: `url`/the endpoint path/the auth
-/// header are baked in here, and the LLM's arguments fill the path/query/body at call time — no
-/// OCG-specific code runs server-side.
+/// Build the raw OCG [`ToolDef`] list for a custom retrieval agent. Each tool is a plain
+/// Conductor HTTP task; the LLM's arguments fill the path/query/body at call time.
 ///
 /// `credential` names a credential-store entry holding the OCG bearer token; the server
-/// resolves it at execution time, so the secret never appears in the serialized config. Errors
-/// if `url` is blank — every OCG tool set binds its own instance.
+/// resolves it at execution time, so the secret never appears in the serialized config.
 ///
 /// # Errors
 ///
@@ -412,7 +404,7 @@ pub fn ocg_tools(
         .collect()
 }
 
-/// Options for [`ocg_agent`], matching python's `ocg_agent()` keyword-only optional params.
+/// Options for [`ocg_agent`].
 #[derive(Debug, Clone)]
 pub struct OcgAgentOptions {
     /// Agent name. **Must be distinct per OCG instance** — child workflows are registered by
@@ -440,17 +432,16 @@ impl Default for OcgAgentOptions {
     }
 }
 
-/// Build the prebuilt OCG retrieval [`AgentDef`], matching python's `ocg_agent()`. Wrap it with
-/// [`ToolDef::agent`] to let a main agent delegate retrieval, or use it as a pipeline stage to
-/// retrieve before the main agent runs.
+/// Build the prebuilt OCG retrieval [`AgentDef`]. Wrap it with [`ToolDef::agent`] to let a main
+/// agent delegate retrieval, or use it as a pipeline stage before the main agent runs.
 ///
-/// `model` is the LLM for the retrieval agent's own turns (required — the right model depends
-/// on cost/latency targets and the OCG corpus). `url` is the OCG instance base URL (required —
-/// no server-side default).
+/// `model` is the LLM for the retrieval agent's own turns (required). `url` is the OCG
+/// instance base URL (required — no server-side default).
 ///
 /// # Errors
 ///
-/// Returns [`crate::error::ConductorError::Agent`] if `url` is blank (see [`ocg_tools`]), or if `options.name` is empty or invalid (see [`AgentDef::new`]).
+/// Returns [`crate::error::ConductorError::Agent`] if `url` is blank, or if `options.name` is
+/// empty or invalid.
 pub fn ocg_agent(
     model: impl Into<String>,
     url: impl Into<String>,
@@ -649,15 +640,12 @@ mod tests {
         assert!(err.to_string().contains("requires a non-blank url"));
     }
 
-    /// Regression test for the exact prompt text: verified byte-for-byte against python's
-    /// runtime `OCG_SYSTEM_PROMPT` value (not just its source-literal shape, which uses
-    /// mid-paragraph hard newlines python never splices) via a throwaway dump-and-diff during
-    /// development. Pin length + a few interior anchors so a future edit that breaks the
-    /// wrapping is caught here rather than needing that manual re-verification again.
+    /// Pins the exact prompt text (length + interior anchors) so an edit that breaks the
+    /// wrapping is caught here.
     #[test]
     fn test_ocg_system_prompt_matches_python_exactly() {
-        // 3738 python `len()` chars; `str::len()` counts UTF-8 bytes, and the prompt contains
-        // 10 em-dashes (3 bytes each vs. 1 char), hence 3738 + 10*2 = 3758.
+        // str::len() counts UTF-8 bytes: the prompt has 3738 chars including 10 em-dashes (3
+        // bytes each), hence 3758 bytes.
         assert_eq!(OCG_SYSTEM_PROMPT.len(), 3758);
         assert_eq!(OCG_SYSTEM_PROMPT.chars().count(), 3738);
         assert!(OCG_SYSTEM_PROMPT.starts_with(

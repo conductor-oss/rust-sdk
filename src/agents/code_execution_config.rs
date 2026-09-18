@@ -1,35 +1,16 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! First-class code execution configuration for agents — ports python-sdk's
-//! `code_execution_config.py`.
+//! First-class code execution configuration for agents.
 //!
 //! [`CodeExecutionConfig`] declares whether/how an agent may run LLM-written code; when attached
 //! via [`super::AgentDef::with_code_execution`], an `execute_code` tool backed by a local handler
-//! is appended to the agent's tool list automatically, matching python's `Agent.__init__` ->
-//! `_attach_code_execution_tool` flow.
+//! is appended to the agent's tool list automatically.
 //!
-//! ## Deliberate difference from python's `isinstance(self.executor, LocalCodeExecutor)` check
-//!
-//! Python rebuilds a fresh, language-specific `LocalCodeExecutor` on every call *whenever the
-//! configured executor is a `LocalCodeExecutor`* (checked via `isinstance`, including a
-//! caller-supplied instance, not just the auto-created default) — because a single
-//! `LocalCodeExecutor` is bound to one language at construction, but the LLM picks the language
-//! per call via the tool's `language` argument. Any *other* executor (Docker, custom) is used
-//! as-is, with no such per-call override. Rust has no cheap, safe way to downcast a
-//! `dyn CodeExecutor` trait object to check "is this specifically a `LocalCodeExecutor`", so
-//! [`ConfiguredExecutor`] makes the same dichotomy explicit at the type level instead of via
-//! runtime type inspection: its `Local` variant gets the same per-call language rebuild;
-//! `Custom` wraps any other [`super::code_executor::CodeExecutor`] and is called as-is.
-//!
-//! ## No `ToolContext`/terminal-error plumbing — matching python, not a narrowing
-//!
-//! Unlike [`super::cli_config`], python's own `CodeExecutionEntry.__call__` never declares a
-//! `context: ToolContext` parameter and never raises `TerminalToolError` — language/command
-//! validation failures are plain `ValueError` (retryable), and `LocalCodeExecutor.execute()`
-//! never raises at all (every failure, including a timeout or missing interpreter, is captured
-//! in the returned `ExecutionResult` instead). There is nothing to wire here because python
-//! itself never uses either mechanism for code execution.
+//! [`ConfiguredExecutor::Local`] rebuilds a fresh [`LocalCodeExecutor`] on every call using the
+//! LLM-selected language; [`ConfiguredExecutor::Custom`] uses a fixed executor as-is regardless
+//! of the selected language. Validation failures (disallowed language/command) are retryable
+//! errors, not terminal.
 
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -69,8 +50,7 @@ const BASH_BUILTINS: &[&str] = &[
     "complete", "compgen",
 ];
 
-/// Best-effort validator that checks code against an allowed-command list, matching python's
-/// `CommandValidator`.
+/// Best-effort validator that checks code against an allowed-command list.
 ///
 /// This is a **convenience safety layer, not a security boundary**. Determined code can bypass
 /// regex-based detection (e.g. via `eval`, encoded strings, or dynamic imports). For untrusted
@@ -160,8 +140,7 @@ impl CommandValidator {
     }
 }
 
-/// How [`CodeExecutionConfig`] should build/reuse an executor per call — see the module doc for
-/// why this replaces python's `isinstance(self.executor, LocalCodeExecutor)` runtime check.
+/// How [`CodeExecutionConfig`] should build/reuse an executor per call.
 #[derive(Clone)]
 pub enum ConfiguredExecutor {
     /// Rebuild a fresh [`LocalCodeExecutor`] on every call, using the LLM-selected `language`
@@ -189,11 +168,9 @@ impl Default for ConfiguredExecutor {
     }
 }
 
-/// Configuration for first-class code execution on an agent, matching python's
-/// `CodeExecutionConfig` dataclass. Wire key `codeExecution`
-/// (`{"enabled", "allowedLanguages", "allowedCommands", "timeout"}`) — see
-/// `AgentConfigSerializer::serialize_agent`; `executor`/`working_dir` are never serialized (only
-/// consulted by this crate's own local `execute_code` handler, matching python).
+/// Configuration for first-class code execution on an agent. Wire key `codeExecution`
+/// (`{"enabled", "allowedLanguages", "allowedCommands", "timeout"}`); `executor`/`working_dir`
+/// are never serialized (only consulted by this crate's own local `execute_code` handler).
 #[derive(Debug, Clone)]
 pub struct CodeExecutionConfig {
     pub enabled: bool,
@@ -303,8 +280,7 @@ fn is_json_falsy(value: Option<&Value>) -> bool {
     }
 }
 
-/// Run one code-execution call per `config`, matching python's `CodeExecutionEntry.__call__` —
-/// see the module doc for what's deliberately not ported.
+/// Run one code-execution call per `config`.
 async fn run_code_execution(config: &CodeExecutionConfig, args: Value) -> Result<Value> {
     let code_arg = args.get("code");
     if is_json_falsy(code_arg) {
@@ -376,8 +352,7 @@ async fn run_code_execution(config: &CodeExecutionConfig, args: Value) -> Result
     }
 }
 
-/// Build the auto-attached `execute_code` tool for `config`, matching python's
-/// `_make_code_execution_tool`.
+/// Build the auto-attached `execute_code` tool for `config`.
 pub(super) fn code_execution_tool(
     config: &CodeExecutionConfig,
     agent_name: Option<&str>,
@@ -497,8 +472,7 @@ mod tests {
     fn test_command_validator_bash_ignores_heredoc_delimiter() {
         // Without heredoc-delimiter tracking, the closing "EOF" line (which sits at line-start,
         // matching the bare-command pattern) would be misdetected as a disallowed command named
-        // "EOF". Heredoc *body* content is not otherwise shielded from scanning — matches
-        // python's "best-effort heuristic" behavior exactly.
+        // "EOF". Heredoc body content is not otherwise shielded from scanning.
         let validator = CommandValidator::new(["cat"]);
         let code = "cat <<EOF\nEOF\n";
         assert!(validator.validate(code, "bash").is_none());

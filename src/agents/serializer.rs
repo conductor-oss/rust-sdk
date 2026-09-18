@@ -10,14 +10,12 @@ use super::swarm::SwarmTransition;
 use super::termination::TerminationCondition;
 use super::tool::{ToolDef, ToolType};
 
-/// Serializes [`AgentDef`]/[`ToolDef`] trees into the `agentConfig` JSON wire format shared
-/// with python-sdk's `conductor.ai.agents.config_serializer.AgentConfigSerializer`.
+/// Serializes [`AgentDef`]/[`ToolDef`] trees into the `agentConfig` JSON wire format.
 ///
-/// Hand-rolled rather than `#[derive(Serialize)]`: `ToolDef` holds a non-serializable handler
-/// closure, `external` is derived from `model` rather than stored, `strategy`'s emission
-/// depends on a different field (`agents`), and tool-level vs. agent-level `credentials` nest
-/// at different wire locations under the same Rust field name. Every omitted `Option`/empty
-/// collection is left out of the JSON entirely — never emitted as `null` or `[]`.
+/// Hand-rolled rather than `#[derive(Serialize)]` because `ToolDef` holds a non-serializable
+/// handler closure and several fields (e.g. `external`, derived from `model`) need custom
+/// logic. Every omitted `Option`/empty collection is left out of the JSON entirely — never
+/// emitted as `null` or `[]`.
 pub struct AgentConfigSerializer;
 
 impl AgentConfigSerializer {
@@ -28,15 +26,10 @@ impl AgentConfigSerializer {
 }
 
 fn serialize_agent(agent: &AgentDef) -> Value {
-    // Matches python-sdk's `config_serializer.py::_serialize_agent`'s very first check:
-    // `if getattr(agent, "_framework", None) == "skill": return {"name":..., "model":...,
-    // "_framework": "skill", **raw_config}` — a framework-marked agent (see
-    // `AgentDef::with_framework`) always serializes as this flattened passthrough instead of
-    // the normal `AgentConfig` shape, whether it's the top-level agent being serialized or
-    // nested as a sub-agent. Unlike the normal `model` field below, python emits `model` as
-    // explicit `null` rather than omitting it when unset (`agent.model or None`) — matched here
-    // too, since this is a distinct wire contract for the target framework normalizer, not the
-    // regular `AgentConfig` shape the rest of this function builds.
+    // A framework-marked agent (see `AgentDef::with_framework`) always serializes as this
+    // flattened passthrough instead of the normal `AgentConfig` shape, whether it's the
+    // top-level agent or nested as a sub-agent. Unlike the normal `model` field below, `model`
+    // is emitted as explicit `null` rather than omitted when unset.
     if let Some(framework) = &agent.framework {
         let mut map = Map::new();
         map.insert("name".to_owned(), Value::String(agent.name.clone()));
@@ -66,10 +59,9 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         map.insert("baseUrl".to_owned(), Value::String(base_url.clone()));
     }
 
-    // Mirrors python-sdk's `has_sub_agents = bool(agent.agents) or agent.planner is not None or
-    // agent.fallback is not None` (config_serializer.py) — a PLAN_EXECUTE coordinator built with
-    // `.with_planner(...)` has no entries in `agents`, only `planner`/`fallback`, so checking
-    // `agents` alone would silently omit `strategy` and the server would default to HANDOFF.
+    // A PLAN_EXECUTE coordinator built with `.with_planner(...)` has no entries in `agents`,
+    // only `planner`/`fallback`, so checking `agents` alone would silently omit `strategy` and
+    // the server would default to HANDOFF.
     if !agent.agents.is_empty() || agent.planner.is_some() || agent.fallback.is_some() {
         map.insert(
             "strategy".to_owned(),
@@ -108,10 +100,8 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
-    // Router: this SDK version only models an agent-based router (see `AgentDef::router`'s
-    // doc comment), so serialization is always the recursive full-agent shape — matching
-    // python-sdk's `_serialize_router`'s `isinstance(router, Agent)` branch. There is no
-    // callable-router `{"taskName": ...}` branch to reproduce here.
+    // Router: this SDK version only models an agent-based router, so serialization is always
+    // the recursive full-agent shape.
     if let Some(router) = &agent.router {
         map.insert("router".to_owned(), serialize_agent(router));
     }
@@ -135,10 +125,7 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         map.insert("memory".to_owned(), serialize_memory(memory));
     }
 
-    // Wire key stays "handoffs" for cross-SDK compatibility even though the Rust type is named
-    // `SwarmTransition` (see swarm.rs's module docs for why the Rust-side name diverges) —
-    // matches python-sdk's `config_serializer.py::_serialize_agent`:
-    // `if agent.handoffs: config["handoffs"] = [self._serialize_handoff(h, agent.name) for h in agent.handoffs]`.
+    // Wire key stays "handoffs" even though the Rust type is named `SwarmTransition`.
     if !agent.swarm_transitions.is_empty() {
         map.insert(
             "handoffs".to_owned(),
@@ -152,11 +139,7 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
-    // Matches python-sdk's `if agent.allowed_transitions: config["allowedTransitions"] =
-    // agent.allowed_transitions` — passed straight through as a `{name: [targets]}` map, the
-    // same shape python currently sends (see the parity audit's note on a pre-existing
-    // python/schema mismatch here — this crate follows what python actually sends on the wire
-    // today, not its own `agent-schema.json`).
+    // Passed straight through as a `{name: [targets]}` map.
     if !agent.allowed_transitions.is_empty() {
         map.insert(
             "allowedTransitions".to_owned(),
@@ -177,8 +160,7 @@ fn serialize_agent(agent: &AgentDef) -> Value {
 
     // PLAN_EXECUTE named slots: planner (required by `AgentDef::with_strategy`) + fallback
     // (optional). Both serialize as full nested `agentConfig` dicts via the same
-    // `serialize_agent` used for `agent.agents`/`ToolType::AgentTool` sub-agents — matches
-    // python-sdk's `config["planner"] = self._serialize_agent(planner_agent)`.
+    // `serialize_agent` used for `agent.agents`/`ToolType::AgentTool` sub-agents.
     if let Some(planner) = &agent.planner {
         map.insert("planner".to_owned(), serialize_agent(planner));
     }
@@ -189,9 +171,7 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         map.insert("fallbackMaxTurns".to_owned(), Value::from(turns));
     }
 
-    // Planner context: bare strings normalise to python-sdk's `Context(text=...)` wire shape
-    // (`{"text": ...}`) — see the `planner_context` field doc on `AgentDef` for why only that
-    // shape is modeled here.
+    // Planner context: bare strings normalize to the `{"text": ...}` wire shape.
     if !agent.planner_context.is_empty() {
         map.insert(
             "plannerContext".to_owned(),
@@ -209,8 +189,7 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
-    // Synthesize flag — default true; only emitted when explicitly disabled, matching
-    // python-sdk's `if not agent.synthesize: config["synthesize"] = False`.
+    // Synthesize flag defaults to true; only emitted when explicitly disabled.
     if !agent.synthesize {
         map.insert("synthesize".to_owned(), Value::Bool(false));
     }
@@ -229,8 +208,6 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
-    // Matches python-sdk's `config["prefillTools"] = [{"toolName": pt.tool_name, "arguments":
-    // pt.arguments} for pt in agent.prefill_tools]`.
     if !agent.prefill_tools.is_empty() {
         map.insert(
             "prefillTools".to_owned(),
@@ -249,10 +226,9 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
-    // Matches python-sdk's `config_serializer.py::_serialize_gate`'s two branches: `TextGate`
-    // serializes inline (compiled server-side, no worker); a callable serializes as a
-    // worker-task reference the same way `stopWhen` does, evaluated by the `{name}_gate`
-    // worker `AgentRuntime::serve` registers.
+    // `TextGate` serializes inline (compiled server-side, no worker); a callable serializes as
+    // a worker-task reference, evaluated by the `{name}_gate` worker `AgentRuntime::serve`
+    // registers.
     if let Some(gate) = &agent.gate {
         let gate_value = match gate {
             super::def::GateCondition::Text(text_gate) => {
@@ -277,9 +253,8 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         map.insert("gate".to_owned(), gate_value);
     }
 
-    // Matches python-sdk's `if agent.stop_when is not None: config["stopWhen"] =
-    // {"taskName": f"{agent.name}_stop_when"}` — the predicate itself is registered as a
-    // worker by `AgentRuntime::serve`, not serialized inline.
+    // The predicate itself is registered as a worker by `AgentRuntime::serve`, not serialized
+    // inline.
     if agent.stop_when.is_some() {
         let mut stop_when_map = Map::new();
         stop_when_map.insert(
@@ -289,8 +264,8 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         map.insert("stopWhen".to_owned(), Value::Object(stop_when_map));
     }
 
-    // Matches python-sdk's `config_serializer.py`'s CLI-command-execution branch: `working_dir`
-    // is never sent, since it's only consulted by this crate's own local `run_command` handler.
+    // `working_dir` is never sent -- it's only consulted by this crate's own local
+    // `run_command` handler.
     if let Some(cli_config) = &agent.cli_config {
         let mut cli_map = Map::new();
         cli_map.insert("enabled".to_owned(), Value::Bool(cli_config.enabled));
@@ -313,9 +288,8 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         map.insert("cliConfig".to_owned(), Value::Object(cli_map));
     }
 
-    // Matches python-sdk's `config_serializer.py`'s code-execution branch: `executor`/
-    // `working_dir` are never sent, since they're only consulted by this crate's own local
-    // `execute_code` handler.
+    // `executor`/`working_dir` are never sent -- they're only consulted by this crate's own
+    // local `execute_code` handler.
     if let Some(code_execution) = &agent.code_execution {
         let mut code_map = Map::new();
         code_map.insert("enabled".to_owned(), Value::Bool(code_execution.enabled));
@@ -398,24 +372,16 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
-    // `agent.callbacks` is deliberately NOT serialized here. Python's
-    // `AgentConfigSerializer._serialize_agent` emits `config["callbacks"]` as a list of
-    // `{"position": ..., "taskName": ...}` references (see `config_serializer.py`, around
-    // `_chain_callbacks_for_position`) — each entry names a worker task, synthesized as
-    // `f"{agent.name}_{position}"`, that python's `AgentRuntime` registers as a callable worker
-    // at deploy time so the *server* can invoke the handler by that name. This crate has no
-    // `AgentRuntime` (nothing registers a task under that name, so there is nothing for
-    // `taskName` to reference), so emitting the same `{"position", "taskName"}` shape here would
-    // produce a dangling reference the server can never resolve — worse than omitting the field.
-    // `callbacks` stays a caller-side-only registration (see `AgentDef::with_callback`) until an
-    // `AgentRuntime` follow-up exists to give each position a real task name to point at.
+    // `agent.callbacks` is deliberately NOT serialized here: this crate has no `AgentRuntime` to
+    // register a worker task for the server to invoke by name, so emitting a `{"position",
+    // "taskName"}` reference would be a dangling reference the server can never resolve.
+    // `callbacks` stays a caller-side-only registration (see `AgentDef::with_callback`).
 
     Value::Object(map)
 }
 
-/// Serializes an [`OutputType`] to the `OutputTypeConfig` wire shape, matching python-sdk's
-/// `AgentConfigSerializer._serialize_output_type`: a JSON `schema` plus the originating
-/// `className` for server-side validation.
+/// Serializes an [`OutputType`] to the `OutputTypeConfig` wire shape: a JSON `schema` plus the
+/// originating `className` for server-side validation.
 fn serialize_output_type(output_type: &OutputType) -> Value {
     let mut map = Map::new();
     map.insert("schema".to_owned(), output_type.schema.clone());
@@ -426,12 +392,9 @@ fn serialize_output_type(output_type: &OutputType) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`Guardrail`] to the `GuardrailConfig` wire shape, matching python-sdk's
-/// `AgentConfigSerializer._serialize_guardrail`: common fields (`name`/`position`/`onFail`/
-/// `maxRetries`) plus the `guardrailType` discriminant and that type's own fields, contributed by
-/// [`Guardrail::guardrail_type_fields`] (which delegates to the wrapped [`GuardrailCheck`](super::guardrail::GuardrailCheck)
-/// — this crate always wraps a concrete checker, so the `"external"`/`"custom"` branches python's
-/// version has for a `func`-less `Guardrail` don't apply here).
+/// Serializes a [`Guardrail`] to the `GuardrailConfig` wire shape: common fields
+/// (`name`/`position`/`onFail`/`maxRetries`) plus the `guardrailType` discriminant and that
+/// type's own fields, contributed by [`Guardrail::guardrail_type_fields`].
 fn serialize_guardrail(guardrail: &Guardrail) -> Value {
     let mut map = Map::new();
 
@@ -450,10 +413,9 @@ fn serialize_guardrail(guardrail: &Guardrail) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`TerminationCondition`] to the `TerminationConfig` wire shape, matching
-/// python-sdk's `AgentConfigSerializer._serialize_termination` exactly: a `"type"` discriminant
-/// (from [`TerminationCondition::type_str`]) plus that variant's own fields, with `And`/`Or`
-/// recursing into their `conditions` via this same function.
+/// Serializes a [`TerminationCondition`] to the `TerminationConfig` wire shape: a `"type"`
+/// discriminant (from [`TerminationCondition::type_str`]) plus that variant's own fields, with
+/// `And`/`Or` recursing into their `conditions` via this same function.
 fn serialize_termination(condition: &TerminationCondition) -> Value {
     let mut map = Map::new();
     map.insert(
@@ -510,18 +472,10 @@ fn serialize_termination(condition: &TerminationCondition) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`ConversationMemory`] to the `MemoryConfig` wire shape, matching python-sdk's
-/// `AgentConfigSerializer._serialize_memory`: `messages`/`maxMessages` are each independently
-/// omitted when empty/unset (`messages` per this file's usual empty-collection convention;
-/// `maxMessages` per python's `if ... and memory.max_messages:` truthiness check, under which a
-/// configured `0` is falsy and omitted the same as unset — mirroring the same quirk
-/// [`ConversationMemory::trim`](super::memory::ConversationMemory) documents for trimming
-/// itself). Note this function can return an empty object (`{}`) — python's `agent.memory` guard
-/// (`if hasattr(agent, "memory") and agent.memory:`) looks like it treats an empty memory as
-/// omitted too, but python's `ConversationMemory` is a plain dataclass with no `__bool__`/
-/// `__len__`, so any non-`None` instance — empty or not — is truthy; the guard is really just a
-/// `is not None` check. So the top-level `memory` key is emitted whenever `AgentDef.memory` is
-/// `Some`, even if that produces `"memory": {}`.
+/// Serializes a [`ConversationMemory`] to the `MemoryConfig` wire shape. `messages` is omitted
+/// when empty; `maxMessages` is omitted when unset or explicitly set to `0` (treated as falsy).
+/// This function can return an empty object (`{}`) — the top-level `memory` key is emitted
+/// whenever `AgentDef.memory` is `Some`, even if that produces `"memory": {}`.
 fn serialize_memory(memory: &ConversationMemory) -> Value {
     let mut map = Map::new();
 
@@ -540,11 +494,9 @@ fn serialize_memory(memory: &ConversationMemory) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`Message`] to python-sdk's message dict shape (see
-/// `python-sdk/src/conductor/ai/agents/memory.py`'s `add_*` methods, which build these dicts
-/// directly — `message`/`tool_calls` stay `snake_case` while `toolCallId`/`taskReferenceName` are
-/// already camelCase there, so this mirrors that mixed casing verbatim rather than normalizing
-/// it). `tool_calls` is only ever populated for `MessageRole::ToolCall`; `tool_call_id`/
+/// Serializes a [`Message`] to its wire dict shape. Note the mixed casing: `message`/
+/// `tool_calls` stay `snake_case` while `toolCallId`/`taskReferenceName` are camelCase.
+/// `tool_calls` is only ever populated for `MessageRole::ToolCall`; `tool_call_id`/
 /// `task_reference_name` only for `MessageRole::Tool` — both omitted otherwise.
 fn serialize_message(message: &Message) -> Value {
     let mut map = Map::new();
@@ -574,7 +526,7 @@ fn serialize_message(message: &Message) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`ToolCall`] (a [`Message`]'s `tool_calls` entry) to python-sdk's
+/// Serializes a [`ToolCall`] (a [`Message`]'s `tool_calls` entry) to its
 /// `{"name", "taskReferenceName", "input"}` dict shape.
 fn serialize_tool_call(tool_call: &ToolCall) -> Value {
     let mut map = Map::new();
@@ -589,20 +541,13 @@ fn serialize_tool_call(tool_call: &ToolCall) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`SwarmTransition`] to the `HandoffConfig` wire shape, matching python-sdk's
-/// `AgentConfigSerializer._serialize_handoff` exactly: `target` plus a `type` discriminant
-/// (from [`SwarmTransition::as_str`], which already matches python's `"on_tool_result"` /
-/// `"on_text_mention"` / `"on_condition"` strings) and that variant's own fields.
+/// Serializes a [`SwarmTransition`] to the `HandoffConfig` wire shape: `target` plus a `type`
+/// discriminant (from [`SwarmTransition::as_str`]) and that variant's own fields.
 ///
-/// `OnCondition` carries an arbitrary Rust closure ([`super::swarm::SwarmConditionFn`]), which —
-/// like python's `Callable[[Dict[str, Any]], bool]` — has no JSON representation. Python doesn't
-/// serialize the callable either: it emits a `taskName` of `"{agent_name}_handoff_{target}"`,
-/// deferring evaluation to a runtime task registered under that name
-/// (`config_serializer.py`'s module docstring: "Callables ... are registered as workers ... and
-/// sent as task-name references"). This crate has no `AgentRuntime` to register such a task
-/// against yet, so this mirrors the wire shape (same `taskName` convention) without the runtime
-/// registration side — that's out of scope here, tracked alongside the rest of the
-/// `AgentRuntime` follow-up (see `docs/agents/README.md`).
+/// `OnCondition` carries an arbitrary Rust closure ([`super::swarm::SwarmConditionFn`]), which
+/// has no JSON representation, so it serializes as a `taskName` of
+/// `"{agent_name}_handoff_{target}"`, deferring evaluation to a runtime task registered under
+/// that name.
 fn serialize_swarm_transition(transition: &SwarmTransition, agent_name: &str) -> Value {
     let mut map = Map::new();
 
@@ -871,8 +816,7 @@ mod tests {
     }
 
     /// Regression test: a hyphenated agent name's `stopWhen.taskName` must match the sanitized
-    /// name the server actually expects (see `sanitize_for_task_name`'s doc comment for the
-    /// live-confirmed bug this fixes).
+    /// name the server expects.
     #[test]
     fn test_serialize_stop_when_sanitizes_hyphens_in_task_name() {
         let agent = AgentDef::new("triage-agent")
@@ -979,12 +923,9 @@ mod tests {
         );
     }
 
-    /// Regression test for the bug this audit found: a `PLAN_EXECUTE` coordinator has no
-    /// entries in `agents` (its sub-agents live in `planner`/`fallback` instead), so checking
-    /// `agents.is_empty()` alone omitted `strategy` from the wire payload entirely, and the
-    /// server defaulted the missing field to `Strategy.HANDOFF` — confirmed against a real
-    /// server, which then rejected the config with "Named slots `planner=` and `fallback=` are
-    /// only valid with `strategy=Strategy.PLAN_EXECUTE`".
+    /// Regression test: a `PLAN_EXECUTE` coordinator has no entries in `agents` (its sub-agents
+    /// live in `planner`/`fallback` instead), so checking `agents.is_empty()` alone omitted
+    /// `strategy` from the wire payload, and the server defaulted to `Strategy.HANDOFF`.
     #[test]
     fn test_strategy_emitted_for_plan_execute_with_only_planner_no_sub_agents() {
         let planner = AgentDef::new("planner").unwrap().with_model("gpt-4");
@@ -1416,10 +1357,8 @@ mod tests {
 
     #[test]
     fn test_serialize_empty_memory_is_not_omitted() {
-        // Unlike `None`, an explicitly-set but empty `ConversationMemory` is NOT omitted: python's
-        // guard (`if hasattr(agent, "memory") and agent.memory:`) looks like it treats an empty
-        // memory as falsy, but `ConversationMemory` is a plain dataclass with no `__bool__`/
-        // `__len__`, so any non-None instance is truthy and gets serialized — even to `{}`.
+        // Unlike `None`, an explicitly-set but empty `ConversationMemory` is NOT omitted -- it
+        // serializes even to `{}`.
         use super::super::memory::ConversationMemory;
 
         let agent = AgentDef::new("a")
@@ -1440,8 +1379,7 @@ mod tests {
 
     #[test]
     fn test_serialize_memory_max_messages_zero_is_omitted() {
-        // Matches python's `if ... and memory.max_messages:` truthiness check, under which a
-        // configured `0` is falsy and omitted the same as unset.
+        // A configured `0` is falsy and omitted the same as unset.
         use super::super::memory::ConversationMemory;
 
         let memory = ConversationMemory::new().with_max_messages(0);
@@ -1593,13 +1531,9 @@ mod tests {
         assert!(!h.contains_key("resultContains"));
     }
 
-    /// `OnCondition` wraps an arbitrary Rust closure that, like python's `Callable[[Dict[str,
-    /// Any]], bool]`, has no JSON representation. Python doesn't serialize the callable body
-    /// either — `_serialize_handoff` emits a `taskName` of `"{agent_name}_handoff_{target}"`
-    /// and defers evaluation to a runtime task registered under that name. This crate has no
-    /// `AgentRuntime` yet to register such a task against, so this test only asserts the wire
-    /// shape (the `taskName` convention) matches; actually registering/dispatching that task is
-    /// out of scope until `AgentRuntime` exists.
+    /// `OnCondition` wraps an arbitrary Rust closure, which has no JSON representation, so it
+    /// serializes as a `taskName` of `"{agent_name}_handoff_{target}"` and defers evaluation to
+    /// a runtime task registered under that name.
     #[test]
     fn test_serialize_on_condition_transition_emits_task_name_reference() {
         let agent =

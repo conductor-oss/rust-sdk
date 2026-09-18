@@ -1,20 +1,8 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Concrete [`FrameworkAgent`] adapter for the `async-openai` crate (Wave 5 Phase 1 — see
-//! `docs/agents/README.md`'s "Frameworks" table). Gated behind the `openai-adapter` Cargo
-//! feature so plain consumers of this crate never pull in `async-openai`.
-//!
-//! `async-openai` has no single type that bundles a name, instructions, a model, and tool
-//! definitions together the way python's `openai-agents.Agent` does — the closest analog, its
-//! Assistants-API `AssistantObject`, is itself a moving target (the Assistants API is being
-//! phased out upstream in favor of the Responses API). What *is* stable across `async-openai`
-//! versions is its tool-calling shape (`ChatCompletionTool` / `FunctionObject`), which mirrors
-//! `OpenAI`'s own function-calling JSON schema. [`OpenAiAgent`] is therefore a small, local
-//! bundling type — name / instructions / model, all in this crate's own shape, plus tools in
-//! `async-openai`'s native [`ChatCompletionTool`] shape — so this adapter's tool-definition
-//! mapping is real `async-openai` type mapping, without depending on a source "agent" object
-//! whose fields may not be stable.
+//! [`FrameworkAgent`] adapter for the `async-openai` crate. Gated behind the `openai-adapter`
+//! Cargo feature so plain consumers of this crate never pull in `async-openai`.
 
 use std::collections::HashMap;
 
@@ -24,10 +12,8 @@ use serde_json::Value;
 use super::framework::FrameworkAgent;
 use super::tool::{ToolDef, ToolType};
 
-/// Minimal async-openai-shaped agent: bundles the fields this crate can extract from tool
-/// definitions authored against `async-openai`'s chat-completions tool shape into one value
-/// [`FrameworkAgent`] can be implemented against. See the module doc comment for why this is a
-/// local bundling type rather than an impl directly on an `async-openai` "agent" type.
+/// Bundles a name, instructions, model, and `async-openai` tool definitions into a value that
+/// implements [`FrameworkAgent`].
 #[derive(Debug, Clone, Default)]
 pub struct OpenAiAgent {
     pub name: String,
@@ -79,11 +65,7 @@ impl FrameworkAgent for OpenAiAgent {
     }
 
     /// Maps each `ChatCompletionTool` (`{"type": "function", "function": {...}}`) into a
-    /// [`ToolDef`]. `async-openai`'s `ChatCompletionToolType` currently has only the `Function`
-    /// variant, matching `OpenAI`'s own API — there is nothing else to narrow away here, unlike
-    /// the Assistants-API `AssistantTools` enum's `code_interpreter` / `file_search` variants
-    /// (server-run `OpenAI` built-ins with no `ToolDef` equivalent, since they're not Conductor
-    /// worker/http/mcp/human/agent tools), which this adapter does not attempt to map.
+    /// [`ToolDef`].
     fn tools(&self) -> Vec<ToolDef> {
         self.tools
             .iter()

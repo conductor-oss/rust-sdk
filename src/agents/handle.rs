@@ -4,17 +4,10 @@
 //! Non-blocking control surface for a running agent execution.
 //!
 //! [`AgentHandle`] is what `AgentRuntime::start` returns instead of blocking to a result the
-//! way `AgentRuntime::run` does. Mirrors python-sdk's `AgentHandle` (`result.py`) — in
-//! particular, [`AgentHandle::approve`]/[`AgentHandle::reject`]/[`AgentHandle::respond`] target
-//! *this handle's own* `execution_id` by default, matching python's actual behavior
-//! (`self._runtime.respond(_target_execution_id(self.execution_id, event), output)`, which
-//! defaults to `self.execution_id` and only targets a different, nested sub-execution when the
-//! caller explicitly passes the streamed event that raised the request). This crate doesn't yet
-//! carry an execution id on `AgentEvent`, so that override isn't available here — every method
-//! below always targets `self.execution_id`. Get the streamed event's execution id from
-//! [`AgentHandle::stream`] and build a second `AgentHandle` over it (via
-//! `AgentClient`/`AgentHandle::new`) if a HANDOFF/SEQUENTIAL/PARALLEL sub-execution needs a
-//! direct response.
+//! way `AgentRuntime::run` does. [`AgentHandle::approve`]/[`AgentHandle::reject`]/
+//! [`AgentHandle::respond`] always target this handle's own `execution_id`. Build a separate
+//! `AgentHandle` (via `AgentClient`/`AgentHandle::new`) over a different execution id if a
+//! nested sub-execution needs a direct response.
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -31,11 +24,10 @@ use super::stream::AgentStream;
 /// Interval between `get_status` polls in [`AgentHandle::join`].
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
-/// Default stall threshold for [`AgentHandle::join`]'s built-in stall detection -- matches
-/// python-sdk's `liveness_stall_seconds` default.
+/// Default stall threshold for [`AgentHandle::join`]'s built-in stall detection.
 const DEFAULT_STALL_SECONDS: f64 = 30.0;
 
-/// Default interval between stall checks -- matches python-sdk's `liveness_check_interval_seconds`.
+/// Default interval between stall checks.
 const DEFAULT_STALL_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Non-blocking handle to a running (or already-finished) agent execution.
@@ -66,7 +58,7 @@ impl AgentHandle {
         &self.execution_id
     }
 
-    /// Fetch the current status without blocking. Mirrors python's `AgentHandle.get_status`.
+    /// Fetch the current status without blocking.
     ///
     /// # Errors
     ///
@@ -81,15 +73,10 @@ impl AgentHandle {
 
     /// Block until the execution reaches a terminal status, then return its [`AgentResult`].
     ///
-    /// Polls `GET /agent/{id}/status` on a fixed interval and builds the result straight from
-    /// that response's own `output` — mirrors python's `_poll_status_until_complete` +
-    /// `AgentResult(output=status.output, ...)`; there is no separate `get_execution` fetch in
-    /// the common path, because the terminal `/status` response already carries the output.
-    ///
-    /// Also runs the [`StallPolicy::Warn`]-policy stall detection described on
-    /// [`AgentHandle::join_with_options`], using that method's default thresholds. Use
-    /// [`AgentHandle::join_with_options`] directly to customize them or to select
-    /// [`StallPolicy::Raise`].
+    /// Polls `GET /agent/{id}/status` on a fixed interval. Also runs the [`StallPolicy::Warn`]
+    /// stall detection described on [`AgentHandle::join_with_options`], using that method's
+    /// default thresholds. Use [`AgentHandle::join_with_options`] directly to customize them or
+    /// to select [`StallPolicy::Raise`].
     ///
     /// # Errors
     ///
@@ -107,11 +94,9 @@ impl AgentHandle {
     ///
     /// Every `check_interval`, fetches the full workflow (`GET /workflow/{id}?includeTasks=true`)
     /// and looks for any task stuck `SCHEDULED` with zero polls for at least `stall_seconds` --
-    /// a strong signal that no worker is running for it. See the `super::liveness` module doc
-    /// for exactly what this does and doesn't catch (rust has no per-execution worker domain to
-    /// scope the check to, unlike python-sdk's `ServerLivenessMonitor`). A stall-check tick that
-    /// itself fails (e.g. a transient HTTP error) is skipped silently rather than failing
-    /// `join()` over a liveness-check-specific problem; the next tick tries again.
+    /// a signal that no worker is polling for it. See the `super::liveness` module doc for what
+    /// this does and doesn't catch. A stall-check tick that itself fails (e.g. a transient HTTP
+    /// error) is skipped silently; the next tick tries again.
     ///
     /// With `policy` set to [`StallPolicy::Warn`], a detected stall is logged
     /// (`tracing::warn!`) and `join()` keeps waiting. With `policy` set to
@@ -251,14 +236,12 @@ mod tests {
 
     #[test]
     fn approve_payload_has_expected_shape() {
-        // Matches python's `respond({"approved": True}, ...)` exactly.
         let payload = approve_payload();
         assert_eq!(payload, json!({ "approved": true }));
     }
 
     #[test]
     fn reject_payload_has_expected_shape() {
-        // Matches python's `respond({"approved": False, "reason": reason}, ...)`.
         let payload = reject_payload("needs a manager");
         assert_eq!(
             payload,

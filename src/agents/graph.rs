@@ -12,63 +12,23 @@ use super::serializer::AgentConfigSerializer;
 use super::tool::ToolDef;
 
 /// Evaluation context for a [`GraphConditionFn`] — the state-so-far a conditional edge's
-/// predicate reads to pick the next node.
-///
-/// Deliberately **not** a reuse of any existing crate type (not [`super::swarm::SwarmContext`],
-/// not [`super::memory::ConversationMemory`]): those model different niches (rule-based
-/// agent-to-agent handoff context, conversation history) and forcing this into either would carry
-/// fields a graph predicate has no use for. `accumulated` is a plain bag of whatever prior nodes
-/// chose to publish; `last_output` is the most recently produced node's raw output, kept separate
-/// since "what did the node I just left produce" is the single most common thing a routing
-/// predicate needs and forcing callers to know that node's name to look it up in `accumulated`
-/// would be needless ceremony.
-///
-/// **Out of scope / deferred**: shared-state-across-nodes reducers (`LangGraph`'s `StateGraph`
-/// state-channel/reducer machinery, where each node's return value is merged into shared state via
-/// a per-key reduce function) are not modeled here. `accumulated` is a plain last-write-wins map a
-/// caller populates however it sees fit between node executions; there is no `AgentRuntime` yet to
-/// drive that population automatically, and designing a reducer API ahead of that runtime existing
-/// would be speculative. See `docs/agents/README.md`'s `GraphAgentDef` entry.
+/// predicate reads to pick the next node. `accumulated` is a last-write-wins map of whatever
+/// prior nodes chose to publish; `last_output` is the most recently produced node's raw output.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GraphContext {
     /// Accumulated state published by nodes executed so far, keyed by whatever name the caller
-    /// chose when publishing it. Last write wins — there is no merge/reduce step (see the
-    /// deferred-reducers note above).
+    /// chose when publishing it. Last write wins — there is no merge/reduce step.
     pub accumulated: HashMap<String, Value>,
     /// Raw output of the most recently executed node, if any.
     pub last_output: Option<Value>,
 }
 
-/// Boxed synchronous predicate backing [`ConditionalGraphEdge`], returning the *name* of the
+/// Boxed synchronous predicate backing [`ConditionalGraphEdge`], returning the name of the
 /// target node to route to next.
-///
-/// Modeled after [`super::swarm::SwarmConditionFn`] (`Arc`-boxed so a `ConditionalGraphEdge` stays
-/// `Clone`, `Send + Sync` for the same cross-thread-usability reasons, synchronous for the same
-/// "no I/O implied by the shape being ported" reasoning) with one deliberate signature change:
-/// `SwarmConditionFn` returns `bool` because a `SwarmTransition` variant already carries its own
-/// single fixed `target`, so the closure only ever needs to answer "does *this* transition fire."
-/// A graph node, by contrast, may have edges to several differently-named targets from one
-/// conditional branch point (`LangGraph`'s `add_conditional_edges(source, path_fn, path_map)|`
-/// shape); a `bool` predicate cannot select *among* them; it can only gate a single fixed target.
-/// So this type returns the chosen target's `String` name directly instead.
 pub type GraphConditionFn = Arc<dyn Fn(&GraphContext) -> String + Send + Sync>;
 
-/// A single node in a [`GraphAgentDef`].
-///
-/// Three variants, mirroring the three things a `LangGraph` node concretely is in practice:
-///
-/// - [`GraphNode::Agent`]: an LLM/agent call — boxed like [`AgentDef::router`]/
-///   [`AgentDef::planner`]'s sub-agent nesting, for the same reason (an `AgentDef` embedding
-///   itself by value would be an infinitely-sized type).
-/// - [`GraphNode::Tool`]: a tool/worker call, reusing [`ToolDef`] as-is rather than inventing a
-///   parallel "graph tool node" shape.
-/// - [`GraphNode::Human`]: a human-in-the-loop pause, carrying the prompt to show. This overlaps
-///   in *purpose* with [`ToolType::Human`](super::tool::ToolType::Human) (both pause for human
-///   input), but is kept as its own `GraphNode` variant rather than forced through
-///   `GraphNode::Tool(ToolDef::human(...))`: a graph node's identity is "what kind of node is
-///   this in the graph," and a bare prompt string is a lighter-weight, more direct way to express
-///   "pause here and ask" than constructing a full `ToolDef` (with a name, description, and JSON
-///   input schema it doesn't need) just to hold one string.
+/// A single node in a [`GraphAgentDef`]: an LLM/agent call, a tool/worker call, or a
+/// human-in-the-loop pause.
 #[derive(Clone)]
 pub enum GraphNode {
     /// An LLM/agent call node.
@@ -137,17 +97,9 @@ pub struct GraphEdge {
 }
 
 /// A conditional edge: from `source`, evaluate `condition` against the current [`GraphContext`]
-/// to pick which of `targets` to route to next.
-///
-/// `targets` is the declared, closed set of node names `condition` is allowed to return — kept
-/// explicit (rather than inferred from whatever string the closure happens to produce at runtime)
-/// so [`GraphAgentDef::with_conditional_edge`] can validate every possible destination exists as
-/// a real node at build time, the same fail-fast guarantee [`GraphEdge`] gets for free from
-/// having only one target.
-///
-/// `Debug` is implemented by hand (rather than derived) for the same reason as
-/// [`super::swarm::SwarmTransition`]'s `OnCondition` variant: `condition` holds an
-/// `Arc<dyn Fn(..)>` trait object with no meaningful `Debug` impl of its own.
+/// to pick which of `targets` to route to next. `targets` is the declared, closed set of node
+/// names `condition` is allowed to return; [`GraphAgentDef::with_conditional_edge`] validates
+/// each one exists at build time.
 #[derive(Clone)]
 pub struct ConditionalGraphEdge {
     pub source: String,
@@ -165,34 +117,18 @@ impl std::fmt::Debug for ConditionalGraphEdge {
     }
 }
 
-/// Explicit-graph authoring type for the LangGraph-shaped "arbitrary DAG of nodes with per-node
-/// LLM calls" niche.
+/// Explicit-graph authoring type for an arbitrary DAG of nodes with per-node LLM calls. It is
+/// not a general-purpose workflow DAG type, and not a replacement for [`AgentDef`]'s
+/// `Strategy`-based orchestration (`Sequential`/`Parallel`/`Router`/etc.).
 ///
-/// **Read this before touching this type:**
+/// A caller builds a `GraphAgentDef` directly, node by node, edge by edge.
+/// [`GraphAgentDef::serialize`] produces a plain JSON object (`name`, `nodes`, `edges`,
+/// `conditionalEdges`) for inspection and testing; this has **not** been verified against what
+/// the Conductor server expects for graph execution — do not assume a server can execute this
+/// JSON as-is.
 ///
-/// - This serves *only* that one niche. It is not a general-purpose workflow DAG type, not a
-///   replacement for [`AgentDef`]'s `Strategy`-based orchestration (`Sequential`/`Parallel`/
-///   `Router`/etc.), and not intended to grow into one.
-/// - It is **explicitly authored, not extracted**. Unlike a hypothetical adapter that reads
-///   structure out of a compiled `LangGraph` `StateGraph`, there is no bytecode/closure
-///   introspection here (Rust has no analog for that even if it were desired — see
-///   `docs/agents/README.md`'s Phase 2 entry) — a caller builds a `GraphAgentDef`
-///   directly, node by node, edge by edge.
-/// - **Wire compatibility with the Conductor server is an open follow-up, not an assumption.**
-///   [`GraphAgentDef::serialize`] produces a plain, directly-structured JSON object (`name`,
-///   `nodes`, `edges`, `conditionalEdges`) for inspection and testing. This has **not** been
-///   verified against whatever shape the Conductor server actually expects for graph-based
-///   execution — there is no server-side graph-execution contract this shape has been checked
-///   against yet. Do not assume a server can execute this JSON as-is.
-/// - This is **not** feature-complete parity with python-sdk's `LangGraph` support (which itself
-///   works by extracting structure from an already-compiled external graph, a fundamentally
-///   different mechanism than this explicitly-authored type).
-/// - Shared-state-across-nodes (state reducers, `LangGraph`'s per-key merge-function channels) is a
-///   **deferred follow-up** — see [`GraphContext`]'s doc comment.
-///
-/// Construct via [`GraphAgentDef::new`], compose with consuming `with_*` builders (matching
-/// [`AgentDef`]'s 100%-consuming-builder convention), and serialize with
-/// [`GraphAgentDef::serialize`].
+/// Construct via [`GraphAgentDef::new`], compose with consuming `with_*` builders, and serialize
+/// with [`GraphAgentDef::serialize`].
 #[derive(Clone)]
 pub struct GraphAgentDef {
     pub name: String,
@@ -213,9 +149,7 @@ impl std::fmt::Debug for GraphAgentDef {
 }
 
 impl GraphAgentDef {
-    /// Create a new, empty graph definition. Validates `name` against
-    /// `^[a-zA-Z_][a-zA-Z0-9_-]*$` up front, mirroring [`AgentDef::new`]'s validation exactly
-    /// (same rationale: the name doubles as the Conductor workflow name once compiled).
+    /// Create a new, empty graph definition. `name` must match `^[a-zA-Z_][a-zA-Z0-9_-]*$`.
     ///
     /// # Errors
     ///
@@ -235,8 +169,7 @@ impl GraphAgentDef {
         })
     }
 
-    /// Add a node. Fails if its name collides with an already-added node's name (matches
-    /// [`AgentDef::with_sub_agent`]'s duplicate-name check, moved to construction time).
+    /// Add a node. Fails if its name collides with an already-added node's name.
     ///
     /// # Errors
     ///
@@ -253,9 +186,7 @@ impl GraphAgentDef {
     }
 
     /// Add a static edge from `source` to `target`. Fails fast if either name does not already
-    /// name a node added via [`GraphAgentDef::with_node`] — mirroring
-    /// [`AgentDef::with_sub_agent`]'s "reject the invalid state at build time" convention rather
-    /// than allowing a dangling edge to only surface as a failure at execution time.
+    /// name a node added via [`GraphAgentDef::with_node`].
     ///
     /// # Errors
     ///
@@ -274,8 +205,8 @@ impl GraphAgentDef {
     }
 
     /// Add a conditional edge from `source`, routing at runtime to one of `targets` via
-    /// `condition`. Fails fast if `source` or any entry in `targets` does not already name a node
-    /// added via [`GraphAgentDef::with_node`] — same rationale as [`GraphAgentDef::with_edge`].
+    /// `condition`. Fails fast if `source` or any entry in `targets` does not already name a
+    /// node added via [`GraphAgentDef::with_node`].
     ///
     /// # Errors
     ///
@@ -311,11 +242,6 @@ impl GraphAgentDef {
 
     /// Serialize this graph to a plain JSON object: `name`, `nodes` (each tagged by kind), static
     /// `edges`, and `conditionalEdges`.
-    ///
-    /// This is **not** python-sdk's `_graph` prep/finish-split wire shape — no partial wire
-    /// format is invented here (see this type's top-level doc comment). The LLM/agent node's
-    /// nested [`AgentDef`] is serialized via the existing, already-public
-    /// [`AgentConfigSerializer::serialize`] so this file requires no change to `serializer.rs`.
     pub fn serialize(&self) -> Value {
         let mut map = Map::new();
         map.insert("name".to_owned(), Value::String(self.name.clone()));

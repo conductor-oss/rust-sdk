@@ -14,12 +14,7 @@ use super::credentials::Credentials;
 use super::def::AgentDef;
 use super::guardrail::Guardrail;
 
-/// Tool invocation mechanism.
-///
-/// Python has no formal enum for this — `tool_type` is a bare string on `ToolDef`. This crate
-/// uses a closed enum instead (a deliberate Rust-native narrowing, not a python type it's
-/// matching), so `as_str()`'s wire strings are what must match python's string literals exactly,
-/// not the variant names.
+/// Tool invocation mechanism. `as_str()` gives the wire-format string for each variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolType {
     Worker,
@@ -27,30 +22,27 @@ pub enum ToolType {
     Mcp,
     AgentTool,
     Human,
-    /// OpenAPI/Swagger/Postman-spec-driven tool discovery (python's `api_tool`). The server
-    /// fetches and parses the spec at compile time and expands it into individual tools — this
-    /// crate (like python) never parses the spec itself.
+    /// OpenAPI/Swagger/Postman-spec-driven tool discovery. The server fetches and parses the
+    /// spec at compile time and expands it into individual tools.
     Api,
-    /// `Conductor GENERATE_IMAGE` system task (python's `image_tool`).
+    /// `Conductor GENERATE_IMAGE` system task.
     GenerateImage,
-    /// `Conductor GENERATE_AUDIO` system task (python's `audio_tool`).
+    /// `Conductor GENERATE_AUDIO` system task.
     GenerateAudio,
-    /// `Conductor GENERATE_VIDEO` system task (python's `video_tool`).
+    /// `Conductor GENERATE_VIDEO` system task.
     GenerateVideo,
-    /// `Conductor GENERATE_PDF` system task (python's `pdf_tool`).
+    /// `Conductor GENERATE_PDF` system task.
     GeneratePdf,
-    /// `Conductor LLM_INDEX_TEXT` system task — indexes documents into a vector DB (python's
-    /// `index_tool`).
+    /// `Conductor LLM_INDEX_TEXT` system task — indexes documents into a vector DB.
     RagIndex,
-    /// `Conductor LLM_SEARCH_INDEX` system task — searches a vector DB (python's `search_tool`).
+    /// `Conductor LLM_SEARCH_INDEX` system task — searches a vector DB.
     RagSearch,
-    /// `Conductor PULL_WORKFLOW_MESSAGES` system task — dequeues from the Workflow Message
-    /// Queue (python's `wait_for_message_tool`).
+    /// `Conductor PULL_WORKFLOW_MESSAGES` system task — dequeues from the Workflow Message Queue.
     PullWorkflowMessages,
 }
 
 impl ToolType {
-    /// Wire-format string, matching python-sdk's `tool_type=` string literals exactly.
+    /// Wire-format string for this tool type.
     #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -71,29 +63,17 @@ impl ToolType {
     }
 }
 
-/// Session-scoped context available to a tool handler, matching python-sdk's `ToolContext`
-/// dataclass (`tool.py`) field-for-field.
+/// Session-scoped context available to a tool handler.
 ///
-/// **Only `execution_id` and `state` carry real data.** Confirmed by reading
-/// `runtime/_dispatch.py` directly: `agent_name`/`session_id`/`metadata`/`dependencies` are
-/// populated from a module-level `_current_context = {}` dict that is read via `.get(key, "")`
-/// in exactly one place and never *written* anywhere in python-sdk — dead ambient-context
-/// scaffolding, not a real data path, in python today. `execution_id` comes from the polled
-/// task's `workflow_instance_id`; `state` round-trips through the task wire format:
-/// `_dispatch.py` reads a `_agent_state` input key into `ctx.state` before the call and, if the
-/// handler leaves `state` non-empty afterward, folds it back into the task output as
-/// `_state_updates` for the server to persist into the next call's `_agent_state`. This port
-/// reproduces exactly that — the same 4 fields are always empty, and `state` is the only field
-/// with a real read/write path — rather than inventing data for fields python itself never
-/// populates.
+/// Only `execution_id` and `state` currently carry real data — `agent_name`, `session_id`,
+/// `metadata`, and `dependencies` are always empty. `execution_id` comes from the polled task's
+/// `workflow_instance_id`; `state` round-trips through the task wire format: it is seeded from
+/// the polled task's `_agent_state` before the call, and if the handler leaves it non-empty
+/// afterward, it's folded back into the task output as `_state_updates` for the server to
+/// persist into the next call.
 ///
-/// `state` is `Arc<Mutex<...>>`, not a plain `HashMap`, so `ToolWorker` (`super::runtime`)-
-/// equivalent dispatch code can inspect it *after* an async handler call returns and fold any
-/// accumulated entries into the task output — the same mutate-in-place-then-read-back shape
-/// python's single mutable `ctx.state` dict gets from being the same object before and after
-/// the call, done here with an explicit, thread-safe handle instead of relying on shared
-/// ambient state (matching this crate's existing, deliberate departure from python's
-/// process-wide `contextvars` approach for credentials — see `docs/agents/README.md`).
+/// `state` is `Arc<Mutex<...>>`, not a plain `HashMap`, so dispatch code can inspect it *after*
+/// an async handler call returns and fold any accumulated entries into the task output.
 #[derive(Debug, Clone, Default)]
 pub struct ToolContext {
     pub session_id: String,
@@ -123,8 +103,7 @@ impl ToolContext {
             .insert(key.into(), value);
     }
 
-    /// A snapshot of every key currently held, used by dispatch code to build the task output's
-    /// `_state_updates` after a handler call returns.
+    /// A snapshot of every key currently held.
     #[must_use]
     pub fn state_snapshot(&self) -> HashMap<String, Value> {
         self.state
@@ -135,7 +114,7 @@ impl ToolContext {
 
     /// Build a context pre-seeded with `state` — used by
     /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve)'s tool dispatch to inject
-    /// the polled task's `_agent_state`, not intended for other callers.
+    /// the polled task's `_agent_state`; not intended for other callers.
     pub(super) fn with_initial_state(mut self, state: HashMap<String, Value>) -> Self {
         self.state = Arc::new(std::sync::Mutex::new(state));
         self
@@ -146,13 +125,8 @@ impl ToolContext {
 /// [`ToolContext`] for this call, returns raw JSON output.
 ///
 /// Kept as raw `Value -> Value` (rather than generic over `T`) so `ToolDef` itself can stay
-/// non-generic and be stored in a plain `Vec<ToolDef>` on [`AgentDef`]. [`ToolDef::function`],
-/// [`ToolDef::function_with_credentials`], and [`ToolDef::function_with_context`] are the generic
-/// entry points that wrap a strongly-typed `Fn(T) -> Fut` / `Fn(T, &Credentials) -> Fut` /
-/// `Fn(T, ToolContext) -> Fut` into this shape — each wrapper simply ignores whichever of
-/// `Credentials`/`ToolContext` its own signature doesn't take, so every constructor produces the
-/// same `ToolHandler` shape and a caller invoking a tool never needs to know which constructor
-/// built it.
+/// non-generic. [`ToolDef::function`], [`ToolDef::function_with_credentials`], and
+/// [`ToolDef::function_with_context`] wrap a strongly-typed handler into this shape.
 pub type ToolHandler = Arc<
     dyn Fn(Value, Credentials, ToolContext) -> Pin<Box<dyn Future<Output = Result<Value>> + Send>>
         + Send
@@ -162,8 +136,7 @@ pub type ToolHandler = Arc<
 /// Declarative tool definition attachable to an [`AgentDef`].
 ///
 /// Constructed via one of the typed constructors ([`ToolDef::function`], [`ToolDef::http`],
-/// [`ToolDef::mcp`], [`ToolDef::agent`], [`ToolDef::human`]) — each sets `tool_type` and
-/// `config` consistently for its wire shape, so there is no bare public "generic" constructor.
+/// [`ToolDef::mcp`], [`ToolDef::agent`], [`ToolDef::human`]).
 #[derive(Clone)]
 pub struct ToolDef {
     pub name: String,
@@ -180,11 +153,10 @@ pub struct ToolDef {
     pub sub_agent: Option<Box<AgentDef>>,
     pub handler: Option<ToolHandler>,
     /// Guardrails scoped to this tool, independent of the owning agent's
-    /// [`AgentDef::guardrails`](super::def::AgentDef::guardrails) — matching python-sdk's
-    /// `ToolDef.guardrails: List[Any]`. Serialized as `"guardrails"` on the tool's wire config
-    /// (`config_serializer.py::_serialize_tool`); custom-function guardrails found here get a
-    /// worker from [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) exactly like
-    /// agent-level ones do, registered under the guardrail's own name.
+    /// [`AgentDef::guardrails`](super::def::AgentDef::guardrails). Custom-function guardrails
+    /// found here get a worker from
+    /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve), registered under the
+    /// guardrail's own name.
     pub guardrails: Vec<Guardrail>,
 }
 
@@ -259,10 +231,8 @@ impl ToolDef {
     }
 
     /// A locally-invoked function tool whose handler also receives the resolved [`Credentials`]
-    /// for this call — the entry point the `#[tool(credentials = [...])]` macro targets when a
-    /// second `&Credentials` parameter is present (see `docs/agents/README.md`).
-    /// `input_schema` still only describes `T`'s shape; `Credentials` is threaded in separately
-    /// at call time, not part of the JSON arguments.
+    /// for this call. `input_schema` still only describes `T`'s shape; `Credentials` is threaded
+    /// in separately at call time, not part of the JSON arguments.
     pub fn function_with_credentials<T, F, Fut>(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -290,10 +260,8 @@ impl ToolDef {
     }
 
     /// A locally-invoked function tool whose handler also receives the [`ToolContext`] for this
-    /// call — the entry point for tools that declare a `context: ToolContext` parameter in
-    /// python (matching `_dispatch.py`'s `_needs_context` check). `input_schema` still only
-    /// describes `T`'s shape; the context is threaded in separately at call time, not part of
-    /// the JSON arguments.
+    /// call. `input_schema` still only describes `T`'s shape; the context is threaded in
+    /// separately at call time, not part of the JSON arguments.
     pub fn function_with_context<T, F, Fut>(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -343,11 +311,9 @@ impl ToolDef {
 
         let mut tool = Self::base(name, description, ToolType::Http);
         tool.credentials = credentials;
-        // Matches python's `http_tool`: `input_schema=input_schema or {"type": "object",
-        // "properties": {}}` -- a tool with no input parameters still needs a non-null schema
-        // on the wire (a bare `{"type": "object"}`, or `null`, is a different JSON value from
-        // `{"type": "object", "properties": {}}` and fails the mock-LLM-provider's exact
-        // request match on any tool-calling turn).
+        // A tool with no input parameters still needs a non-null schema on the wire -- a bare
+        // `{"type": "object"}`, or `null`, is a different JSON value from
+        // `{"type": "object", "properties": {}}`.
         tool.input_schema = serde_json::json!({"type": "object", "properties": {}});
         tool.config.insert("url".to_owned(), Value::String(url));
         tool.config
@@ -367,14 +333,9 @@ impl ToolDef {
 
     /// An HTTP-backed tool with URI templating: `path_template`'s `{param}` placeholders are
     /// filled in from the LLM's call arguments (URL-encoded) and appended to `url`; `query_params`
-    /// names which arguments get appended to the query string instead of the request body. Both
-    /// are real, general `HttpTaskConfig` wire fields the compiled `EnrichTools` script consumes
-    /// at dispatch time — not specific to any one caller — but [`ToolDef::http`] doesn't expose
-    /// them because no python factory does either; `ocg.py` (this crate's `super::ocg`) hand-
-    /// builds a `ToolDef` with these fields directly rather than going through `http_tool()`.
-    /// Unlike [`ToolDef::http`], no `accept`/`contentType` defaults are set, matching that
-    /// hand-built shape exactly. Same `${NAME}` credential-placeholder validation as
-    /// [`ToolDef::http`].
+    /// names which arguments get appended to the query string instead of the request body.
+    /// Unlike [`ToolDef::http`], no `accept`/`contentType` defaults are set. Same `${NAME}`
+    /// credential-placeholder validation as [`ToolDef::http`].
     #[expect(clippy::too_many_arguments)]
     /// # Errors
     ///
@@ -422,13 +383,11 @@ impl ToolDef {
 
     /// An MCP-backed tool. Same `${NAME}` credential-placeholder validation as [`ToolDef::http`].
     ///
-    /// `max_tools` is the threshold (matching python's `mcp_tool`'s `max_tools: int = 64`
-    /// default) above which the server compiles a runtime LLM-filtering step instead of listing
-    /// every discovered MCP tool directly — always emitted on the wire as `config["max_tools"]`
-    /// (python does this unconditionally too), since the server's own compiler falls back to a
-    /// *different*, lower default (32) when the key is absent entirely, silently changing
-    /// compiled behavior for any MCP server exposing more than 32 tools. `tool_names` is an
-    /// optional whitelist of MCP tool names to include, only emitted when `Some`.
+    /// `max_tools` is the threshold above which the server compiles a runtime LLM-filtering step
+    /// instead of listing every discovered MCP tool directly. It is always emitted on the wire,
+    /// since the server falls back to a different, lower default (32) when the key is absent
+    /// entirely. `tool_names` is an optional whitelist of MCP tool names to include, only
+    /// emitted when `Some`.
     ///
     /// # Errors
     ///
@@ -495,17 +454,15 @@ impl ToolDef {
         tool
     }
 
-    /// A tool built from an `OpenAPI` spec, Swagger spec, Postman collection, or base URL (python's
-    /// `api_tool`). At compile time the *server* fetches and parses `url`, auto-detecting the
-    /// format, and expands it into individual tools — this crate never parses the spec itself,
-    /// matching python exactly. Tool calls execute as ordinary Conductor `HTTP` tasks; no worker
-    /// process is needed.
+    /// A tool built from an `OpenAPI` spec, Swagger spec, Postman collection, or base URL. At
+    /// compile time the server fetches and parses `url`, auto-detecting the format, and expands
+    /// it into individual tools. Tool calls execute as ordinary Conductor `HTTP` tasks; no
+    /// worker process is needed.
     ///
     /// `url`/`headers` values may reference declared credentials via `${NAME}` placeholders —
     /// same validation as [`ToolDef::http`]/[`ToolDef::mcp`]. `tool_names` is an optional
-    /// whitelist of operation IDs to include; `max_tools` (matches python's default of `64`)
-    /// is the threshold above which the server uses a filter LLM to select the most relevant
-    /// operations for the user's prompt at run time.
+    /// whitelist of operation IDs to include; `max_tools` is the threshold above which the
+    /// server uses a filter LLM to select the most relevant operations at run time.
     ///
     /// # Errors
     ///
@@ -544,11 +501,10 @@ impl ToolDef {
         Ok(tool)
     }
 
-    /// A tool that generates images via the Conductor `GENERATE_IMAGE` system task (python's
-    /// `image_tool`). No worker process is needed — the server calls the AI provider directly.
-    /// `input_schema` defaults to a schema with `prompt`/`style`/`width`/`height`/`size`/`n`/
-    /// `outputFormat`/`weight` (matching python's default exactly) when `None`. `defaults` are
-    /// extra static parameters baked into the task config (python's `**defaults`).
+    /// A tool that generates images via the Conductor `GENERATE_IMAGE` system task. No worker
+    /// process is needed — the server calls the AI provider directly. `input_schema` defaults to
+    /// a schema with `prompt`/`style`/`width`/`height`/`size`/`n`/`outputFormat`/`weight` when
+    /// `None`. `defaults` are extra static parameters baked into the task config.
     pub fn image(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -585,8 +541,8 @@ impl ToolDef {
     }
 
     /// A tool that generates audio / text-to-speech via the Conductor `GENERATE_AUDIO` system
-    /// task (python's `audio_tool`). `input_schema` defaults to a schema with `text`/`voice`/
-    /// `speed`/`responseFormat`/`n` when `None`.
+    /// task. `input_schema` defaults to a schema with `text`/`voice`/`speed`/`responseFormat`/`n`
+    /// when `None`.
     pub fn audio(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -624,11 +580,10 @@ impl ToolDef {
         )
     }
 
-    /// A tool that generates video via the Conductor `GENERATE_VIDEO` system task (python's
-    /// `video_tool`). Video generation is typically async — the server submits the job and
-    /// polls until ready. `input_schema` defaults to a schema with `prompt`/`duration`/`style`
-    /// (plus many optional provider-specific fields, matching python's default exactly) when
-    /// `None`.
+    /// A tool that generates video via the Conductor `GENERATE_VIDEO` system task. Video
+    /// generation is typically async — the server submits the job and polls until ready.
+    /// `input_schema` defaults to a schema with `prompt`/`duration`/`style` (plus many optional
+    /// provider-specific fields) when `None`.
     pub fn video(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -676,16 +631,9 @@ impl ToolDef {
         )
     }
 
-    /// A tool that generates a PDF from markdown via the Conductor `GENERATE_PDF` system task
-    /// (python's `pdf_tool`). No AI provider is needed — the server converts markdown to PDF
-    /// directly. `input_schema` defaults to a schema with `markdown`/`pageSize`/`theme`/
-    /// `baseFontSize` when `None`.
-    ///
-    /// Unlike python (which defaults `name`/`description` to `"generate_pdf"`/`"Generate a PDF
-    /// document from markdown text."` since it's the only media tool with no required provider/
-    /// model), this crate requires both explicitly — matching every other tool constructor's
-    /// convention rather than special-casing this one. Pass those exact strings to reproduce
-    /// python's defaults.
+    /// A tool that generates a PDF from markdown via the Conductor `GENERATE_PDF` system task.
+    /// No AI provider is needed — the server converts markdown to PDF directly. `input_schema`
+    /// defaults to a schema with `markdown`/`pageSize`/`theme`/`baseFontSize` when `None`.
     pub fn pdf(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -714,8 +662,7 @@ impl ToolDef {
         tool
     }
 
-    /// Internal helper shared by [`ToolDef::image`]/[`ToolDef::audio`]/[`ToolDef::video`] —
-    /// mirrors python's `_media_tool`.
+    /// Internal helper shared by [`ToolDef::image`]/[`ToolDef::audio`]/[`ToolDef::video`].
     #[expect(clippy::too_many_arguments)]
     fn media_tool(
         tool_type: ToolType,
@@ -740,9 +687,8 @@ impl ToolDef {
     }
 
     /// A tool that indexes documents into a vector database via the Conductor `LLM_INDEX_TEXT`
-    /// system task (python's `index_tool`). No worker process is needed. `namespace` defaults
-    /// to `"default_ns"` when `None`, matching python. `input_schema` defaults to a schema with
-    /// `text`/`docId`/`metadata` when `None`.
+    /// system task. No worker process is needed. `namespace` defaults to `"default_ns"` when
+    /// `None`. `input_schema` defaults to a schema with `text`/`docId`/`metadata` when `None`.
     #[expect(clippy::too_many_arguments)]
     pub fn rag_index(
         name: impl Into<String>,
@@ -804,10 +750,9 @@ impl ToolDef {
         tool
     }
 
-    /// A tool that searches a vector database via the Conductor `LLM_SEARCH_INDEX` system task
-    /// (python's `search_tool`). No worker process is needed. `namespace` defaults to
-    /// `"default_ns"`, `max_results` to `5` (both matching python) when `None`. `input_schema`
-    /// defaults to a schema with just `query` when `None`.
+    /// A tool that searches a vector database via the Conductor `LLM_SEARCH_INDEX` system task.
+    /// No worker process is needed. `namespace` defaults to `"default_ns"`, `max_results` to `5`
+    /// when `None`. `input_schema` defaults to a schema with just `query` when `None`.
     #[expect(clippy::too_many_arguments)]
     pub fn rag_search(
         name: impl Into<String>,
@@ -863,10 +808,10 @@ impl ToolDef {
     }
 
     /// A tool that dequeues messages from the Workflow Message Queue via the Conductor
-    /// `PULL_WORKFLOW_MESSAGES` system task (python's `wait_for_message_tool`). No worker
-    /// process is needed. In blocking mode (`blocking = true`, the default python uses), the
-    /// task stays `IN_PROGRESS` while the queue is empty; in non-blocking mode it completes
-    /// immediately with whatever messages (if any) are already queued.
+    /// `PULL_WORKFLOW_MESSAGES` system task. No worker process is needed. In blocking mode
+    /// (`blocking = true`), the task stays `IN_PROGRESS` while the queue is empty; in
+    /// non-blocking mode it completes immediately with whatever messages (if any) are already
+    /// queued.
     pub fn wait_for_message(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -914,12 +859,10 @@ impl ToolDef {
         self
     }
 
-    /// Declare the credential names this tool needs. These names flow end-to-end: registration
-    /// stamps them onto `TaskDef.runtime_metadata`, the server resolves and delivers values back
-    /// on the polled `Task`, and a handler built via [`ToolDef::function_with_credentials`] reads
-    /// them out of the `&Credentials` it's called with (see
-    /// `docs/agents/README.md`). Also required (not merely declared) by
-    /// [`ToolDef::http`] / [`ToolDef::mcp`]'s `${NAME}` placeholder validation.
+    /// Declare the credential names this tool needs. A handler built via
+    /// [`ToolDef::function_with_credentials`] reads them out of the `&Credentials` it's called
+    /// with. Also required by [`ToolDef::http`] / [`ToolDef::mcp`]'s `${NAME}` placeholder
+    /// validation.
     #[must_use]
     pub fn with_credentials(mut self, credentials: Vec<String>) -> Self {
         self.credentials = credentials;
@@ -927,7 +870,7 @@ impl ToolDef {
     }
 
     /// Add a guardrail scoped to this tool, independent of the owning agent's guardrails.
-    /// Accumulates — call once per guardrail, matching python's `ToolDef(guardrails=[...])`.
+    /// Accumulates — call once per guardrail.
     #[must_use]
     pub fn with_guardrail(mut self, guardrail: Guardrail) -> Self {
         self.guardrails.push(guardrail);
@@ -1054,8 +997,7 @@ mod tests {
         let cloned = ctx.clone();
         ctx.set_state("shared", Value::from(true));
         // Cloning a ToolContext clones the Arc, not the underlying state — a handler's clone
-        // and the dispatcher's original see the same mutations, matching python's single
-        // mutable `ctx.state` dict being the same object throughout one call.
+        // and the dispatcher's original see the same mutations.
         assert_eq!(cloned.get_state("shared"), Some(Value::from(true)));
     }
 
@@ -1132,9 +1074,8 @@ mod tests {
 
     #[test]
     fn test_http_tool_defaults_to_empty_object_input_schema() {
-        // Matches python's `http_tool`'s `input_schema or {"type": "object", "properties":
-        // {}}` default -- not `null`, and not a bare `{"type": "object"}` with no `properties`
-        // key, both of which are different JSON values on the wire.
+        // Not `null`, and not a bare `{"type": "object"}` with no `properties` key -- both are
+        // different JSON values on the wire.
         let tool = ToolDef::http(
             "t",
             "d",
@@ -1153,8 +1094,7 @@ mod tests {
     #[test]
     fn test_mcp_tool_always_emits_max_tools_defaulting_to_64() {
         // The server's own compiler falls back to a *different*, lower default (32) when
-        // `max_tools` is absent from the wire config entirely -- matches python's `mcp_tool`,
-        // which unconditionally sets `config["max_tools"] = max_tools` (default 64).
+        // `max_tools` is absent from the wire config entirely.
         let tool = ToolDef::mcp(
             "https://mcp.example.com",
             "t",

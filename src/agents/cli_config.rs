@@ -1,27 +1,20 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! First-class CLI command execution for agents — ports python-sdk's `cli_config.py`.
+//! First-class CLI command execution for agents.
 //!
 //! [`CliConfig`] declares which commands an agent may shell out to; when attached via
 //! [`super::AgentDef::with_cli_commands`], a `run_command` tool backed by a local handler is
-//! appended to the agent's tool list automatically, matching python's `Agent.__init__` ->
-//! `_attach_cli_tool` flow.
+//! appended to the agent's tool list automatically.
 //!
 //! `context_key` is supported via [`super::ToolContext`]/[`ToolDef::function_with_context`]:
 //! on a successful call, the trimmed stdout (falling back to stderr) is recorded via
-//! [`super::ToolContext::set_state`] for later pipeline steps to read back — matching python's
-//! `context.state[context_key] = value`.
+//! [`super::ToolContext::set_state`] for later pipeline steps to read back.
 //!
-//! ## Deliberate narrowings
-//!
-//! - **Timeout/missing-executable/unexpected-IO failures are terminal
-//!   (`ConductorError::terminal_tool`, mapped to `FAILED_WITH_TERMINAL_ERROR`)**, matching
-//!   python's `TerminalToolError`; whitelist/shell-gate violations stay plain
-//!   [`crate::error::ConductorError::agent`] (retryable), matching python's plain `ValueError` for those.
-//! - **Shell tokenization/quoting uses the [`shell_words`] crate** in place of python's `shlex`
-//!   module — same `split`/`quote` semantics, a well-tested crate rather than a hand-rolled
-//!   parser, since incorrect shell tokenization here is a direct command-injection risk.
+//! Timeout/missing-executable/unexpected-IO failures are terminal
+//! (`ConductorError::terminal_tool`, mapped to `FAILED_WITH_TERMINAL_ERROR`); whitelist/shell-gate
+//! violations stay plain [`crate::error::ConductorError::agent`] (retryable). Shell
+//! tokenization/quoting uses the [`shell_words`] crate.
 
 use std::fmt::Write as _;
 use std::process::Stdio;
@@ -36,11 +29,9 @@ use crate::error::{ConductorError, Result};
 
 use super::tool::{ToolContext, ToolDef};
 
-/// Configuration for first-class CLI command execution on an agent, matching python's
-/// `CliConfig` dataclass field-for-field. Wire key `cliConfig`
-/// (`{"enabled", "allowedCommands", "timeout", "allowShell"}`) — see
-/// `AgentConfigSerializer::serialize_agent`; `working_dir` is intentionally never serialized
-/// (it's only consulted by this crate's own local `run_command` handler, matching python).
+/// Configuration for first-class CLI command execution on an agent. Wire key `cliConfig`
+/// (`{"enabled", "allowedCommands", "timeout", "allowShell"}`); `working_dir` is intentionally
+/// never serialized (only consulted by this crate's own local `run_command` handler).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CliConfig {
     pub enabled: bool,
@@ -104,10 +95,9 @@ impl CliConfig {
     }
 }
 
-/// Return *command*'s executable token: the first shell word, tokenizing a full command line
-/// (e.g. `"gh repo list --limit 5"`) the same way a bare executable (`"gh"`) is — matching
-/// python's `_executable_of`. Falls back to whitespace splitting if *command* isn't validly
-/// quoted, same as python's `except ValueError: tokens = command.split()`.
+/// Return `command`'s executable token: the first shell word, tokenizing a full command line
+/// (e.g. `"gh repo list --limit 5"`) the same way a bare executable (`"gh"`) is. Falls back to
+/// whitespace splitting if `command` isn't validly quoted.
 fn executable_of(command: &str) -> String {
     if command.is_empty() {
         return String::new();
@@ -120,10 +110,9 @@ fn executable_of(command: &str) -> String {
         .unwrap_or_else(|| command.to_owned())
 }
 
-/// Validate *command* against *`allowed_commands`*, matching python's `_validate_cli_command`:
-/// keys off the executable (so `"git"` and `"git status -s"` validate identically), strips any
-/// path prefix (`/usr/bin/git` -> `git`) first, and permits everything when the whitelist is
-/// empty.
+/// Validate `command` against `allowed_commands`: keys off the executable (so `"git"` and
+/// `"git status -s"` validate identically), strips any path prefix (`/usr/bin/git` -> `git`)
+/// first, and permits everything when the whitelist is empty.
 fn validate_cli_command(command: &str, allowed_commands: &[String]) -> Result<()> {
     if allowed_commands.is_empty() {
         return Ok(());
@@ -190,9 +179,8 @@ fn build_shell_command(cmd_str: &str, cwd: Option<&str>) -> Command {
     cmd
 }
 
-/// Run one CLI command per *config*, matching python's `_CliCommandRunner.__call__`, including
-/// `context_key`: on success, if set and non-empty, the trimmed stdout (falling back to
-/// stderr) is recorded via [`ToolContext::set_state`] for later pipeline steps to read back.
+/// Run one CLI command per `config`. If `context_key` is set and non-empty on success, the
+/// trimmed stdout (falling back to stderr) is recorded via [`ToolContext::set_state`].
 async fn run_cli_command(config: &CliConfig, args: Value, context: &ToolContext) -> Result<Value> {
     let command = match args.get("command").and_then(Value::as_str) {
         Some(c) if !c.is_empty() => c,
@@ -266,9 +254,8 @@ async fn run_cli_command(config: &CliConfig, args: Value, context: &ToolContext)
         build_direct_command(&executable, &command_args, cwd.as_deref())
     };
 
-    // Matches python's exec-time exception handling: `TimeoutExpired`/`FileNotFoundError`/any
-    // other `Exception` all become `TerminalToolError` (`except ...: raise TerminalToolError(...)`)
-    // — non-retryable, unlike the plain-`ValueError` validation/shell-gate failures above.
+    // Timeout/not-found/IO errors here become terminal (non-retryable) errors, unlike the
+    // validation/shell-gate failures above.
     let output = match timeout(Duration::from_secs(config.timeout_seconds), cmd.output()).await {
         Ok(Ok(output)) => output,
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -320,10 +307,9 @@ async fn run_cli_command(config: &CliConfig, args: Value, context: &ToolContext)
     }
 }
 
-/// Build the auto-attached `run_command` tool for *config*, matching python's `_make_cli_tool`.
-/// Task name is `{agent_name}_run_command` (sanitized via
-/// [`super::def::sanitize_for_task_name`]) when an agent name is given, else bare
-/// `"run_command"`.
+/// Build the auto-attached `run_command` tool for `config`. Task name is
+/// `{agent_name}_run_command` (sanitized via [`super::def::sanitize_for_task_name`]) when an
+/// agent name is given, else bare `"run_command"`.
 pub(super) fn cli_command_tool(config: &CliConfig, agent_name: Option<&str>) -> ToolDef {
     let task_name =
         agent_name.map_or_else(|| "run_command".to_owned(), |n| format!("{n}_run_command"));

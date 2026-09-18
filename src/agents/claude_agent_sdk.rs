@@ -1,77 +1,42 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Bare subprocess + `stream-json` transport for the Anthropic **Claude Agent SDK** (formerly
-//! Claude Code SDK) CLI (`claude`), gated behind the `claude-agent-sdk` Cargo feature.
+//! Bare subprocess + `stream-json` transport for the Anthropic **Claude Agent SDK** CLI
+//! (`claude`), gated behind the `claude-agent-sdk` Cargo feature.
 //!
-//! # This is black-box passthrough — read this before wiring it into anything
+//! # Passthrough only
 //!
-//! Per `docs/agents/README.md` §"Frameworks", the `claude` CLI's own execution loop
-//! (planning, tool calls, sub-agent turns) is fundamentally opaque: there is no `AgentDef`/
-//! `FrameworkAgent` extraction path for it the way there is for `async-openai`. Quoting
-//! `docs/agents/README.md` directly, because this is the one thing every caller of
-//! this module needs to internalize: **"content run through `FrameworkAgent` extraction gets
-//! Conductor guardrails/termination; content run through a passthrough adapter does not, and
-//! never will unless the loop is unwrapped into a real Conductor task."** Everything the `claude`
-//! binary does between the moment this module spawns it and the moment it exits happens outside
-//! Conductor's view. No [`crate::agents::Guardrail`], no [`crate::agents::TerminationCondition`],
-//! no handoff — none of it can see or touch what happens inside that process.
+//! The `claude` CLI's own execution loop (planning, tool calls, sub-agent turns) is opaque to
+//! this crate: everything it does between spawn and exit happens outside Conductor's view, so
+//! no [`crate::agents::Guardrail`], [`crate::agents::TerminationCondition`], or handoff applies
+//! to it.
 //!
-//! # What this module is
-//!
-//! Purely the transport layer described in `docs/agents/README.md`'s "Claude Agent SDK —
-//! passthrough only" section (subprocess + `stream-json` protocol):
-//!
-//! 1. [`ClaudeAgentSdkOptions`] — a builder for the CLI flags this transport knows how to set.
-//! 2. [`build_args`] — a pure, unit-testable function that turns those options (plus a prompt and
-//!    a one-shot/streaming-input mode flag) into the exact `Vec<String>` of CLI arguments,
-//!    mirroring the vendored `claude_code_sdk/_internal/transport/subprocess_cli.py::_build_command`
-//!    ground truth.
-//! 3. [`ClaudeAgentSdkQuery`] — spawns the `claude` binary (via `tokio::process::Command`) using
-//!    those arguments and hands back a [`ClaudeAgentSdkStream`] over its newline-delimited JSON
-//!    stdout.
-//!
-//! # What this module explicitly is *not*
+//! This module provides only: [`ClaudeAgentSdkOptions`] (a builder for the CLI flags it knows
+//! how to set), [`build_args`] (turns those options into the CLI argument list), and
+//! [`ClaudeAgentSdkQuery`] (spawns `claude` and hands back a [`ClaudeAgentSdkStream`] over its
+//! newline-delimited JSON stdout).
 //!
 //! [`push_event_nonblocking`]/[`update_task_progress_nonblocking`]/[`ProgressMetadata`]/
-//! [`ProgressThrottle`] give a caller who wraps a [`ClaudeAgentSdkStream`] in their own
-//! `impl Worker` composable pieces of python's instrumentation (event push to
-//! `/agent/events/{id}`, throttled `IN_PROGRESS` task updates) — but **not** the largest piece:
-//! python's `_create_tracking_workflow`/`_inject_tool_task`/`_complete_tool_task_nonblocking`
-//! dynamically register and drive a *real* Conductor workflow/task instance per tool call
-//! purely so the CLI's progress renders as a visualized DAG in the Conductor UI. That is a
-//! separate, larger follow-up (effectively its own subsystem — dynamic workflow/task
-//! definition registration, execution start, and per-tool-call task lifecycle management
-//! timed to the live event stream), not something this module attempts. There is also no
-//! callback/hook-bridging in the python `claude_code_sdk`-hooks sense — this transport parses
-//! raw `stream-json` lines rather than driving an SDK with a hook API to bridge in the first
-//! place, so [`ProgressMetadata::record_event`] derives the same counters from each event's own
-//! shape instead (see its doc comment for what's narrowed as a result).
+//! [`ProgressThrottle`] are optional helpers a caller wrapping a [`ClaudeAgentSdkStream`] in
+//! their own `impl Worker` can use for event push and throttled progress updates.
 //!
-//! # Event shape: raw `serde_json::Value`, on purpose
+//! # Event shape
 //!
-//! The vendored `claude_code_sdk` `types.py` / `_internal/message_parser.py` stream-json shapes
-//! (`system` init events, `assistant`/`user` message events each wrapping a nested Anthropic
-//! Messages-API `content` array, `result` completion events, and more added across CLI versions)
-//! are large, CLI-version-dependent, and not part of any versioned wire contract this crate
-//! controls — unlike `crate::agents::AgentEvent`, which *is* this crate's own SSE wire format.
-//! Modeling them as a closed Rust enum here would silently break every time the `claude` CLI
-//! changes its own output. So each stdout line is handed back as a parsed [`serde_json::Value`];
-//! callers that want a typed view can layer their own `serde::Deserialize` shape on top.
+//! Each stdout line is handed back as a raw [`serde_json::Value`] rather than a typed enum,
+//! since the `claude` CLI's stream-json shape is version-dependent and not a contract this
+//! crate controls. Callers that want a typed view can layer their own `serde::Deserialize` shape
+//! on top.
 //!
 //! # Credentials
 //!
-//! This module never reads or mutates the current process's environment. If the `claude` binary
-//! needs an API key (e.g. `ANTHROPIC_API_KEY`), resolve it the normal way (e.g.
-//! [`crate::agents::Credentials::get`]) and hand the resolved value to
-//! [`ClaudeAgentSdkOptions::with_env`], which is applied via `Command::env()` scoped to the
-//! spawned child only — exactly the pattern `docs/agents/README.md`'s `gh_create_issue`
-//! example uses for `gh`.
+//! This module never reads or mutates the current process's environment. Resolve any API key
+//! (e.g. `ANTHROPIC_API_KEY`) yourself and hand it to [`ClaudeAgentSdkOptions::with_env`], which
+//! is applied via `Command::env()` scoped to the spawned child only.
 //!
-//! # Not implemented here: spawning `claude` in tests
+//! # Testing
 //!
-//! The `claude` CLI binary is not installed in this crate's build/CI environment. The tests in
-//! this module cover only the pure [`build_args`] function; nothing here spawns a real process.
+//! The `claude` CLI binary is not installed in this crate's build/CI environment, so tests here
+//! cover only the pure [`build_args`] function; nothing spawns a real process.
 
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -86,12 +51,10 @@ use crate::error::{ConductorError, Result};
 /// Name of the `claude` CLI binary this transport shells out to.
 const CLAUDE_BINARY: &str = "claude";
 
-/// Resolve a short Claude Agent SDK model alias to its full model id, matching python's
-/// `conductor.ai.agents.claude_code.resolve_claude_code_model` table and semantics exactly.
+/// Resolve a short Claude Agent SDK model alias (e.g. `"opus"`) to its full model id.
 ///
-/// An empty `alias` returns `None`, meaning "let the `claude` CLI pick its own default" -- the
-/// same meaning python gives it. Any other string is looked up in the alias table and, if not
-/// found there, passed through unchanged (it's assumed to already be a full model id).
+/// An empty `alias` returns `None`, meaning "let the `claude` CLI pick its own default". Any
+/// other string is looked up in the alias table and, if not found, passed through unchanged.
 #[must_use]
 pub fn resolve_claude_code_model(alias: &str) -> Option<String> {
     if alias.is_empty() {
@@ -106,10 +69,8 @@ pub fn resolve_claude_code_model(alias: &str) -> Option<String> {
     Some(resolved.to_owned())
 }
 
-/// Builder for the subset of `claude` CLI flags this transport knows how to set.
-///
-/// Consuming `with_*` methods, matching this crate's builder convention (see
-/// `crate::agents::OpenAiAgent` behind the `openai-adapter` feature).
+/// Builder for the subset of `claude` CLI flags this transport knows how to set. Consuming
+/// `with_*` methods.
 #[derive(Debug, Clone, Default)]
 pub struct ClaudeAgentSdkOptions {
     system_prompt: Option<String>,
@@ -147,9 +108,7 @@ impl ClaudeAgentSdkOptions {
     /// Set the `--model <name>` flag from a short alias, resolving it via
     /// [`resolve_claude_code_model`] first (e.g. `"opus"` becomes `"claude-opus-4-6"`).
     ///
-    /// An empty alias is a no-op -- it leaves any previously-set model untouched, matching
-    /// [`resolve_claude_code_model`]'s `None` meaning "let the `claude` CLI use its own
-    /// default" rather than "clear the model."
+    /// An empty alias is a no-op — it leaves any previously-set model untouched.
     #[must_use]
     pub fn with_model_alias(self, alias: impl AsRef<str>) -> Self {
         match resolve_claude_code_model(alias.as_ref()) {
@@ -190,18 +149,13 @@ impl ClaudeAgentSdkOptions {
     }
 }
 
-/// Pure argument-builder: turns [`ClaudeAgentSdkOptions`] (plus an optional one-shot prompt and a
-/// streaming-input flag) into the `claude` CLI argument list, mirroring the vendored
-/// `claude_code_sdk/_internal/transport/subprocess_cli.py::_build_command` ground truth.
-///
-/// Does not include the `claude` binary name itself — that's supplied separately to
-/// `Command::new` by the spawning code, keeping this function pure and independent of
-/// `tokio::process`.
+/// Pure argument-builder: turns [`ClaudeAgentSdkOptions`] (plus an optional one-shot prompt and
+/// a streaming-input flag) into the `claude` CLI argument list. Does not include the `claude`
+/// binary name itself.
 ///
 /// - `prompt`: the one-shot prompt text. Ignored when `streaming_input` is `true`.
-/// - `streaming_input`: `false` for one-shot mode (`--print -- <prompt>` appended, prompt as the
-///   final positional arg); `true` for streaming-input mode (`--input-format stream-json` added,
-///   no positional prompt).
+/// - `streaming_input`: `false` for one-shot mode (`--print -- <prompt>` appended); `true` for
+///   streaming-input mode (`--input-format stream-json` added, no positional prompt).
 fn build_args(
     prompt: Option<&str>,
     opts: &ClaudeAgentSdkOptions,
@@ -248,12 +202,8 @@ fn build_args(
     args
 }
 
-/// A `claude` CLI invocation, built from [`ClaudeAgentSdkOptions`].
-///
-/// Named after python-sdk's `query()` entry point (`claude_code_sdk.query`) — this is the
-/// session/query object a caller builds once from [`ClaudeAgentSdkOptions`], then uses to spawn
-/// one or more one-shot `claude` invocations. See the module docs for what this transport does
-/// and does not do.
+/// A `claude` CLI invocation, built from [`ClaudeAgentSdkOptions`]. Build once, then use to
+/// spawn one or more `claude` invocations.
 #[derive(Debug, Clone, Default)]
 pub struct ClaudeAgentSdkQuery {
     options: ClaudeAgentSdkOptions,
@@ -269,13 +219,12 @@ impl ClaudeAgentSdkQuery {
     /// Spawn `claude` in one-shot mode (`--print -- <prompt>`) and return a stream over its
     /// newline-delimited `stream-json` stdout.
     ///
-    /// Any env vars set via [`ClaudeAgentSdkOptions::with_env`] are applied to the spawned child
-    /// process only, via `Command::env()` — this never reads or mutates this process's own
-    /// environment.
+    /// Any env vars set via [`ClaudeAgentSdkOptions::with_env`] are applied to the spawned
+    /// child process only.
     ///
     /// # Errors
     ///
-    /// Returns [`crate::error::ConductorError::Io`] if spawning the `claude` binary fails (e.g. not found on `PATH`).
+    /// Returns [`crate::error::ConductorError::Io`] if spawning the `claude` binary fails.
     pub fn spawn(&self, prompt: &str) -> Result<ClaudeAgentSdkStream> {
         let args = build_args(Some(prompt), &self.options, false);
         self.spawn_with_args(args)
@@ -284,13 +233,12 @@ impl ClaudeAgentSdkQuery {
     /// Spawn `claude` in streaming-input mode (`--input-format stream-json`, no positional
     /// prompt) and return a stream over its newline-delimited `stream-json` stdout.
     ///
-    /// Writing turns to the child's stdin (the other half of the streaming-input protocol) is
-    /// not implemented by this transport — see the module docs' "What this module explicitly is
-    /// not" section. Only the argument-building and stdout-consuming halves are provided today.
+    /// Writing turns to the child's stdin is not implemented by this transport — only
+    /// argument-building and stdout-consuming are provided.
     ///
     /// # Errors
     ///
-    /// Returns [`crate::error::ConductorError::Io`] if spawning the `claude` binary fails (e.g. not found on `PATH`).
+    /// Returns [`crate::error::ConductorError::Io`] if spawning the `claude` binary fails.
     pub fn spawn_streaming(&self) -> Result<ClaudeAgentSdkStream> {
         let args = build_args(None, &self.options, true);
         self.spawn_with_args(args)
@@ -364,19 +312,12 @@ impl ClaudeAgentSdkStream {
     }
 }
 
-/// Accumulated progress counters for one Claude Agent SDK passthrough run, matching the
-/// `metadata` dict python's `_build_conductor_agent_hooks` threads through its SDK hook
-/// callbacks (`tool_call_count`, `tool_error_count`, `subagent_count`, `tools_used`,
-/// `last_tool_output`).
+/// Accumulated progress counters for one Claude Agent SDK passthrough run (`tool_call_count`,
+/// `tool_error_count`, `subagent_count`, `tools_used`, `last_tool_output`).
 ///
-/// Since this transport parses raw `stream-json` lines instead of receiving SDK hook callbacks
-/// (there is no SDK here to hook into a python `claude_code_sdk`-style hook API — see the
-/// module docs), [`ProgressMetadata::record_event`] derives the same counters directly from
-/// each parsed event's own shape (Anthropic Messages-API content blocks:
-/// `tool_use`/`tool_result`) instead. **Narrowed from python's version**: `tools_used` here is
-/// just tool names, not python's per-call `{tool_name, args, status, start_time, end_time,
-/// duration_ms, stdout, stderr}` entries — there is no tool-call-id-keyed before/after pairing
-/// (`PreToolUse` start vs. `PostToolUse` finish) here, only running counts.
+/// [`ProgressMetadata::record_event`] derives these from each parsed event's Anthropic
+/// Messages-API content blocks (`tool_use`/`tool_result`). `tools_used` is just tool names —
+/// there's no tool-call-id-keyed before/after pairing, only running counts.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ProgressMetadata {
     pub tool_call_count: u32,
@@ -447,10 +388,9 @@ fn extract_tool_result_text(block: &Value) -> Option<String> {
     }
 }
 
-/// Fire-and-forget push of one raw event to `/agent/events/{execution_id}`, matching python's
-/// `_push_event_nonblocking`. Spawns a background task and only logs (at debug level) — never
-/// propagates — a failed push, so a transient event-push failure never disrupts the caller's
-/// main loop over [`ClaudeAgentSdkStream`].
+/// Fire-and-forget push of one raw event to `/agent/events/{execution_id}`. Spawns a
+/// background task and only logs (at debug level) — never propagates — a failed push, so it
+/// never disrupts the caller's main loop.
 pub fn push_event_nonblocking(
     client: crate::client::AgentClient,
     execution_id: String,
@@ -463,14 +403,10 @@ pub fn push_event_nonblocking(
     });
 }
 
-/// Minimum interval between `IN_PROGRESS` task updates, matching python's
-/// `_PROGRESS_UPDATE_INTERVAL_S`.
+/// Minimum interval between `IN_PROGRESS` task updates.
 pub const PROGRESS_UPDATE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// Tracks whether enough time has passed to push another progress update — matching the
-/// throttling python's call sites apply before calling `_update_task_progress_nonblocking` at
-/// all, pulled into a small reusable helper here instead of being every caller's own job to
-/// remember.
+/// Tracks whether enough time has passed to push another progress update.
 #[derive(Debug)]
 pub struct ProgressThrottle {
     last_update: Option<tokio::time::Instant>,
@@ -511,16 +447,14 @@ impl ProgressThrottle {
     }
 }
 
-/// Max characters of `last_tool_output` included in a progress update, matching python's
-/// `_PROGRESS_SNIPPET_MAX_CHARS`.
+/// Max characters of `last_tool_output` included in a progress update.
 const PROGRESS_SNIPPET_MAX_CHARS: usize = 500;
 
-/// Fire-and-forget `IN_PROGRESS` task update carrying `metadata`, matching python's
-/// `_update_task_progress_nonblocking`: lets the server (and any polling clients) see
-/// real-time progress from a long-running Claude Agent SDK passthrough worker. `tools_used` is
-/// truncated to the last 5 entries and `last_tool_output` to
-/// `PROGRESS_SNIPPET_MAX_CHARS` characters, matching python's slice-last-5/truncate behavior.
-/// Like [`push_event_nonblocking`], a failed update is only logged, never propagated.
+/// Fire-and-forget `IN_PROGRESS` task update carrying `metadata`: lets the server (and any
+/// polling clients) see real-time progress from a long-running worker. `tools_used` is
+/// truncated to the last 5 entries and `last_tool_output` to `PROGRESS_SNIPPET_MAX_CHARS`
+/// characters. Like [`push_event_nonblocking`], a failed update is only logged, never
+/// propagated.
 pub fn update_task_progress_nonblocking(
     task_client: crate::client::TaskClient,
     task_id: String,

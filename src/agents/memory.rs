@@ -3,25 +3,12 @@
 
 //! Conversation memory — session message history management.
 //!
-//! Ports python-sdk's `ConversationMemory` (see
-//! `python-sdk/src/conductor/ai/agents/memory.py`). There, conversation state is designed to be
-//! persisted in Conductor workflow variables so it survives process crashes; this module mirrors
-//! the message-accumulation/trimming behavior only — persistence is the caller's/runtime's
-//! responsibility, not this struct's.
-//!
-//! Per `docs/agents/README.md`'s class diagram, [`AgentDef`](super::AgentDef) holds
-//! `ConversationMemory` with an *open* circle (`o--`), not a filled one (`*--`): `AgentDef`
-//! doesn't own/construct this value the way it owns `Vec<ToolDef>` or `Vec<Guardrail>`. A
-//! `ConversationMemory` is mutable session state a caller builds up turn-by-turn (and may persist
-//! across process restarts) and hands to — or reads back from — an agent run; `AgentDef` merely
-//! references it, the same reasoning that makes `CallbackHandler` `o--` there too. Wiring a
-//! `memory` field onto `AgentDef` itself, plus its `AgentConfigSerializer` support, is tracked as
-//! a separate follow-up — this module only defines the type.
+//! Accumulates and trims message history for an agent session. Persistence across process
+//! restarts is the caller's responsibility, not this module's.
 
 use serde_json::Value;
 
-/// The speaker/kind of a [`Message`], matching python-sdk's string literals used as dict
-/// `"role"` values (`"user"`, `"assistant"`, `"system"`, `"tool_call"`, `"tool"`) exactly.
+/// The speaker/kind of a [`Message`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageRole {
     User,
@@ -32,7 +19,7 @@ pub enum MessageRole {
 }
 
 impl MessageRole {
-    /// Wire-format string, matching python-sdk's role values exactly.
+    /// Wire-format string for this role.
     #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -46,8 +33,7 @@ impl MessageRole {
 }
 
 /// A single entry inside a [`Message`]'s `tool_calls` list (only populated on
-/// `MessageRole::ToolCall` messages), matching python-sdk's `{"name", "taskReferenceName",
-/// "input"}` dict shape.
+/// `MessageRole::ToolCall` messages).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolCall {
     pub name: String,
@@ -57,12 +43,9 @@ pub struct ToolCall {
 
 /// One entry in a [`ConversationMemory`]'s history.
 ///
-/// Kept as a flat struct rather than one enum variant per role, because that is exactly
-/// python-sdk's shape: every message is the same dict with role-dependent optional fields
-/// populated (`tool_calls` only for `ToolCall`; `tool_call_id`/`task_reference_name` only for
-/// `Tool`). Construct these via [`ConversationMemory`]'s `add_*` methods rather than directly —
-/// they populate the right combination of fields per role, the same division of responsibility
-/// as python's `add_user_message`/`add_tool_call`/etc.
+/// Fields other than `role` and `message` are only populated for the relevant roles
+/// (`tool_calls` for `ToolCall`; `tool_call_id`/`task_reference_name` for `Tool`). Construct
+/// these via [`ConversationMemory`]'s `add_*` methods rather than directly.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Message {
     pub role: MessageRole,
@@ -86,11 +69,9 @@ impl Message {
 
 /// Manages conversation history for an agent session.
 ///
-/// Ports python-sdk's `ConversationMemory` dataclass as-is: a plain accumulator of [`Message`]s
-/// optionally bounded by `max_messages`. This is runtime session state built up turn-by-turn
-/// (not an immutable definition), so its message-adding methods take `&mut self` rather than
-/// following this crate's usual consuming `with_*` builder convention — contrast
-/// [`AgentDef`](super::AgentDef), which builds an immutable definition.
+/// A plain accumulator of [`Message`]s optionally bounded by `max_messages`. This is mutable
+/// session state, so its message-adding methods take `&mut self` rather than this crate's usual
+/// consuming `with_*` builder convention.
 #[derive(Debug, Clone, Default)]
 pub struct ConversationMemory {
     pub messages: Vec<Message>,
@@ -133,7 +114,7 @@ impl ConversationMemory {
     }
 
     /// Record a tool call in the conversation. `task_reference_name` defaults to
-    /// `"{tool_name}_ref"` when not given, matching python-sdk.
+    /// `"{tool_name}_ref"` when not given.
     pub fn add_tool_call(
         &mut self,
         tool_name: impl Into<String>,
@@ -153,8 +134,7 @@ impl ConversationMemory {
     }
 
     /// Record a tool result in the conversation. `task_reference_name` defaults to
-    /// `"{tool_name}_ref"` when not given, matching python-sdk. `result` is stringified,
-    /// matching python's `str(result)`.
+    /// `"{tool_name}_ref"` when not given. `result` is stringified.
     pub fn add_tool_result(
         &mut self,
         tool_name: impl Into<String>,
@@ -170,8 +150,8 @@ impl ConversationMemory {
         self.trim();
     }
 
-    /// Return a clone of the accumulated messages. Matches python's `to_chat_messages`, which
-    /// deep-copies so callers can't mutate this memory's history through the returned list.
+    /// Return a clone of the accumulated messages; callers can't mutate this memory's history
+    /// through the returned list.
     #[must_use]
     pub fn to_chat_messages(&self) -> Vec<Message> {
         self.messages.clone()
@@ -185,11 +165,8 @@ impl ConversationMemory {
     /// Trim messages to stay within `max_messages`.
     ///
     /// Preserves original ordering: removes the oldest non-system messages first while keeping
-    /// all system messages in their original positions. Ported field-for-field from python-sdk's
-    /// `_trim` (`python-sdk/src/conductor/ai/agents/memory.py`), including its quirk that
-    /// `max_messages == Some(0)` disables trimming entirely — python's guard is `if
-    /// self.max_messages and ...`, and `0` is falsy in Python, so a configured zero is silently
-    /// treated the same as unset rather than "keep zero messages".
+    /// all system messages in their original positions. `max_messages == Some(0)` disables
+    /// trimming entirely (treated the same as unset, not "keep zero messages").
     fn trim(&mut self) {
         let Some(max_messages) = self.max_messages else {
             return;
@@ -329,7 +306,7 @@ mod tests {
 
     #[test]
     fn test_max_messages_zero_disables_trimming() {
-        // Matches python-sdk's falsy-zero quirk in `_trim`: max_messages == 0 behaves as unset.
+        // max_messages == 0 behaves as unset.
         let mut memory = ConversationMemory::new().with_max_messages(0);
         memory.add_user_message("one");
         memory.add_user_message("two");

@@ -1,47 +1,20 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Agent Skills integration — ports python-sdk's `skill.py`: load an
-//! [agentskills.io](https://agentskills.io) skill directory (a `SKILL.md` file plus optional
-//! `*-agent.md`/`scripts/`/`references/`/`examples/`/`assets/` entries) as a runnable agent.
+//! Agent Skills integration: load an [agentskills.io](https://agentskills.io) skill directory (a
+//! `SKILL.md` file plus optional `*-agent.md`/`scripts/`/`references/`/`examples/`/`assets/`
+//! entries) as a runnable agent.
 //!
-//! ## Wire mechanism — a "framework" marker, not an ordinary [`super::AgentDef`]
-//!
-//! A loaded skill is **not** an [`super::AgentDef`] tree. Confirmed by reading `frameworks/serializer.py`
-//! (`_serialize_skill`) and `runtime/runtime.py`'s `_deploy_via_server`: python's `skill()`
-//! returns an `Agent` instance with `_framework = "skill"` and `_framework_config` set to the
-//! exact dict this module calls `raw_config`; `runtime.compile()`/`deploy()`/`start()` detect
-//! that marker and send `{"framework": "skill", "rawConfig": raw_config}` — precisely the shape
+//! A loaded skill is **not** an [`super::AgentDef`] tree. [`load_skill`] returns a [`SkillAgent`]
+//! carrying a `raw_config` framework marker, usable directly with
 //! [`super::AgentRuntime::compile_framework`]/[`super::AgentRuntime::deploy_framework`]/
-//! [`super::AgentRuntime::start_framework`]/[`super::AgentRuntime::run_framework`] (added for the
-//! *other* framework family — LangChain/LangGraph/Claude-Agent-SDK/OpenAI-Agents adapters) already
-//! send. [`load_skill`] therefore returns a [`SkillAgent`] carrying `raw_config` directly usable
-//! with those same methods — no new wire-serialization path needed.
+//! [`super::AgentRuntime::start_framework`]/[`super::AgentRuntime::run_framework`], or converted
+//! with [`SkillAgent::into_agent_def`] to nest it as a sub-agent of an ordinary agent tree via
+//! [`super::AgentDef::with_sub_agent`]/[`super::ToolDef::agent`].
 //!
-//! Python also lets a skill `Agent` be nested as a *sub-agent* of an ordinary native agent
-//! (`config_serializer.py`'s `_serialize_agent` special-cases `_framework == "skill"` inline
-//! while recursing a tree, so `Agent(agents=[skill_agent, ...])` or `agent_tool(skill_agent)`
-//! both work). [`SkillAgent::into_agent_def`] ports this: it builds an [`super::AgentDef`] carrying
-//! the same `framework`/`framework_config` marker (see [`super::AgentDef::with_framework`]), so a
-//! loaded skill can be passed to [`super::AgentDef::with_sub_agent`]/[`super::ToolDef::agent`] like
-//! any other sub-agent.
-//!
-//! ## Worker registration
-//!
-//! [`create_skill_workers`] mirrors python's `create_skill_workers` + `frameworks/serializer.py`'s
-//! `_serialize_skill`: one tool per discovered script (runs it as a subprocess, 300s timeout) plus
-//! one `read_skill_file` tool if there are any allowed resource files. Register the returned
-//! [`ToolDef`]s with [`super::AgentRuntime::serve_tools`].
-//!
-//! **Known upstream oddity, ported faithfully, not "fixed":** `_serialize_skill` builds the
-//! *same* `{"command": <string>}` input schema for every skill worker, including
-//! `read_skill_file` — whose actual parameter is `path`, not `command`. Since python's tool
-//! dispatch (`run_tool_task`, `_dispatch.py`) maps a task's input fields to the target function's
-//! *real* parameter names via introspection (not the declared schema), an LLM faithfully filling
-//! in `command` per the schema would call `read_skill_file` with no `path` argument at all. This
-//! module reproduces the same schema (for wire fidelity) and reads the value the handler actually
-//! needs (`path`) directly, matching what the real python function parameter name is — i.e. the
-//! same latent mismatch exists on both sides, ported byte-for-byte rather than silently patched.
+//! [`create_skill_workers`] builds one tool per discovered script (runs it as a subprocess, 300s
+//! timeout) plus one `read_skill_file` tool if there are any allowed resource files; register the
+//! result with [`super::AgentRuntime::serve_tools`].
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -70,12 +43,10 @@ static CROSS_SKILL_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| 
 });
 
 /// Characters (~15K tokens) above which a `SKILL.md` body is auto-split into `##`-heading
-/// sections, matching python's `SECTION_SPLIT_THRESHOLD`.
+/// sections.
 const SECTION_SPLIT_THRESHOLD: usize = 50_000;
 
-/// Extract the `name` and default `params` from `SKILL.md`'s YAML frontmatter, matching python's
-/// `parse_frontmatter`. Narrowed to just these two fields — the only ones any caller in this
-/// module (or python's) ever reads back out of the parsed frontmatter dict.
+/// The `name` and default `params` extracted from `SKILL.md`'s YAML frontmatter.
 #[derive(Debug)]
 struct Frontmatter {
     name: String,
@@ -129,7 +100,7 @@ fn yaml_to_json(value: &serde_yaml_ng::Value) -> Result<Value> {
         .map_err(|e| ConductorError::agent(format!("invalid YAML value: {e}")))
 }
 
-/// Extract the markdown body after frontmatter, matching python's `extract_body`.
+/// Extract the markdown body after frontmatter.
 fn extract_body(content: &str) -> String {
     match BODY_RE.captures(content) {
         Some(caps) => caps[1].trim().to_owned(),
@@ -137,8 +108,7 @@ fn extract_body(content: &str) -> String {
     }
 }
 
-/// Slugify a heading: lowercase, spaces to hyphens, strip special chars — matches python's
-/// `slugify` exactly.
+/// Slugify a heading: lowercase, spaces to hyphens, strip special chars.
 fn slugify(text: &str) -> String {
     let lowered = text.to_lowercase();
     let filtered: String = lowered
@@ -161,10 +131,9 @@ fn slugify(text: &str) -> String {
     slug.trim_matches('-').to_owned()
 }
 
-/// Split a `SKILL.md` body into sections by `##` headings, matching python's
-/// `split_into_sections`. Returns ordered `(slug, section_text)` pairs (heading line included in
-/// each section's text); content before the first `##` heading is dropped, matching python's
-/// preamble skip.
+/// Split a `SKILL.md` body into sections by `##` headings. Returns ordered
+/// `(slug, section_text)` pairs (heading line included in each section's text); content before
+/// the first `##` heading is dropped.
 fn split_into_sections(body: &str) -> Vec<(String, String)> {
     let mut result = Vec::new();
     let mut current_heading: Option<String> = None;
@@ -203,7 +172,7 @@ fn extension_language(ext: &str) -> Option<&'static str> {
     }
 }
 
-/// Detect script language from file extension or shebang, matching python's `detect_language`.
+/// Detect script language from file extension or shebang.
 fn detect_language(path: &Path) -> String {
     let ext = path
         .extension()
@@ -233,7 +202,7 @@ fn detect_language(path: &Path) -> String {
     "bash".to_owned()
 }
 
-/// Format skill parameters as a prompt prefix, matching python's `format_skill_params`.
+/// Format skill parameters as a prompt prefix.
 fn format_skill_params(params: &[(String, Value)]) -> String {
     if params.is_empty() {
         return String::new();
@@ -252,7 +221,7 @@ fn display_param_value(value: &Value) -> String {
     }
 }
 
-/// Prepend skill parameters to the user prompt, matching python's `format_prompt_with_params`.
+/// Prepend skill parameters to the user prompt.
 #[must_use]
 pub fn format_prompt_with_params(prompt: &str, params: &[(String, Value)]) -> String {
     let prefix = format_skill_params(params);
@@ -262,8 +231,8 @@ pub fn format_prompt_with_params(prompt: &str, params: &[(String, Value)]) -> St
     format!("{prefix}\n\n[User Request]\n{prompt}")
 }
 
-/// Merge *overrides* onto *defaults* with python dict-update ordering: an existing key keeps its
-/// position but takes the override's value; a brand-new key is appended in override order.
+/// Merge *overrides* onto *defaults*: an existing key keeps its position but takes the
+/// override's value; a brand-new key is appended in override order.
 fn merge_ordered_params(
     defaults: &[(String, Value)],
     overrides: &[(String, Value)],
@@ -279,7 +248,7 @@ fn merge_ordered_params(
     result
 }
 
-/// A discovered skill script, matching python's per-script entry.
+/// A discovered skill script.
 #[derive(Debug, Clone)]
 struct ScriptInfo {
     filename: String,
@@ -287,7 +256,7 @@ struct ScriptInfo {
     path: PathBuf,
 }
 
-/// Options for [`load_skill`], matching python's `skill()` keyword-only optional params.
+/// Options for [`load_skill`].
 #[derive(Debug, Clone, Default)]
 pub struct SkillOptions {
     /// Model for the orchestrator agent; also the default for sub-agents.
@@ -301,13 +270,12 @@ pub struct SkillOptions {
     pub params: HashMap<String, Value>,
 }
 
-/// A loaded Agent Skill — python's `Agent` instance with `_framework = "skill"`. Not an
-/// [`super::AgentDef`]; see the module doc for why and how to run one.
+/// A loaded Agent Skill. Not an [`super::AgentDef`] — see the module doc for how to run one.
 #[derive(Debug, Clone)]
 pub struct SkillAgent {
     pub name: String,
     pub model: Option<String>,
-    /// The exact dict python calls `_framework_config` — feed this straight to
+    /// Feed this straight to
     /// [`super::AgentRuntime::compile_framework`]/[`super::AgentRuntime::deploy_framework`]/
     /// [`super::AgentRuntime::start_framework`]/[`super::AgentRuntime::run_framework`] with
     /// `framework = "skill"`.
@@ -319,13 +287,11 @@ pub struct SkillAgent {
 }
 
 impl SkillAgent {
-    /// Convert this loaded skill into an [`super::AgentDef`] carrying the `"skill"` framework marker
-    /// (see [`super::AgentDef::with_framework`]) — the piece that lets a skill be nested as a
-    /// sub-agent of an ordinary native agent tree (`agents=[...]`/[`super::ToolDef::agent`]),
-    /// matching python's `config_serializer.py::_serialize_agent`'s inline `_framework == "skill"`
-    /// recursion case. For the standalone (top-level) case, use [`SkillAgent::raw_config`]
-    /// directly with `compile_framework`/`deploy_framework`/`start_framework`/`run_framework`
-    /// instead — nesting isn't required for that path.
+    /// Convert this loaded skill into an [`super::AgentDef`] carrying the `"skill"` framework
+    /// marker (see [`super::AgentDef::with_framework`]), so it can be nested as a sub-agent of
+    /// an ordinary agent tree (`agents=[...]`/[`super::ToolDef::agent`]). For the standalone
+    /// (top-level) case, use `raw_config` directly with
+    /// `compile_framework`/`deploy_framework`/`start_framework`/`run_framework` instead.
     ///
     /// # Errors
     ///
@@ -349,9 +315,8 @@ fn interpreter_for_language(language: &str) -> &'static str {
     }
 }
 
-/// Run one skill script as a subprocess, matching python's `ScriptRunner.__call__` — including
-/// its "never raise, always return a descriptive string" contract (errors surface as
-/// `"ERROR..."`-prefixed *successful* tool output, not a failed task).
+/// Run one skill script as a subprocess. Never raises — errors surface as `"ERROR..."`-prefixed
+/// successful tool output, not a failed task.
 async fn run_skill_script(interpreter: &str, script_path: &Path, args: &Value) -> Value {
     let command = args.get("command").and_then(Value::as_str).unwrap_or("");
     let extra_args = if command.is_empty() {
@@ -377,16 +342,13 @@ async fn run_skill_script(interpreter: &str, script_path: &Path, args: &Value) -
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Value::String(format!("ERROR (exit {code}):\n{stderr}"));
     }
-    // Normalize `\r\n` -> `\n`, matching python's `subprocess.run(..., text=True)` universal-
-    // newlines behavior on Windows (where the child's own CRT text-mode stdout emits `\r\n`
-    // even though the pipe itself is a raw byte stream).
+    // Normalize `\r\n` -> `\n` for consistent output across platforms.
     Value::String(String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"))
 }
 
-/// Read one allowed skill resource (or virtual `skill_section:*` entry), matching python's
-/// `SkillFileReader.__call__` — same "never raise" contract as [`run_skill_script`]. Reads the
-/// `path` key directly (see the module doc's note on the schema/param-name mismatch this
-/// reproduces from python).
+/// Read one allowed skill resource (or virtual `skill_section:*` entry). Never raises, same as
+/// [`run_skill_script`]. Rejects paths not in `allowed` and paths that resolve outside
+/// `skill_dir`.
 fn read_skill_file(
     skill_dir: &Path,
     allowed: &HashSet<String>,
@@ -429,8 +391,9 @@ fn read_skill_file(
     }
 }
 
-/// The fixed input schema python's `_serialize_skill` gives every skill worker — see the module
-/// doc for the `read_skill_file` naming mismatch this intentionally preserves.
+/// The input schema every skill worker tool declares: `{"command": string}`. Note:
+/// `read_skill_file`'s actual parameter is `path`, not `command` — its handler reads `path` from
+/// the task input regardless of this declared schema.
 fn skill_worker_input_schema() -> Value {
     json!({
         "type": "object",
@@ -440,9 +403,7 @@ fn skill_worker_input_schema() -> Value {
     })
 }
 
-/// Build the worker [`ToolDef`]s for a loaded skill, matching python's `create_skill_workers`
-/// (+ `frameworks/serializer.py`'s `_serialize_skill`, which is what actually turns them into
-/// registrable workers on the python side). Register the result with
+/// Build the worker [`ToolDef`]s for a loaded skill. Register the result with
 /// [`super::AgentRuntime::serve_tools`].
 #[must_use]
 pub fn create_skill_workers(agent: &SkillAgent) -> Vec<ToolDef> {
@@ -581,10 +542,9 @@ fn discover_resource_files(dir: &Path) -> Vec<String> {
                 .filter_map(|f| {
                     f.strip_prefix(dir)
                         .ok()
-                        // Always emit `/`-separated relative paths (matching python's
-                        // `pathlib`-on-POSIX output), regardless of host OS -- these are used
-                        // as stable identifiers (e.g. the allowlist `read_skill_file` checks
-                        // against), not passed back to the filesystem directly.
+                        // Always emit `/`-separated relative paths regardless of host OS --
+                        // these are used as stable identifiers (e.g. the allowlist
+                        // `read_skill_file` checks against), not passed back to the filesystem.
                         .map(|p| p.to_string_lossy().replace('\\', "/"))
                 })
                 .collect();
@@ -632,9 +592,9 @@ fn walk_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Resolve cross-skill references found in `SKILL.md`'s body, matching python's
-/// `resolve_cross_skills`. Scans for patterns like `"invoke writing-plans skill"` and resolves
-/// them from `search_path` plus the standard sibling/`.agents/skills` locations.
+/// Resolve cross-skill references found in `SKILL.md`'s body. Scans for patterns like
+/// `"invoke writing-plans skill"` and resolves them from `search_path` plus the standard
+/// sibling/`.agents/skills` locations.
 fn resolve_cross_skills(
     skill_md: &str,
     skill_path: &Path,
@@ -755,9 +715,8 @@ fn expand_and_resolve(p: &str) -> PathBuf {
     expanded.canonicalize().unwrap_or(expanded)
 }
 
-/// Load an Agent Skills directory as a [`SkillAgent`], matching python's `skill()`. See the
-/// module doc for the wire mechanism (a "framework" marker, not an [`super::AgentDef`]) and what
-/// is and isn't ported.
+/// Load an Agent Skills directory as a [`SkillAgent`]. See the module doc for the wire mechanism
+/// (a "framework" marker, not an [`super::AgentDef`]).
 ///
 /// # Errors
 ///
@@ -830,8 +789,7 @@ pub fn load_skill(path: impl AsRef<Path>, options: SkillOptions) -> Result<Skill
     })
 }
 
-/// Load all skills from a directory (each immediate subdirectory containing a `SKILL.md`),
-/// matching python's `load_skills`.
+/// Load all skills from a directory (each immediate subdirectory containing a `SKILL.md`).
 ///
 /// # Errors
 ///

@@ -3,24 +3,12 @@
 
 //! Guardrails — input and output validation for agent responses.
 //!
-//! Ports python-sdk's `conductor.ai.agents.guardrail` (`guardrail.py`). Guardrails compile to
-//! Conductor worker tasks positioned before ([`Position::Input`]) or after ([`Position::Output`])
-//! the `LlmChatComplete` task; on failure with [`OnFail::Retry`] the guardrail's message is
-//! appended to the conversation and the LLM is called again — see `rust-sdk/docs/agents/README.md`
-//! (search "Guardrail") for where this sits in the overall `AgentDef` shape.
-//!
-//! ## Why this isn't a class hierarchy
-//!
-//! Python models `RegexGuardrail`/`LLMGuardrail` as subclasses of `Guardrail`: each subclass's
-//! `__init__` builds a bound-method `func` (`self._check` / `self._evaluate`) and hands it to
-//! `Guardrail.__init__`, which stores it and later calls `self.func(content)` from `check()`.
-//! Rust has no inheritance, so this port follows `parity-plan.md`'s class diagram literally
-//! instead of reproducing the hierarchy: [`Guardrail`] holds the `position/on_fail/max_retries`
-//! config plus **one** boxed [`GuardrailCheck`] (composition — `Guardrail "1" *-- "1"
-//! GuardrailCheck`), and [`RegexGuardrail`]/[`LlmGuardrail`] are concrete types that *implement*
-//! [`GuardrailCheck`] (`..|>` in the diagram) rather than subclass anything. This is the same
-//! "policy object plugged into a shared wrapper" shape python gets from `func`, minus the base
-//! class:
+//! A [`Guardrail`] wraps a [`GuardrailCheck`] implementation ([`RegexGuardrail`],
+//! [`LlmGuardrail`], or [`FunctionGuardrail`]) plus config for where it runs ([`Position`]) and
+//! what happens on failure ([`OnFail`]). Guardrails compile to Conductor worker tasks positioned
+//! before ([`Position::Input`]) or after ([`Position::Output`]) the `LlmChatComplete` task; on
+//! [`OnFail::Retry`] the guardrail's message is appended to the conversation and the LLM is
+//! called again.
 //!
 //! ```
 //! use conductor::agents::{Guardrail, OnFail, RegexGuardrail};
@@ -33,26 +21,6 @@
 //!     .unwrap();
 //! assert!(!no_pii.check("email me at a@b.com").passed);
 //! ```
-//!
-//! ## Scope
-//!
-//! Python's `Guardrail` also accepts `func: None` paired with a `name` to reference an
-//! **external** guardrail — a worker running elsewhere with no local check to call. The
-//! `parity-plan.md` class diagram has no such "nameless/external" node (`Guardrail` always
-//! composes exactly one `GuardrailCheck`), so this port always requires a concrete checker;
-//! external-worker references remain out of scope (this file still does not touch `AgentDef`
-//! itself — see [`FunctionGuardrail`] below for what *is* now wired into `serializer.rs`/
-//! `runtime.rs`).
-//!
-//! Python's `@guardrail` decorator (turning a bare function into a named custom check) *is*
-//! ported, as [`FunctionGuardrail`] — a third [`GuardrailCheck`] implementation alongside
-//! [`RegexGuardrail`]/[`LlmGuardrail`], wrapping an arbitrary `Fn(&str) -> GuardrailResult`
-//! closure instead of a decorated function (Rust has no decorator equivalent; a plain
-//! higher-order constructor is the natural substitute). This is what
-//! [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) registers a worker for under the
-//! guardrail's own name — matching python's `_register_guardrail_worker`/
-//! `_register_single_guardrail_worker`, which key off exactly this "not Regex, not LLM, not
-//! external" case.
 
 use crate::error::{ConductorError, Result};
 use regex::Regex;
@@ -72,7 +40,7 @@ pub enum Position {
 }
 
 impl Position {
-    /// Wire-format string, matching python-sdk's `Position(str, Enum)` values exactly.
+    /// Wire-format string for this variant.
     #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -98,7 +66,7 @@ pub enum OnFail {
 }
 
 impl OnFail {
-    /// Wire-format string, matching python-sdk's `OnFail(str, Enum)` values exactly.
+    /// Wire-format string for this variant.
     #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -110,8 +78,8 @@ impl OnFail {
     }
 }
 
-/// `on_fail = Human` is only valid for `position = Output` (matches python's `ValueError` in
-/// `Guardrail.__init__`: input guardrails are client-side and cannot pause a workflow).
+/// `on_fail = Human` is only valid for `position = Output`; input guardrails are client-side
+/// and cannot pause a workflow.
 fn validate_position_on_fail(position: Position, on_fail: OnFail) -> Result<()> {
     if on_fail == OnFail::Human && position == Position::Input {
         return Err(ConductorError::agent(
@@ -170,28 +138,17 @@ impl GuardrailResult {
 
 /// A content-validation check pluggable into a [`Guardrail`].
 ///
-/// Parallel to python's `func: Callable[[str], GuardrailResult]` slot on `Guardrail.__init__`.
-/// [`RegexGuardrail`] and [`LlmGuardrail`] are this port's two concrete implementations (matching
-/// `parity-plan.md`'s class diagram: `RegexGuardrail ..|> GuardrailCheck`, `LlmGuardrail ..|>
-/// GuardrailCheck`). `Send + Sync` supertraits match this crate's other boxed-trait-object
-/// conventions (e.g. [`CallbackHandler`](super::callback::CallbackHandler),
-/// [`ToolHandler`](super::tool::ToolHandler)) so a `Guardrail` can be held and called from a
-/// multi-threaded async runtime once one exists.
+/// [`RegexGuardrail`], [`LlmGuardrail`], and [`FunctionGuardrail`] are the built-in
+/// implementations.
 pub trait GuardrailCheck: Send + Sync {
     /// Run the check against `content`.
     fn check(&self, content: &str) -> GuardrailResult;
 
     /// Type-specific wire fields for [`AgentConfigSerializer`](super::AgentConfigSerializer) —
     /// the `guardrailType` discriminant (`"regex"`, `"llm"`, `"custom"`, ...) plus whatever
-    /// fields that concrete guardrail type contributes, matching python-sdk's
-    /// `AgentConfigSerializer._serialize_guardrail`'s `isinstance` branches. Each
-    /// [`GuardrailCheck`] impl owns its own wire shape here rather than the serializer
-    /// downcasting a `dyn GuardrailCheck` (matching how [`ToolType::as_str`](super::tool::ToolType::as_str)
-    /// gives each tool-type variant its own wire representation) — see
-    /// [`Guardrail::guardrail_type_fields`], the method `AgentConfigSerializer` actually calls.
-    /// `name` is the wrapping [`Guardrail`]'s name, threaded through because
-    /// [`FunctionGuardrail`]'s `"custom"` wire shape needs it for `taskName` (python's
-    /// `result["taskName"] = guardrail.name`) — the checker itself has no name of its own.
+    /// fields that concrete guardrail type contributes. `name` is the wrapping [`Guardrail`]'s
+    /// name, threaded through because [`FunctionGuardrail`]'s `"custom"` wire shape needs it for
+    /// `taskName` — the checker itself has no name of its own.
     fn guardrail_type_fields(&self, name: &str) -> Map<String, Value>;
 }
 
@@ -199,15 +156,12 @@ pub trait GuardrailCheck: Send + Sync {
 
 /// A validation guardrail for agent input or output.
 ///
-/// Wraps a [`GuardrailCheck`] — [`RegexGuardrail`], [`LlmGuardrail`], or any other implementation
-/// — with the config python's `Guardrail.__init__` validates: where it runs
-/// ([`Guardrail::with_position`]), what happens on failure ([`Guardrail::with_on_fail`]), and how
-/// many retries it gets ([`Guardrail::with_max_retries`]).
+/// Wraps a [`GuardrailCheck`] with config for where it runs ([`Guardrail::with_position`]), what
+/// happens on failure ([`Guardrail::with_on_fail`]), and how many retries it gets
+/// ([`Guardrail::with_max_retries`]).
 ///
-/// Construct with [`Guardrail::new`] and compose with consuming `with_*` builders — matching
-/// [`AgentDef`](super::def::AgentDef)'s pattern (`fn with_x(mut self, ...) -> Self`/`Result<Self>`,
-/// no `&mut self` builders). Defaults match python's `Guardrail.__init__`: `position = Output`,
-/// `on_fail = Raise`, `max_retries = 3`.
+/// Construct with [`Guardrail::new`] and compose with consuming `with_*` builders. Defaults:
+/// `position = Output`, `on_fail = Raise`, `max_retries = 3`.
 #[derive(Clone)]
 pub struct Guardrail {
     pub name: String,
@@ -241,10 +195,8 @@ impl Guardrail {
         }
     }
 
-    /// Set where the guardrail runs. Rejects the combination this would leave in an invalid
-    /// state — `position = Input` together with an already-set `on_fail = Human` — the same
-    /// invariant [`Guardrail::with_on_fail`] enforces from the other direction, so the check
-    /// holds regardless of which builder call comes first.
+    /// Set where the guardrail runs. Rejects `position = Input` together with an already-set
+    /// `on_fail = Human`.
     ///
     /// # Errors
     ///
@@ -256,8 +208,7 @@ impl Guardrail {
     }
 
     /// Set what to do when the check fails. Rejects `on_fail = Human` combined with
-    /// `position = Input` (matches python's `ValueError`: input guardrails are client-side and
-    /// cannot pause a workflow).
+    /// `position = Input` — input guardrails are client-side and cannot pause a workflow.
     ///
     /// # Errors
     ///
@@ -268,8 +219,7 @@ impl Guardrail {
         Ok(self)
     }
 
-    /// Set the max retry attempts used when `on_fail = Retry`. Must be at least 1 (matches
-    /// python's `ValueError(f"max_retries must be >= 1, got {max_retries}")`).
+    /// Set the max retry attempts used when `on_fail = Retry`. Must be at least 1.
     ///
     /// # Errors
     ///
@@ -290,10 +240,8 @@ impl Guardrail {
         self.checker.check(content)
     }
 
-    /// Type-specific wire fields (`guardrailType` plus that type's own fields) for
-    /// [`AgentConfigSerializer`](super::AgentConfigSerializer) — delegates to the wrapped
-    /// [`GuardrailCheck`] so the serializer never needs to downcast `checker`. See
-    /// [`GuardrailCheck::guardrail_type_fields`].
+    /// Type-specific wire fields (`guardrailType` plus that type's own fields), delegating to
+    /// the wrapped [`GuardrailCheck`]. See [`GuardrailCheck::guardrail_type_fields`].
     #[must_use]
     pub fn guardrail_type_fields(&self) -> Map<String, Value> {
         self.checker.guardrail_type_fields(&self.name)
@@ -316,10 +264,6 @@ pub enum RegexMode {
 /// By default **rejects** content that matches any of the given patterns
 /// ([`RegexMode::Block`]). Use [`RegexGuardrail::with_mode`] with [`RegexMode::Allow`] to instead
 /// reject content that matches none of the patterns.
-///
-/// Ports python-sdk's `RegexGuardrail` (`guardrail.py`) minus its `on_fail`/`position`/`name`/
-/// `max_retries` constructor arguments — those live on the wrapping [`Guardrail`] here (see the
-/// module docs for why: no base-class `__init__` to fold them all into).
 ///
 /// # Example
 ///
@@ -458,34 +402,15 @@ impl GuardrailCheck for RegexGuardrail {
 
 /// A [`GuardrailCheck`] that uses an LLM to evaluate content against a policy.
 ///
-/// Ports python-sdk's `LLMGuardrail` (`guardrail.py`), which sends the content plus a policy
-/// prompt directly to an LLM provider (via `litellm`, bypassing the Conductor server entirely
-/// for this one call) and expects a `{"passed": bool, "reason": str}` JSON response, evaluated
-/// **synchronously** at check time. This is a genuinely different call path from the rest of
-/// this crate's LLM usage: it is not a Conductor `LLM_CHAT_COMPLETE` workflow task, and
-/// `AgentRuntime` is not involved — python's own implementation confirms this by calling
-/// `litellm.completion(...)` directly, never touching `self._agent_client`.
+/// Calls the LLM provider's API directly and synchronously — this is not a Conductor
+/// `LLM_CHAT_COMPLETE` workflow task, and `AgentRuntime` is not involved. Supports
+/// `"openai/<model>"` (reads `OPENAI_API_KEY`) and `"anthropic/<model>"` (reads
+/// `ANTHROPIC_API_KEY`); any other `"provider/model"` string fails closed with an error message
+/// naming the unsupported provider.
 ///
-/// Ported for the two providers most of this crate's own examples already use —
-/// `"openai/<model>"` (`POST https://api.openai.com/v1/chat/completions`, reading
-/// `OPENAI_API_KEY`) and `"anthropic/<model>"` (`POST https://api.anthropic.com/v1/messages`,
-/// reading `ANTHROPIC_API_KEY`) — rather than python's full `litellm` multi-provider surface
-/// (a dozen-plus providers), which would mean re-implementing a large fraction of `litellm`
-/// itself. Any other `"provider/model"` string fails closed with a message naming the
-/// unsupported provider, exactly mirroring python's own fail-closed fallback when `litellm`
-/// isn't installed (`GuardrailResult(passed=False, message="LLMGuardrail requires the
-/// 'litellm' package. ...")`) rather than panicking or silently doing nothing.
-///
-/// [`GuardrailCheck::check`] is synchronous (matching python, and the rest of this trait), but
-/// the HTTP call underneath is necessarily async (this crate's only HTTP client, `reqwest`, is
-/// async-only). Bridging that safely — without risking reqwest's classic "can't create a
-/// runtime inside a runtime" panic when `check()` is called from within this crate's own
-/// multi-threaded Tokio executor (e.g. from a guardrail-worker `Worker::execute`, which is
-/// exactly the context the trait's own doc comment anticipates) — means never calling
-/// `Handle::block_on` on the *calling* thread. Instead `run_blocking` spawns a fresh OS thread
-/// with its own throwaway single-threaded runtime for just this one call, and the calling
-/// thread only does an ordinary, runtime-agnostic blocking channel `join()` — safe from any
-/// context, sync or async, single- or multi-threaded.
+/// [`GuardrailCheck::check`] is synchronous, but the underlying HTTP call runs on a dedicated OS
+/// thread with its own Tokio runtime, so it is safe to call even from within this crate's own
+/// async runtime.
 #[derive(Debug, Clone)]
 pub struct LlmGuardrail {
     model: String,
@@ -524,20 +449,17 @@ impl LlmGuardrail {
     }
 }
 
-/// The exact evaluation prompt python-sdk's `LLMGuardrail._evaluate` sends — same wording, same
-/// structure, so a policy tuned against python's prompt behaves identically here.
+/// The evaluation prompt sent to the LLM for a given policy and content.
 fn llm_guardrail_prompt(policy: &str, content: &str) -> String {
     format!(
         "You are a content safety evaluator. Evaluate the following content against this policy:\n\nPOLICY: {policy}\n\nCONTENT: {content}\n\nRespond with ONLY a JSON object: {{\"passed\": true/false, \"reason\": \"...\"}}"
     )
 }
 
-/// Parse an LLM's raw response text into a [`GuardrailResult`], matching python's exact
-/// `_evaluate` parsing: a strict `json.loads` (no fenced-code-block stripping, no leniency
-/// beyond what `serde_json` itself tolerates) of `{"passed": ..., "reason": ...}`, defaulting
-/// `passed` to `false` and `reason` to `""` if either key is absent. An unparseable response
-/// fails closed with the first 200 characters of the raw text, matching python's
-/// `result_text[:200]`.
+/// Parse an LLM's raw response text into a [`GuardrailResult`]. Expects strict JSON
+/// `{"passed": bool, "reason": string}` (no fenced-code-block stripping); a missing key defaults
+/// `passed` to `false` and `reason` to `""`. An unparseable response fails closed with the first
+/// 200 characters of the raw text.
 fn parse_llm_guardrail_response(result_text: &str) -> GuardrailResult {
     if let Ok(Value::Object(data)) = serde_json::from_str::<Value>(result_text.trim()) {
         let passed = data.get("passed").and_then(Value::as_bool).unwrap_or(false);
@@ -583,10 +505,8 @@ fn extract_openai_content(response: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Build the Anthropic Messages request body for one evaluation call. Anthropic's API requires
-/// `max_tokens` (unlike `OpenAI`'s, where it's optional) — python's `litellm` supplies a default
-/// when the caller didn't set one; this does the same (`1024`, litellm's own default for this
-/// call shape).
+/// Build the Anthropic Messages request body for one evaluation call. Anthropic requires
+/// `max_tokens`; defaults to `1024` if not set.
 fn anthropic_request_body(model: &str, prompt: &str, max_tokens: Option<u32>) -> Value {
     serde_json::json!({
         "model": model,
@@ -606,15 +526,10 @@ fn extract_anthropic_content(response: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Run `future` to completion on a dedicated OS thread with its own throwaway single-threaded
-/// Tokio runtime, blocking the *calling* thread on an ordinary channel `recv` — not on
-/// `Handle::block_on`. See [`LlmGuardrail`]'s doc comment for why this indirection exists: it's
-/// the only way to safely call async `reqwest` code from a synchronous [`GuardrailCheck::check`]
-/// that might itself already be running on this crate's multi-threaded async runtime.
-/// Runs `future` on its dedicated thread; `Err` covers both ways that thread can fail to
-/// deliver an output (couldn't build its own runtime, or panicked before sending) — both
-/// collapse into a plain `String` here since callers already treat every failure path as a
-/// fail-closed [`GuardrailResult`], not a distinguishable error type.
+/// Run `future` to completion on a dedicated OS thread with its own single-threaded Tokio
+/// runtime, blocking the calling thread on a channel `recv` rather than `Handle::block_on` —
+/// safe to call even from within an existing async runtime. `Err` covers both ways the thread
+/// can fail to deliver a result (couldn't build its own runtime, or panicked before sending).
 fn run_blocking<F>(future: F) -> std::result::Result<F::Output, String>
 where
     F: std::future::Future + Send + 'static,
@@ -643,9 +558,7 @@ where
 
 /// Call the given provider's chat/messages API and return the assistant's raw reply text, or an
 /// error message describing what went wrong (missing API key, transport error, non-2xx status,
-/// or an unrecognized provider) — every branch is a `String`, never a panic or propagated error,
-/// matching python's blanket `except Exception as e: return GuardrailResult(passed=False,
-/// message=f"LLM guardrail evaluation error: {e}")`.
+/// or an unrecognized provider).
 async fn call_llm_provider(
     provider: &str,
     model: &str,
@@ -758,13 +671,9 @@ impl GuardrailCheck for LlmGuardrail {
 
 // ── FunctionGuardrail ────────────────────────────────────────────────────
 
-/// A [`GuardrailCheck`] backed by an arbitrary function, matching python-sdk's `@guardrail`-
-/// decorated custom-function case (`Guardrail(func=...)` where `func` isn't the `RegexGuardrail`/
-/// `LLMGuardrail` bound-method case). Wire `guardrailType: "custom"`, `taskName: <guardrail
-/// name>` — [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) polls a task named
-/// after the *guardrail itself* for this type, not a name derived from the owning agent (see
-/// [`Guardrail::guardrail_type_fields`]'s note on why `name` is threaded through the trait
-/// method).
+/// A [`GuardrailCheck`] backed by an arbitrary function. Wire `guardrailType: "custom"`,
+/// `taskName: <guardrail name>` — [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve)
+/// polls a task named after the guardrail itself for this type.
 ///
 /// # Example
 ///
@@ -943,8 +852,7 @@ mod tests {
     #[test]
     fn test_llm_guardrail_fails_closed_for_unsupported_provider() {
         // Deterministic and network-free: an unrecognized provider fails before any env lookup
-        // or HTTP call, matching python's fail-closed-with-a-clear-message behavior when
-        // `litellm` itself can't run the evaluation.
+        // or HTTP call.
         let guardrail = LlmGuardrail::new("some_unsupported_provider/foo", "no harmful content");
         let result = guardrail.check("anything");
         assert!(!result.passed);
@@ -1064,10 +972,8 @@ mod tests {
         assert!(!result.passed);
     }
 
-    /// Regression test matching python's exact strictness: python's `_evaluate` does a bare
-    /// `json.loads` with no fenced-code-block stripping, so a model that ignores "Respond with
-    /// ONLY a JSON object" and wraps its answer in triple-backtick `json` fences fails closed
-    /// here too, not leniently parsed through.
+    /// Regression test: a model that wraps its JSON answer in triple-backtick fences fails
+    /// closed rather than being leniently parsed.
     #[test]
     fn test_parse_llm_guardrail_response_fails_closed_on_fenced_json() {
         let result = parse_llm_guardrail_response("```json\n{\"passed\": true}\n```");

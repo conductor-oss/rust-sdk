@@ -3,50 +3,13 @@
 
 //! Server-Sent Events decoding for a running agent execution.
 //!
-//! Wraps the byte stream returned by `crate::client::AgentClient::stream` (`GET
-//! /agent/stream/{execution_id}`, python-sdk's `stream_sse`) and turns it into a sequence of
-//! [`AgentEvent`]s. Per `docs/agents/README.md`'s `AgentEvent` section, `execution_id` is mandatory on every
-//! variant — `Handoff`/`Sequential`/`Parallel` strategies put a pending `HUMAN` step in a nested
-//! sub-execution, and `approve`/`reject`/`respond` must target that inner id, not a caller-held
-//! top-level one, so there is no variant that can be constructed without one.
+//! Wraps the byte stream returned by `crate::client::AgentClient::stream` and decodes it into a
+//! sequence of [`AgentEvent`]s. `execution_id` is mandatory on every variant.
 //!
-//! The SSE wire format itself (`data:` lines, blank-line frame boundaries, optional `event:`/
-//! `id:`/`retry:` lines and `:`-prefixed comments this parser ignores) is the standard documented
-//! at <https://html.spec.whatwg.org/multipage/server-sent-events.html>; only the `data:` payload
-//! (parsed as this crate's own `AgentEvent` JSON shape) is meaningful here.
+//! # Known limitation
 //!
-//! # Variant shapes are verified against the real server, not python
-//!
-//! The previous version of this enum (`Message`/`Progress`/`Waiting`/`Done`/`Error`) was checked
-//! against python's `EventType`, which turned out to itself be an incomplete/inaccurate proxy for
-//! the real wire format. Re-derived from the actual source of truth instead --
-//! `AgentSSEEvent.java` (the DTO the server serializes) and `AgentEventListener.java`/
-//! `AgentHumanTask.java` (every real call site that constructs one) -- which surfaced two kinds
-//! of bug in the old enum, not just missing coverage:
-//!
-//! - `Message`/`Progress` don't correspond to anything the real server ever sends -- there is no
-//!   `AgentSSEEvent.message(...)`/`.progress(...)` factory, and no emit call site anywhere in
-//!   `AgentEventListener`/`AgentHumanTask` sends either `type`. They were never reachable against
-//!   a real server.
-//! - `Waiting`'s old shape (`tool_name`/`args` fields directly on the event) and `Error`'s old
-//!   shape (a field literally named `error`) don't match the real payload either: the server's
-//!   `waiting` event carries a single freeform `pendingTool` map (see [`AgentEvent::Waiting`]'s
-//!   doc), and its `error` event carries `content`/`toolName`, never a field named `error`. Any
-//!   caller that received a real `waiting`/`error` event from an actual server would have failed
-//!   to deserialize under the old enum.
-//!
-//! The current set below is exhaustively every `AgentSSEEvent` factory method that exists
-//! server-side today, each variant's fields matching that factory's parameters exactly --
-//! including three (`ContextCondensed`/`SubagentStart`/`SubagentStop`) that aren't in python's own
-//! `EventType` either, so this is not just "catch up to python."
-//!
-//! # Known limitation: no forward-compatible catch-all
-//!
-//! This enum has no `Unknown`/`#[serde(other)]` fallback variant, so a server that ever adds a
-//! 13th event kind would make [`AgentStream::next`] return a deserialization `Err` for it,
-//! stopping iteration. This is a pre-existing property of this design (true of the old 5-variant
-//! enum too), not something newly introduced fixing the shapes above -- left as a separate,
-//! not-yet-requested robustness improvement rather than folded into this fix.
+//! This enum has no catch-all fallback variant, so a server event kind not listed here makes
+//! [`AgentStream::next`] return a deserialization `Err` and stop iteration.
 
 use futures::{StreamExt as _, TryStreamExt as _};
 use serde::{Deserialize, Serialize};
@@ -54,9 +17,8 @@ use serde_json::Value;
 
 use crate::error::{ConductorError, Result};
 
-/// A single decoded event from an agent execution's SSE stream.
-///
-/// Every variant carries `execution_id` — see the module docs for why it can't be optional.
+/// A single decoded event from an agent execution's SSE stream. Every variant carries
+/// `execution_id`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentEvent {
@@ -95,12 +57,9 @@ pub enum AgentEvent {
     /// The execution is paused awaiting input (a human-in-the-loop tool call, or a
     /// server-side workflow pause).
     ///
-    /// `pending_tool` is deliberately a raw [`Value`], not a typed struct: the real server DTO
-    /// (`AgentSSEEvent.pendingTool`, built by `AgentHumanTask.start()`) mixes `snake_case` and
-    /// `camelCase` keys (`tool_name`, `parameters`, `toolCalls`, `response_schema`,
-    /// `response_ui_schema`, `taskRefName`) and only conditionally includes several of them --
-    /// there's no single fixed schema to model faithfully. Can also be an empty object (a
-    /// workflow-level pause with no specific pending tool).
+    /// `pending_tool` is a raw [`Value`] rather than a typed struct, since its shape varies by
+    /// pending-tool type. Can also be an empty object for a workflow-level pause with no
+    /// specific pending tool.
     #[serde(rename = "waiting")]
     Waiting {
         #[serde(rename = "executionId")]
@@ -198,8 +157,7 @@ impl AgentEvent {
 
 /// Incremental SSE frame decoder: buffers raw bytes and yields complete frames (delimited by a
 /// blank line) as they become available, tolerating a frame's bytes arriving split across
-/// multiple pushes. Pure/sync and independent of any HTTP transport, so it's testable without a
-/// live server (see the tests below).
+/// multiple pushes.
 #[derive(Debug, Default)]
 struct SseDecoder {
     buffer: String,
@@ -279,8 +237,8 @@ fn parse_event(data: &str) -> Result<AgentEvent> {
 
 /// Decoded [`AgentEvent`] stream over a running agent execution's SSE endpoint.
 ///
-/// Constructed from the [`reqwest::Response`] returned by
-/// `crate::client::AgentClient::stream`. Drive it with [`AgentStream::next`]:
+/// Constructed from the [`reqwest::Response`] returned by `crate::client::AgentClient::stream`.
+/// Drive it with [`AgentStream::next`]:
 ///
 /// ```ignore
 /// let mut stream = agent_client.stream(&execution_id).await?.into();
@@ -307,9 +265,6 @@ impl AgentStream {
     }
 
     /// Fetch the next decoded event, or `None` once the stream has ended.
-    ///
-    /// Matches the `while let Some(event) = stream.next().await.transpose()?` usage shown in
-    /// `docs/agents/README.md`'s worked examples.
     pub async fn next(&mut self) -> Option<Result<AgentEvent>> {
         loop {
             if let Some(data) = self.decoder.next_data() {

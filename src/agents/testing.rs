@@ -1,30 +1,9 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Deterministic agent testing without an LLM or a live Conductor server -- ports the core,
-//! most-portable slice of python-sdk's `conductor.ai.agents.testing` package: [`mock_run`]
-//! (`testing/mock.py`'s `mock_run`) and the fluent [`expect`] assertion API (`testing/expect.py`).
-//!
-//! **Not ported here, deferred to future work:** record/replay of real execution traces
-//! (`testing/recording.py`), LLM-judge semantic assertions (`testing/semantic.py`, needs an
-//! actual LLM client this crate doesn't have one of yet), per-strategy structural validators
-//! (`testing/strategy_validators.py`), the LLM-backed correctness eval runner
-//! (`testing/eval_runner.py`), and the pytest plugin (`testing/pytest_plugin.py` -- N/A as
-//! designed; this crate's equivalent is just `#[test]`/`cargo test`, no plugin needed). See
-//! `docs/agents/README.md`'s Testing section for these as their own tracked follow-ups.
-//!
-//! ## Narrower than python's version, and why
-//!
-//! Python's [`ScriptedEvent`]-equivalent (`MockEvent`) covers ten event kinds (`THINKING`,
-//! `TOOL_CALL`, `TOOL_RESULT`, `HANDOFF`, `MESSAGE`, `GUARDRAIL_PASS`, `GUARDRAIL_FAIL`,
-//! `WAITING`, `DONE`, `ERROR`) because python's real SSE stream consumer (`runtime.py`'s
-//! `stream()`) actually distinguishes all of them from the wire. This crate's [`super::stream`]
-//! only recognizes five real wire event kinds (`Message`/`Progress`/`Waiting`/`Done`/`Error`) --
-//! confirmed by reading the actual server payload shape, not guessed -- so [`ScriptedEvent`]
-//! only covers what has a real counterpart today: tool calls/results, completion, and failure.
-//! Tool-call tracking doesn't need its own [`super::AgentEvent`] variant either way -- a
-//! [`crate::agents::result::ToolCallRecord`] is populated directly from the script, independent
-//! of whatever the wire actually emits for it.
+//! Deterministic agent testing without an LLM or a live Conductor server: [`mock_run`] executes
+//! a scripted event sequence, and the fluent [`expect`] API asserts on the resulting
+//! [`AgentResult`].
 
 use serde_json::Value;
 
@@ -38,8 +17,8 @@ use super::tool::ToolContext;
 pub enum ScriptedEvent {
     /// The agent calls a tool. If `agent` has a matching tool with a real handler and no
     /// explicit [`ScriptedEvent::ToolResult`] immediately follows, [`mock_run`] calls that
-    /// handler for real and records its output -- matching python's `auto_execute_tools=True`
-    /// default. Pass `args` as `serde_json::json!({...})` (an object).
+    /// handler for real and records its output. Pass `args` as `serde_json::json!({...})` (an
+    /// object).
     ToolCall { name: String, args: Value },
     /// An explicit result for the preceding [`ScriptedEvent::ToolCall`], skipping real handler
     /// invocation for it -- use this to script a specific tool outcome without needing (or
@@ -60,9 +39,8 @@ pub enum ScriptedEvent {
 /// `ToolCall` for a tool `agent` doesn't have (or that has no handler, e.g. an `http`/`mcp`
 /// tool) is recorded with `result: None` unless a following `ToolResult` supplies one.
 ///
-/// `prompt` isn't sent anywhere (there's no LLM call) and is currently unused -- it's still a
-/// parameter so call sites read naturally (`mock_run(&agent, "the prompt", script)`) and so a
-/// future extension (e.g. recording it on the result) doesn't need a signature change.
+/// `prompt` isn't sent anywhere (there's no LLM call); it's unused but kept as a parameter so
+/// call sites read naturally.
 pub async fn mock_run(agent: &AgentDef, _prompt: &str, script: Vec<ScriptedEvent>) -> AgentResult {
     let mut tool_calls: Vec<ToolCallRecord> = Vec::new();
     let mut output = Value::Null;
@@ -151,8 +129,8 @@ pub async fn mock_run(agent: &AgentDef, _prompt: &str, script: Vec<ScriptedEvent
 }
 
 /// Start a fluent assertion chain over `result` -- see [`Expect`]'s methods. Each assertion
-/// panics with a clear message on failure (an ordinary Rust `#[test]` failure, not a special
-/// error type), and returns `&Self` so calls chain: `expect(&result).completed().used_tool("x")`.
+/// panics on failure and returns `&Self` so calls chain:
+/// `expect(&result).completed().used_tool("x")`.
 #[must_use]
 pub fn expect(result: &AgentResult) -> Expect<'_> {
     Expect { result }
@@ -165,9 +143,8 @@ pub struct Expect<'a> {
     result: &'a AgentResult,
 }
 
-// Every method here is meant to be called either as the final link in a chain (where the
-// returned `&Self` is legitimately discarded -- the assertion already ran via `assert!`) or
-// chained further; unlike an ordinary builder, dropping the return value is never a mistake.
+// Every method here may be called as the final link in a chain, so dropping the returned
+// `&Self` is never a mistake.
 #[expect(clippy::must_use_candidate)]
 impl Expect<'_> {
     /// Assert the execution completed successfully.

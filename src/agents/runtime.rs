@@ -3,16 +3,11 @@
 
 //! `AgentRuntime` — the control-plane + local-worker composition root for agents.
 //!
-//! Kept as a single file (not split across per-agent submodules) per
-//! `docs/agents/README.md`'s note: `AgentRuntime`'s lifecycle methods
-//! (`compile`/`deploy`/`start`/`run`/`serve`/`shutdown`) share enough state (one [`AgentClient`],
-//! one [`TaskHandler`]) that splitting them across files would only add indirection.
-//!
-//! No new polling loop is introduced here — `serve` reuses the existing [`TaskHandler`] exactly
-//! as `docs/agents/README.md`'s "composition over the existing worker framework"
-//! section describes: every locally-invoked [`ToolDef`] becomes an ordinary `impl Worker`
-//! registered on the same [`TaskHandler`] every other worker in this crate uses, so agent tool
-//! workers get pooling, panic isolation, retry-on-update, and graceful shutdown for free.
+//! Exposes `AgentRuntime`'s lifecycle methods (`compile`/`deploy`/`start`/`run`/`serve`/`shutdown`).
+//! `serve` reuses the existing [`TaskHandler`]: every locally-invoked [`ToolDef`] becomes an
+//! ordinary `impl Worker` registered on the same [`TaskHandler`] every other worker in this crate
+//! uses, so agent tool workers get pooling, panic isolation, retry-on-update, and graceful
+//! shutdown for free.
 
 use async_trait::async_trait;
 use serde_json::{Map, Value};
@@ -36,10 +31,9 @@ use super::termination::TerminationCondition;
 use super::tool::{ToolContext, ToolDef, ToolHandler};
 
 /// Bridges a locally-invoked [`ToolDef`] (one whose `handler` is `Some`) into an ordinary
-/// [`Worker`], so it can be registered onto the same [`TaskHandler`] every other worker in this
-/// crate runs on. The task name is the tool name; the polled [`Task`]'s `input_data` is what the
-/// [`ToolHandler`] receives as its raw JSON arguments, and `task.runtime_metadata` is what
-/// resolves into the [`Credentials`] passed alongside it.
+/// [`Worker`]. The task name is the tool name; the polled [`Task`]'s `input_data` is what the
+/// [`ToolHandler`] receives as its raw JSON arguments, and `task.runtime_metadata` resolves into
+/// the [`Credentials`] passed alongside it.
 struct ToolWorker {
     name: String,
     handler: ToolHandler,
@@ -49,7 +43,7 @@ struct ToolWorker {
 }
 
 impl ToolWorker {
-    /// Build a [`ToolWorker`] from a [`ToolDef`], or `None` if the tool has no local handler
+    /// Builds a [`ToolWorker`] from a [`ToolDef`], or `None` if the tool has no local handler
     /// (server-side tools — `http`/`mcp`/`agent_tool`/`human` — have nothing to run locally).
     fn from_tool_def(tool: &ToolDef) -> Option<Self> {
         let handler = tool.handler.clone()?;
@@ -74,7 +68,7 @@ impl Worker for ToolWorker {
 
         // `_agent_state` is a system-injected input key carrying state a previous tool call in
         // this agent run recorded via `ToolContext::set_state` — strip it before building the
-        // tool's own arguments, matching python's `task.input_data.pop("_agent_state", None)`.
+        // tool's own arguments.
         let mut input_data = task.input_data.clone();
         let initial_state = input_data
             .remove("_agent_state")
@@ -87,10 +81,9 @@ impl Worker for ToolWorker {
         let context = context.with_initial_state(initial_state);
 
         let input = serde_json::to_value(&input_data)?;
-        // A handler that wants FAILED_WITH_TERMINAL_ERROR semantics (matching python's
-        // `TerminalToolError`) returns `Err(ConductorError::TerminalTool(..))` instead of any
-        // other error variant; every other `Err` still propagates via `?` and maps to the
-        // default retryable `Failed` in `task_runner.rs`, exactly as before this existed.
+        // A handler that wants FAILED_WITH_TERMINAL_ERROR semantics returns
+        // `Err(ConductorError::TerminalTool(..))`; every other `Err` propagates via `?` and maps
+        // to the default retryable `Failed` in `task_runner.rs`.
         let output = match (self.handler)(input, credentials, context.clone()).await {
             Ok(value) => value,
             Err(ConductorError::TerminalTool(reason)) => {
@@ -99,14 +92,9 @@ impl Worker for ToolWorker {
             Err(e) => return Err(e),
         };
 
-        // Matches python's `run_tool_task`/`_dispatch.py`: `if isinstance(result, dict):
-        // task_result.output_data = result else: task_result.output_data = {"result": result}`
-        // — an object return becomes the task output directly (its fields are the output keys
-        // the agent loop/LLM sees), not nested one level down under a "result" key. Only
-        // non-object returns (numbers, strings, arrays, null) get the "result" wrapper. Found by
-        // actually running a tool that returns a dict against a recorded playback fixture: the
-        // old unconditional `completed_with_result` wrap produced `{"result": {...}}`, which
-        // never matches what real tool-using agents (python or otherwise) actually send.
+        // An object return becomes the task output directly (its fields are the output keys the
+        // agent loop/LLM sees); only non-object returns (numbers, strings, arrays, null) get
+        // wrapped under a "result" key.
         let mut result_map = match output {
             Value::Object(map) => map.into_iter().collect(),
             other => match WorkerOutput::completed_with_result(other) {
@@ -138,8 +126,7 @@ impl Worker for ToolWorker {
 }
 
 /// Bridges an [`AgentDef::stop_when`] predicate into an ordinary [`Worker`], registered under
-/// `{agent_name}_stop_when` — matching the task name [`AgentConfigSerializer`] emits for
-/// `stopWhen` and python-sdk's `_register_stop_when_worker`/`StopWhenEntry`.
+/// `{agent_name}_stop_when`.
 struct StopWhenWorker {
     task_name: String,
     handler: super::def::StopWhenHandler,
@@ -151,13 +138,11 @@ impl Worker for StopWhenWorker {
         &self.task_name
     }
 
-    /// Reads `result`/`messages`/`iteration` off the polled [`Task`]'s input, builds the same
-    /// context shape python's `StopWhenEntry.__call__` does (`{"result": ..., "messages": ...,
-    /// "iteration": ...}`), and returns `{"should_continue": !should_stop}` — inverted from the
-    /// predicate's own `true` = "stop" sense, matching the wire contract the server's compiled
-    /// SWITCH task expects. On a predicate error, logs it and fails *open*
-    /// (`should_continue: true`), matching python's `except Exception` branch exactly rather
-    /// than propagating the error and potentially wedging the workflow.
+    /// Reads `result`/`messages`/`iteration` off the polled [`Task`]'s input and returns
+    /// `{"should_continue": !should_stop}` — inverted from the predicate's own `true` = "stop"
+    /// sense, matching the wire contract the server's compiled SWITCH task expects. On a
+    /// predicate error, logs it and fails *open* (`should_continue: true`) rather than
+    /// propagating the error and potentially wedging the workflow.
     async fn execute(&self, task: &Task) -> Result<WorkerOutput> {
         let result = task
             .input_data
@@ -195,8 +180,7 @@ impl Worker for StopWhenWorker {
 }
 
 /// Bridges a callable [`super::def::GateCondition`] into an ordinary [`Worker`], registered
-/// under `{agent_name}_gate` — matching the task name [`AgentConfigSerializer`] emits for the
-/// callable `gate` shape and python-sdk's `_register_gate_worker`/`GateEntry`.
+/// under `{agent_name}_gate`.
 struct GateWorker {
     task_name: String,
     handler: super::def::GateHandler,
@@ -208,9 +192,8 @@ impl Worker for GateWorker {
         &self.task_name
     }
 
-    /// Builds `{"result": ...}` (matching python's `GateEntry.__call__`'s context dict) and
-    /// returns `{"decision": "continue"|"stop"}`. On a predicate error, logs it and fails
-    /// *open* (`"decision": "continue"`), matching python's `except Exception` branch exactly.
+    /// Builds `{"result": ...}` and returns `{"decision": "continue"|"stop"}`. On a predicate
+    /// error, logs it and fails *open* (`"decision": "continue"`).
     async fn execute(&self, task: &Task) -> Result<WorkerOutput> {
         let result = task
             .input_data
@@ -235,8 +218,7 @@ impl Worker for GateWorker {
 }
 
 /// Bridges an [`AgentDef::termination`] condition into an ordinary [`Worker`], registered under
-/// `{agent_name}_termination` — matching the task name python-sdk's
-/// `_register_termination_worker`/`TerminationEntry` uses.
+/// `{agent_name}_termination`.
 struct TerminationWorker {
     task_name: String,
     condition: TerminationCondition,
@@ -248,12 +230,9 @@ impl Worker for TerminationWorker {
         &self.task_name
     }
 
-    /// Builds the same `{"result", "messages", "iteration"}` context shape python's
-    /// `TerminationEntry.__call__` does (`messages` always `[]` there too — python's own
-    /// comment: conditions receive it for API completeness, but this worker's compiled task
-    /// only ever supplies `result`/`iteration`) and returns `{"should_continue": !terminate,
-    /// "reason": ...}`. [`TerminationCondition::should_terminate`] never returns an `Err`, so
-    /// unlike [`StopWhenWorker`] there's no fail-open branch to trigger here.
+    /// Builds a `{"result", "messages", "iteration"}` context (`messages` is always `[]` — this
+    /// worker's compiled task only ever supplies `result`/`iteration`) and returns
+    /// `{"should_continue": !terminate, "reason": ...}`.
     async fn execute(&self, task: &Task) -> Result<WorkerOutput> {
         let result = task
             .input_data
@@ -283,9 +262,8 @@ impl Worker for TerminationWorker {
     }
 }
 
-/// One of the six lifecycle points [`CallbackHandler`] exposes — matches python-sdk's
-/// `POSITION_TO_METHOD` keys (`callback.py`) and the `{agent_name}_{position}` task-naming
-/// convention `_register_callback_worker` uses.
+/// One of the six lifecycle points [`CallbackHandler`] exposes, used for the
+/// `{agent_name}_{position}` task-naming convention.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CallbackPosition {
     BeforeAgent,
@@ -307,7 +285,7 @@ impl CallbackPosition {
         CallbackPosition::AfterTool,
     ];
 
-    /// Wire/task-name spelling, matching python's `POSITION_TO_METHOD` keys exactly.
+    /// Wire/task-name spelling.
     fn as_str(self) -> &'static str {
         match self {
             CallbackPosition::BeforeAgent => "before_agent",
@@ -335,14 +313,11 @@ impl CallbackPosition {
     }
 }
 
-/// Run `handlers` in order for `position`, returning the first short-circuiting result — mirrors
-/// python's `_chain_callbacks_for_position`'s handler-chain half (there is no Rust equivalent of
-/// python's separate `legacy_fn`/`before_agent_callback`-style deprecated attributes, so only the
-/// handler-list half is ported). Per [`CallbackHandler`]'s own doc comment: `None` *and*
-/// `Some(Value::Null)` both mean "continue to the next handler"; anything else short-circuits.
-/// Returns `Value::Object` either way — the winning handler's value if it's already an object,
-/// that value wrapped as `{"result": value}` if it's some other JSON type, or an empty object if
-/// no handler short-circuited — so callers never need to branch on the return shape.
+/// Runs `handlers` in order for `position`, returning the first short-circuiting result. `None`
+/// and `Some(Value::Null)` both mean "continue to the next handler"; anything else short-circuits.
+/// Always returns `Value::Object`: the winning handler's value if it's already an object, that
+/// value wrapped as `{"result": value}` otherwise, or an empty object if no handler
+/// short-circuited.
 async fn dispatch_callback_position(
     position: CallbackPosition,
     handlers: &[std::sync::Arc<dyn CallbackHandler>],
@@ -363,8 +338,7 @@ async fn dispatch_callback_position(
 }
 
 /// Bridges [`AgentDef::callbacks`] at one [`CallbackPosition`] into an ordinary [`Worker`],
-/// registered under `{agent_name}_{position}` — matching python-sdk's
-/// `_register_callback_worker`/`CallbackEntry`.
+/// registered under `{agent_name}_{position}`.
 struct CallbackWorker {
     task_name: String,
     position: CallbackPosition,
@@ -378,8 +352,7 @@ impl Worker for CallbackWorker {
     }
 
     /// Builds a [`CallbackContext`] from whichever of `messages`/`llm_result` the polled
-    /// [`Task`]'s input carries (matching python's `CallbackEntry.__call__`, which only forwards
-    /// the kwargs it was actually given) and dispatches via [`dispatch_callback_position`].
+    /// [`Task`]'s input carries and dispatches via [`dispatch_callback_position`].
     async fn execute(&self, task: &Task) -> Result<WorkerOutput> {
         let mut fields = Map::new();
         if let Some(messages) = task.input_data.get("messages") {
@@ -398,8 +371,7 @@ impl Worker for CallbackWorker {
     }
 }
 
-/// Matches python's `_stringify_content`: `None`/absent -> `""`; a JSON string -> itself; any
-/// other JSON value -> its JSON text (python's `json.dumps(content, default=str)`).
+/// `None`/absent -> `""`; a JSON string -> itself; any other JSON value -> its JSON text.
 fn stringify_content(content: Option<&Value>) -> String {
     match content {
         None | Some(Value::Null) => String::new(),
@@ -408,27 +380,16 @@ fn stringify_content(content: Option<&Value>) -> String {
     }
 }
 
-/// `true` if `guardrail`'s wire shape is python's "custom `@guardrail` function" case (not
-/// `RegexGuardrail`/`LlmGuardrail`, not external) — the only kind [`AgentRuntime::serve`]
-/// registers a worker for, matching python's `not isinstance(g, (RegexGuardrail, LLMGuardrail))
-/// and g.func is not None` filter. Checked via [`Guardrail::guardrail_type_fields`]'s
-/// `guardrailType` discriminant rather than a downcast, since that's the one place every
-/// [`super::guardrail::GuardrailCheck`] impl already declares its own kind.
+/// `true` if `guardrail`'s wire shape is the custom-function case (not `RegexGuardrail`/
+/// `LlmGuardrail`, not external) — the only kind [`AgentRuntime::serve`] registers a worker for.
+/// Checked via [`Guardrail::guardrail_type_fields`]'s `guardrailType` discriminant.
 fn is_custom_function_guardrail(guardrail: &Guardrail) -> bool {
     guardrail.guardrail_type_fields().get("guardrailType")
         == Some(&Value::String("custom".to_owned()))
 }
 
-/// Bridges a custom-function [`Guardrail`] (backed by
-/// [`super::guardrail::FunctionGuardrail`]) into an ordinary [`Worker`], registered under the
-/// guardrail's own name — matching the server's `GuardrailCompiler.compileCustomGuardrail`
-/// convention and python-sdk's `_register_single_guardrail_worker`/`GuardrailEntry`.
-///
-/// Python also registers a second, *combined* worker (`{agent_name}_output_guardrail`) for its
-/// own client-side "local compile" path, which builds workflow tasks without going through the
-/// server compiler at all. This crate has no such path — `AgentRuntime::compile`/`deploy` always
-/// go through the real server's `/agent/compile`/`/agent/deploy` — so only the per-guardrail
-/// worker is registered here; the combined one would have nothing to serve.
+/// Bridges a custom-function [`Guardrail`] (backed by [`super::guardrail::FunctionGuardrail`])
+/// into an ordinary [`Worker`], registered under the guardrail's own name.
 struct GuardrailWorker {
     task_name: String,
     guardrail: Guardrail,
@@ -440,13 +401,10 @@ impl Worker for GuardrailWorker {
         &self.task_name
     }
 
-    /// Builds the `{content, iteration}` -> `{passed, message, on_fail, fixed_output,
-    /// guardrail_name, should_continue}` contract python's `GuardrailEntry.__call__` uses,
-    /// including the same `on_fail` escalation rules (`retry` -> `raise` once `iteration` hits
-    /// `max_retries`; `fix` -> `raise` when there's no `fixed_output`). Unlike python's
-    /// `GuardrailEntry._check`, a panicking [`super::guardrail::GuardrailCheck`] is not caught
-    /// here — this crate doesn't defensively catch panics anywhere else either, and a broken
-    /// custom guardrail closure is a caller bug, not a runtime condition to paper over.
+    /// Builds `{content, iteration}` -> `{passed, message, on_fail, fixed_output,
+    /// guardrail_name, should_continue}`, with `on_fail` escalation rules: `retry` -> `raise`
+    /// once `iteration` hits `max_retries`; `fix` -> `raise` when there's no `fixed_output`. A
+    /// panicking [`super::guardrail::GuardrailCheck`] is not caught here.
     async fn execute(&self, task: &Task) -> Result<WorkerOutput> {
         let content = stringify_content(task.input_data.get("content"));
         let iteration = task
@@ -491,9 +449,9 @@ impl Worker for GuardrailWorker {
     }
 }
 
-/// Detect `_transfer_to_` tool calls in `tool_calls`, matching python's `CheckTransferEntry`.
-/// Selection is first-wins (only one hand-off per turn is meaningful); any further transfer
-/// calls in the same turn are surfaced as `dropped_transfers` rather than silently discarded.
+/// Detects `_transfer_to_` tool calls in `tool_calls`. Selection is first-wins (only one hand-off
+/// per turn is meaningful); any further transfer calls in the same turn are surfaced as
+/// `dropped_transfers` rather than silently discarded.
 fn evaluate_check_transfer(tool_calls: &[Value]) -> Value {
     const MARKER: &str = "_transfer_to_";
     let mut transfers: Vec<(String, String)> = Vec::new();
@@ -531,7 +489,7 @@ fn evaluate_check_transfer(tool_calls: &[Value]) -> Value {
 }
 
 /// Bridges [`evaluate_check_transfer`] into a [`Worker`], registered under
-/// `{agent_name}_check_transfer` — matching python's `_register_check_transfer_worker`.
+/// `{agent_name}_check_transfer`.
 struct CheckTransferWorker {
     task_name: String,
 }
@@ -559,8 +517,7 @@ impl Worker for CheckTransferWorker {
 
 /// No-op transfer tool — the actual hand-off is detected by [`CheckTransferWorker`] from
 /// `toolCalls` output; this just echoes the hand-off `message` (if any) so it's visible in the
-/// task output/UI. Registered under `{source}_transfer_to_{target}`, matching python's
-/// `TransferNoopEntry`.
+/// task output/UI. Registered under `{source}_transfer_to_{target}`.
 struct TransferNoopWorker {
     task_name: String,
 }
@@ -586,8 +543,7 @@ impl Worker for TransferNoopWorker {
 }
 
 /// Transfer tool for a target unreachable via [`AgentDef::allowed_transitions`] — always
-/// returns a fixed error message so the LLM knows to try a different tool. Matches python's
-/// `TransferUnreachableEntry`.
+/// returns a fixed error message so the LLM knows to try a different tool.
 struct TransferUnreachableWorker {
     task_name: String,
 }
@@ -607,8 +563,7 @@ impl Worker for TransferUnreachableWorker {
     }
 }
 
-/// `true` if `value` is python's `_is_transfer_truthy`: a JSON `true`, or the case-insensitive
-/// string `"true"`.
+/// `true` if `value` is a JSON `true`, or the case-insensitive string `"true"`.
 fn is_transfer_truthy(value: &Value) -> bool {
     match value {
         Value::Bool(b) => *b,
@@ -618,8 +573,7 @@ fn is_transfer_truthy(value: &Value) -> bool {
 }
 
 /// `true` if `source_idx` (looked up in `idx_to_name`) is allowed to transfer to `target_name`
-/// per `allowed` — empty `allowed` means unrestricted, matching python's
-/// `HandoffCheckEntry._is_allowed`.
+/// per `allowed` — empty `allowed` means unrestricted.
 fn is_allowed_transition(
     allowed: &std::collections::HashMap<String, Vec<String>>,
     idx_to_name: &std::collections::HashMap<String, String>,
@@ -635,20 +589,18 @@ fn is_allowed_transition(
         .is_some_and(|targets| targets.iter().any(|t| t == target_name))
 }
 
-/// Swarm handoff decision, matching python's `HandoffCheckEntry.__call__` return shape.
+/// Swarm handoff decision.
 struct HandoffDecision {
     active_agent: String,
     handoff: bool,
 }
 
-/// Number of blocked-transfer retries an agent gets before the loop gives up on it, matching
-/// python's `HandoffCheckEntry.__init__`'s `max_blocked_retries=3` default.
+/// Number of blocked-transfer retries an agent gets before the loop gives up on it.
 const HANDOFF_MAX_BLOCKED_RETRIES: u32 = 3;
 
-/// Decide the next `active_agent` for a swarm turn, matching python's
-/// `HandoffCheckEntry.__call__`: priority 1 is a detected transfer-tool call (with retry-then-
-/// give-up handling when `allowed_transitions` blocks it); priority 2 (fallback) is
-/// condition-based [`super::SwarmTransition`] evaluation.
+/// Decides the next `active_agent` for a swarm turn: priority 1 is a detected transfer-tool call
+/// (with retry-then-give-up handling when `allowed_transitions` blocks it); priority 2
+/// (fallback) is condition-based [`super::SwarmTransition`] evaluation.
 #[expect(clippy::too_many_arguments)]
 fn evaluate_handoff_check(
     transitions: &[super::swarm::SwarmTransition],
@@ -721,9 +673,7 @@ fn evaluate_handoff_check(
 }
 
 /// Bridges [`evaluate_handoff_check`] into a [`Worker`], registered under
-/// `{agent_name}_handoff_check` — matching python's `_register_handoff_worker`/
-/// `HandoffCheckEntry`. `blocked_counts` is per-process mutable state, the same closure-cell
-/// semantics python's instance attribute replaces.
+/// `{agent_name}_handoff_check`. `blocked_counts` is per-process mutable state.
 struct HandoffCheckWorker {
     task_name: String,
     transitions: Vec<super::swarm::SwarmTransition>,
@@ -795,10 +745,10 @@ fn display_value(value: &Value) -> String {
     }
 }
 
-/// Map a manual-strategy human selection to its sub-agent index, matching python's
-/// `ProcessSelectionEntry.__call__`: `human_output.selected`/`.agent` (in that priority order,
-/// defaulting to `"0"`) is looked up in `name_to_idx`; if the lookup misses (or `human_output`
-/// isn't an object at all), the value's string form is returned as-is.
+/// Maps a manual-strategy human selection to its sub-agent index: `human_output.selected`/
+/// `.agent` (in that priority order, defaulting to `"0"`) is looked up in `name_to_idx`; if the
+/// lookup misses (or `human_output` isn't an object at all), the value's string form is returned
+/// as-is.
 fn evaluate_manual_selection(
     name_to_idx: &std::collections::HashMap<String, String>,
     human_output: Option<&Value>,
@@ -821,8 +771,7 @@ fn evaluate_manual_selection(
 }
 
 /// Bridges [`evaluate_manual_selection`] into a [`Worker`], registered under
-/// `{agent_name}_process_selection` — matching python's `_register_manual_selection_worker`/
-/// `ProcessSelectionEntry`.
+/// `{agent_name}_process_selection`.
 struct ManualSelectionWorker {
     task_name: String,
     name_to_idx: std::collections::HashMap<String, String>,
@@ -843,11 +792,7 @@ impl Worker for ManualSelectionWorker {
     }
 }
 
-/// Merge an `AgentRuntime::start`/`run` caller's `input` into `payload`'s top level, in the
-/// shape the server's `AgentStartRequest` DTO actually has (`prompt`/`media`/`context`/
-/// `sessionId` — there is no generic `input` field). See [`AgentRuntime::start`] for the exact
-/// rules.
-/// Extract the `executionId`/`execution_id` field a `/agent/start` response carries, or a
+/// Extracts the `executionId`/`execution_id` field a `/agent/start` response carries, or a
 /// descriptive error if the response has neither.
 fn extract_execution_id(response: &Value) -> Result<String> {
     response
@@ -862,9 +807,9 @@ fn extract_execution_id(response: &Value) -> Result<String> {
         })
 }
 
-/// Build the `{"framework": ..., "rawConfig": ...}` request-body shape the server's
-/// `AgentStartRequest` accepts as an alternative to `agentConfig` — shared by
-/// `compile_framework`/`deploy_framework`/`start_framework`.
+/// Builds the `{"framework": ..., "rawConfig": ...}` request-body shape the server accepts as an
+/// alternative to `agentConfig` — shared by `compile_framework`/`deploy_framework`/
+/// `start_framework`.
 fn framework_payload(framework: impl Into<String>, raw_config: Value) -> Value {
     serde_json::json!({
         "framework": framework.into(),
@@ -872,6 +817,9 @@ fn framework_payload(framework: impl Into<String>, raw_config: Value) -> Value {
     })
 }
 
+/// Merges an `AgentRuntime::start`/`run` caller's `input` into `payload`'s top level
+/// (`prompt`/`media`/`context`/`sessionId`) — there is no generic `input` field on the wire DTO.
+/// See [`AgentRuntime::start`] for the exact rules.
 fn merge_start_input(payload: &mut Map<String, Value>, input: Value) {
     const RECOGNIZED_KEYS: [&str; 5] = ["prompt", "media", "context", "sessionId", "static_plan"];
 
@@ -916,9 +864,8 @@ fn merge_start_input(payload: &mut Map<String, Value>, input: Value) {
 /// [`AgentDef`]s against a Conductor server.
 ///
 /// Owns one [`AgentClient`] (the `/agent/*` control-plane transport) and one [`TaskHandler`]
-/// (this crate's existing worker-polling machinery) — [`AgentRuntime::serve`] registers each
-/// [`AgentDef`]'s locally-invoked tools onto that same `TaskHandler` rather than running a second
-/// polling loop, per `docs/agents/README.md`.
+/// — [`AgentRuntime::serve`] registers each [`AgentDef`]'s locally-invoked tools onto that same
+/// `TaskHandler` rather than running a second polling loop.
 pub struct AgentRuntime {
     agent_client: AgentClient,
     task_handler: TaskHandler,
@@ -943,11 +890,9 @@ impl AgentRuntime {
     }
 
     /// Access the underlying [`TaskHandler`] that [`AgentRuntime::serve`]/[`AgentRuntime::resume`]
-    /// register local tool workers onto.
-    ///
-    /// The main current use is calling [`TaskHandler::verify_workers_started`] right after
-    /// `serve`/`resume` returns, to confirm every worker actually started polling before
-    /// proceeding -- e.g. before handing out a URL/webhook that assumes the agent is ready.
+    /// register local tool workers onto. Useful for calling
+    /// [`TaskHandler::verify_workers_started`] after `serve`/`resume` returns, to confirm every
+    /// worker actually started polling before proceeding.
     #[must_use]
     pub fn task_handler(&self) -> &TaskHandler {
         &self.task_handler
@@ -955,9 +900,9 @@ impl AgentRuntime {
 
     /// Compile an [`AgentDef`] into a Conductor workflow, without deploying it.
     ///
-    /// Serializes `agent` via [`AgentConfigSerializer::serialize`] and wraps it in the
-    /// `{"agentConfig": ...}` envelope the server's `AgentStartRequest` DTO requires (matching
-    /// python-sdk's `_compile_via_server`), then POSTs it via [`AgentClient::compile_agent`].
+    /// Serializes `agent` via [`AgentConfigSerializer::serialize`], wraps it in the
+    /// `{"agentConfig": ...}` envelope the server's `AgentStartRequest` DTO requires, and POSTs
+    /// it via [`AgentClient::compile_agent`].
     ///
     /// # Errors
     ///
@@ -983,14 +928,9 @@ impl AgentRuntime {
         self.agent_client.deploy_agent(&payload).await
     }
 
-    /// [`AgentRuntime::deploy`], then reconcile the agent's cron schedules in the same call --
-    /// matches python's `deploy(agent, schedules=...)`.
+    /// [`AgentRuntime::deploy`], then reconcile the agent's cron schedules in the same call.
     ///
-    /// Unlike python, this crate's `deploy` only ever takes one agent (see its doc comment), so
-    /// python's runtime check that `schedules` requires "exactly one agent" has no equivalent
-    /// here -- the signature already guarantees it.
-    ///
-    /// `schedules` follows the same tri-state contract as python's `deploy(..., schedules=...)`:
+    /// `schedules` follows a tri-state contract:
     /// - `None`: leave this agent's existing schedules untouched (the default -- this method
     ///   behaves exactly like [`AgentRuntime::deploy`] if you never pass anything else).
     /// - `Some(&[])`: delete every schedule currently registered for this agent.
@@ -1020,9 +960,8 @@ impl AgentRuntime {
     /// Start an agent execution without blocking for completion.
     ///
     /// Serializes `agent`, merges `input` into the top-level `AgentStartRequest` fields the
-    /// server expects (`prompt`/`media`/`context`/`sessionId`/`static_plan` — there is no
-    /// generic `input` field on that DTO), and wraps the `executionId` the response carries in an
-    /// [`AgentHandle`]. `input` may be:
+    /// server expects (`prompt`/`media`/`context`/`sessionId`/`static_plan`), and wraps the
+    /// `executionId` the response carries in an [`AgentHandle`]. `input` may be:
     /// - a plain string, used as `prompt` directly;
     /// - an object already shaped like the extra fields (e.g. `json!({"prompt": "...", "context":
     ///   {...}})`) — recognized keys (`prompt`, `media`, `context`, `sessionId`/`session_id`,
@@ -1063,21 +1002,13 @@ impl AgentRuntime {
 
     /// Compile a foreign-framework agent, given its already-serialized `raw_config` (e.g. the
     /// output of a framework-specific serializer) — the `{"framework": ..., "rawConfig": ...}`
-    /// shape `AgentStartRequest` accepts as an alternative to `agentConfig`, matching python's
-    /// `_deploy_via_server(agent, framework=framework)`'s framework branch (same shape, shared
-    /// across compile/deploy/start there too).
+    /// shape `AgentStartRequest` accepts as an alternative to `agentConfig`.
     ///
-    /// `framework` must name a normalizer the server actually has registered (confirmed by
-    /// reading the server's `NormalizerRegistry`/`*Normalizer` implementations directly, not
-    /// assumed) — e.g. `"openai"`, `"google_adk"`, `"langgraph"`, `"langchain"`, `"skill"`.
-    /// **This crate has no serializer that produces a *correct* `raw_config` for any of them
-    /// yet** — [`super::graph::GraphAgentDef`] in particular does **not** produce the shape
-    /// `"langgraph"`'s normalizer expects (confirmed by reading `LangGraphNormalizer.java`: it
-    /// needs a nested `_graph` key with `snake_case` `nodes`/`edges`/`conditional_edges` and
-    /// `_worker_ref`/`_llm_node`/`_human_node`-style per-node markers, not `GraphAgentDef`'s
-    /// current `{name, nodes, edges, conditionalEdges}` shape). Callers must build `raw_config`
-    /// themselves, matching whatever normalizer they're targeting, until a real serializer for
-    /// one exists.
+    /// `framework` must name a normalizer the server actually has registered — e.g. `"openai"`,
+    /// `"google_adk"`, `"langgraph"`, `"langchain"`, `"skill"`. This crate does not build a
+    /// correct `raw_config` for any of these itself ([`super::graph::GraphAgentDef`] included);
+    /// callers must build `raw_config` themselves, matching whatever normalizer they're
+    /// targeting.
     ///
     /// # Errors
     ///
@@ -1150,57 +1081,40 @@ impl AgentRuntime {
             .await
     }
 
-    /// Register every locally-invoked tool on `agent` (i.e. every [`ToolDef`] whose `handler` is
-    /// `Some`) as a worker on this runtime's [`TaskHandler`], plus:
+    /// Registers every locally-invoked tool on `agent` (i.e. every [`ToolDef`] whose `handler`
+    /// is `Some`) as a worker on this runtime's [`TaskHandler`], plus:
     /// - a `{name}_stop_when` worker if [`AgentDef::stop_when`] is set;
     /// - a `{name}_termination` worker if [`AgentDef::termination`] is set;
     /// - a `{name}_{position}` worker for each of the six `CallbackPosition`s, if
     ///   [`AgentDef::callbacks`] is non-empty;
     /// - one worker per custom-function [`Guardrail`] in [`AgentDef::guardrails`] *or* any
-    ///   [`ToolDef::guardrails`] on `agent.tools` (i.e. every guardrail whose wire
-    ///   `guardrailType` is `"custom"` — [`RegexGuardrail`](super::guardrail::RegexGuardrail)/
+    ///   [`ToolDef::guardrails`] on `agent.tools` (guardrails whose wire `guardrailType` is
+    ///   `"custom"` — [`RegexGuardrail`](super::guardrail::RegexGuardrail)/
     ///   [`LlmGuardrail`](super::guardrail::LlmGuardrail) are evaluated natively by the server
-    ///   and need no worker), registered under the guardrail's own name, matching python's
-    ///   `_register_single_guardrail_worker` (called from both the agent-level and the
-    ///   per-tool registration loops);
+    ///   and need no worker), registered under the guardrail's own name;
     /// - a `{name}_gate` worker if [`AgentDef::gate`] is the callable
     ///   [`super::def::GateCondition::Callable`] shape (the declarative
     ///   [`super::def::GateCondition::Text`] shape needs none — it's compiled entirely
     ///   server-side);
     /// - a `{name}_check_transfer` worker plus one no-op `{name}_transfer_to_{sub}` tool per
-    ///   sub-agent, for a *hybrid* agent (has both its own [`ToolDef`]s and sub-[`AgentDef`]s),
-    ///   matching python's `_register_check_transfer_worker`/`_register_hybrid_transfer_workers`;
+    ///   sub-agent, for a *hybrid* agent (has both its own [`ToolDef`]s and sub-[`AgentDef`]s);
     /// - a `{name}_handoff_check` worker if [`AgentDef::swarm_transitions`] is non-empty or
-    ///   `strategy` is [`Strategy::Swarm`](super::def::Strategy::Swarm) with sub-agents, matching
-    ///   python's `_register_handoff_worker`;
+    ///   `strategy` is [`Strategy::Swarm`](super::def::Strategy::Swarm) with sub-agents;
     /// - for `strategy = Swarm`: an all-pairs `{source}_transfer_to_{target}` no-op (or, when
     ///   [`AgentDef::allowed_transitions`] makes a target unreachable, error-returning) tool per
     ///   ordered agent pair, plus a `{name}_check_transfer` worker for the parent *and* every
-    ///   sub-agent, matching python's `_register_swarm_transfer_workers`;
-    /// - a `{name}_process_selection` worker for `strategy = Manual` with sub-agents, matching
-    ///   python's `_register_manual_selection_worker`;
+    ///   sub-agent;
+    /// - a `{name}_process_selection` worker for `strategy = Manual` with sub-agents;
     ///
-    /// then start polling.
+    /// then starts polling.
     ///
     /// Server-side tools (`http`/`mcp`/`agent_tool`/`human`) need no local worker and are
-    /// skipped. **Not yet registered here, for reasons recorded in the parity audit rather than
-    /// left unexplained:**
-    /// - The function-based router worker (python's `_register_router_worker`) — deferred.
-    ///   [`AgentDef::router`] only models the agent-based router shape (see its own doc
-    ///   comment); adding the callable shape would mean restructuring that field into an enum
-    ///   the same way [`super::def::GateCondition`] restructured `gate`, which is a
-    ///   disproportionate change for the smallest-value piece of this worker-registration
-    ///   batch — the common agent-based router case already needs no worker at all (the server
-    ///   evaluates it natively).
+    /// skipped. The function-based router worker is not yet registered here.
     ///
     /// Recurses into every sub-agent in [`AgentDef::agents`] and registers the same set of
-    /// workers for each of them too, matching python's `_register_workers`, whose last step is
-    /// exactly this recursion (`for sub in agent.agents: ... self._register_workers(sub, ...)`)
-    /// — every handoff/swarm/hierarchical/parallel/sequential sub-agent's own tools need a
-    /// locally-invoked worker just as much as the top-level agent's do. Unlike python, this
-    /// crate has no notion of an "external" (already-deployed-elsewhere) sub-agent to skip —
-    /// [`AgentDef`] doesn't model that concept yet — so every sub-agent is recursed into
-    /// unconditionally.
+    /// workers for each of them too — every handoff/swarm/hierarchical/parallel/sequential
+    /// sub-agent's own tools need a locally-invoked worker just as much as the top-level agent's
+    /// do.
     ///
     /// Registers workers and spawns their polling loops in the background, then returns --
     /// [`TaskHandler::start`] only blocks long enough to register/spawn, not for the runners'
@@ -1227,14 +1141,6 @@ impl AgentRuntime {
     /// register duplicate workers for the same task types, exactly as calling `serve` itself
     /// twice would.
     ///
-    /// Narrower than python-sdk's `AgentRuntime.resume`: python extracts the execution's
-    /// per-run worker domain from its `taskToDomain` mapping and re-registers workers scoped to
-    /// that domain, because each stateful python execution gets a random per-run domain. This
-    /// crate's worker registration (`register_agent_workers`) has no equivalent per-execution
-    /// domain concept at all -- workers are always registered by task-type name alone, shared
-    /// across every concurrent execution of the same agent -- so there is no domain to extract
-    /// or re-apply here.
-    ///
     /// # Errors
     ///
     /// Returns [`crate::error::ConductorError::Worker`] if `agent` (and its sub-agent tree)
@@ -1258,9 +1164,8 @@ impl AgentRuntime {
                 self.task_handler.add_worker(worker);
             }
             // Tool-level custom-function guardrails get the same single-guardrail-worker
-            // registration as agent-level ones, matching python's tool-registration loop in
-            // `_register_workers` (registered under the guardrail's own name, independent of
-            // the owning agent).
+            // registration as agent-level ones (registered under the guardrail's own name,
+            // independent of the owning agent).
             for guardrail in &tool.guardrails {
                 if is_custom_function_guardrail(guardrail) {
                     self.task_handler.add_worker(GuardrailWorker {
@@ -1307,8 +1212,7 @@ impl AgentRuntime {
             });
         }
         // Hybrid handoff: an agent with both its own tools and sub-agents gets a check_transfer
-        // worker plus one no-op transfer tool per sub-agent — matches python's
-        // `_register_check_transfer_worker`/`_register_hybrid_transfer_workers`.
+        // worker plus one no-op transfer tool per sub-agent.
         if !agent.tools.is_empty() && !agent.agents.is_empty() {
             self.task_handler.add_worker(CheckTransferWorker {
                 task_name: format!("{sanitized_name}_check_transfer"),
@@ -1323,8 +1227,7 @@ impl AgentRuntime {
             }
         }
         // Handoff check — needed for any Swarm parent (server always generates the task) or
-        // any agent with explicit condition-based handoffs, matching python's
-        // `_register_handoff_worker` trigger condition.
+        // any agent with explicit condition-based handoffs.
         if !agent.swarm_transitions.is_empty()
             || (agent.strategy == super::def::Strategy::Swarm && !agent.agents.is_empty())
         {
@@ -1347,9 +1250,7 @@ impl AgentRuntime {
             });
         }
         // Swarm transfer tools: every agent in the swarm gets a transfer tool for every peer,
-        // plus its own check_transfer worker — matches python's
-        // `_register_swarm_transfer_workers` (with the `allowed_transitions`-unreachable
-        // variant) and the per-sub-agent `_register_check_transfer_worker` calls in "7b.".
+        // plus its own check_transfer worker.
         if agent.strategy == super::def::Strategy::Swarm && !agent.agents.is_empty() {
             let allowed = &agent.allowed_transitions;
             let valid_targets: std::collections::HashSet<&str> =
@@ -1392,8 +1293,7 @@ impl AgentRuntime {
                 });
             }
         }
-        // Manual selection — matches python's `_register_manual_selection_worker` trigger
-        // condition.
+        // Manual selection worker, registered when the strategy is Manual with sub-agents.
         if agent.strategy == super::def::Strategy::Manual && !agent.agents.is_empty() {
             let name_to_idx: std::collections::HashMap<String, String> = agent
                 .agents
@@ -1414,11 +1314,8 @@ impl AgentRuntime {
     /// Register every locally-invoked tool in `tools` (i.e. every [`ToolDef`] whose `handler` is
     /// `Some`) as a worker, then start polling — the same tool-registration half of
     /// [`AgentRuntime::serve`], exposed standalone for agent shapes that don't have an
-    /// [`AgentDef`] to walk. `super::skill`'s framework-marker skill agents are the motivating
-    /// case: their tools are locally-built worker functions (`ScriptRunner`/`SkillFileReader`
-    /// equivalents), not an `AgentDef.tools` list, since the agent itself compiles via
-    /// [`AgentRuntime::compile_framework`]/[`AgentRuntime::deploy_framework`] rather than the
-    /// normal `AgentDef` tree.
+    /// [`AgentDef`] to walk (e.g. framework-marker skill agents whose tools aren't an
+    /// `AgentDef.tools` list).
     ///
     /// # Errors
     ///
@@ -1480,11 +1377,8 @@ mod tests {
         // to drain against a mock server this test never registered a poll response on.
     }
 
-    /// `compile()`/`deploy()`/`start()` all build their outgoing payload around
-    /// `AgentConfigSerializer::serialize` under a top-level `agentConfig` key — this asserts on
-    /// that inner shape, since actually calling `compile()` would require a live server. See
-    /// `test_compile_and_deploy_wrap_payload_in_agent_config_envelope` for the envelope itself,
-    /// which is what a real server's `AgentStartRequest` DTO actually requires.
+    /// Asserts the inner `AgentConfigSerializer::serialize` shape that `compile()`/`deploy()`/
+    /// `start()` all wrap under `agentConfig`.
     #[test]
     fn test_compile_payload_matches_agent_config_serializer_shape() {
         let agent = AgentDef::new("compiler_test")
@@ -1505,11 +1399,9 @@ mod tests {
         assert_eq!(obj.get("external"), Some(&Value::Bool(false)));
     }
 
-    /// Regression test for the bug this audit found: `compile()`/`deploy()` used to POST
-    /// `AgentConfigSerializer::serialize(agent)` directly as the request body. The server's
-    /// `AgentStartRequest` DTO requires it nested under `agentConfig` — confirmed against a real
-    /// server, which rejected the unwrapped shape with `400 "agentConfig is required when
-    /// framework is not specified"`.
+    /// Regression test: `compile()`/`deploy()` must nest the serialized agent under
+    /// `agentConfig` in the request body, since the server's `AgentStartRequest` DTO requires
+    /// it there.
     #[test]
     fn test_compile_and_deploy_wrap_payload_in_agent_config_envelope() {
         let agent = AgentDef::new("envelope_test")
@@ -1844,8 +1736,8 @@ mod tests {
         let WorkerOutput::Completed(map) = output else {
             panic!("expected Completed")
         };
-        // An object-shaped tool return becomes the task output directly (matching python's
-        // `isinstance(result, dict)` branch), not nested under a "result" key.
+        // An object-shaped tool return becomes the task output directly, not nested under a
+        // "result" key.
         assert!(!map.contains_key("_agent_state"));
         assert_eq!(map.get("n"), Some(&Value::from(1)));
     }
@@ -1934,9 +1826,8 @@ mod tests {
         }
     }
 
-    /// Regression test for python's exact fail-open behavior: a predicate `Err` must not stop
-    /// the agent loop (`StopWhenEntry.__call__`'s `except Exception` branch returns
-    /// `{"should_continue": True}`, not a task failure).
+    /// A predicate `Err` must not stop the agent loop: it fails open
+    /// (`{"should_continue": true}`), not as a task failure.
     #[tokio::test]
     async fn test_stop_when_worker_fails_open_on_predicate_error() {
         let agent = AgentDef::new("agent")
@@ -1965,9 +1856,8 @@ mod tests {
             });
         let worker = stop_when_worker(agent.stop_when.clone().unwrap());
 
-        // No result/messages/iteration set on the task -- worker must supply defaults matching
-        // python's `StopWhenEntry.__call__` signature defaults (`result: object = ""`,
-        // `iteration: int = 0`, `messages: object = None` normalized to `[]`).
+        // No result/messages/iteration set on the task -- worker must supply defaults
+        // (`result: ""`, `iteration: 0`, `messages: []`).
         worker.execute(&Task::default()).await.unwrap();
     }
 
@@ -2107,9 +1997,8 @@ mod tests {
 
     #[test]
     fn test_register_agent_workers_recurses_into_sub_agents() {
-        // Matches python's `_register_workers`, whose last step recurses into `agent.agents` —
-        // a handoff/swarm/hierarchical parent's sub-agents' own tools need local workers just
-        // as much as the parent's do. `register_agent_workers` (unlike `serve`, which blocks
+        // A handoff/swarm/hierarchical parent's sub-agents' own tools need local workers just as
+        // much as the parent's do. `register_agent_workers` (unlike `serve`, which blocks
         // forever polling) doesn't start polling, so it's directly testable here.
         let config = Configuration::new("http://localhost:8080/api");
         let mut runtime = AgentRuntime::new(config).unwrap();
