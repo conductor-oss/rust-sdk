@@ -1,11 +1,11 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Worker stall detection for [`super::AgentHandle::join`].
-//!
-//! Scans a workflow for `SCHEDULED` tasks with zero polls that have sat past a stall threshold.
-//! The check is workflow-scoped: a positive is a reliable signal that some worker is missing,
-//! but it can't pin the stall to a specific local worker.
+// Worker stall detection for super::AgentHandle::join.
+//
+// Scans a workflow for SCHEDULED tasks with zero polls that have sat past a stall threshold.
+// The check is workflow-scoped: a positive is a reliable signal that some worker is missing,
+// but it can't pin the stall to a specific local worker.
 
 use std::collections::HashSet;
 
@@ -24,9 +24,9 @@ pub enum StallPolicy {
     Raise,
 }
 
-/// Scan `workflow`'s tasks for ones stuck `SCHEDULED` with no poller for at least
-/// `stall_seconds`, skipping any `task_id` already in `seen`. Newly-found stalls are added to
-/// `seen` before returning.
+// Scan workflow's tasks for ones stuck SCHEDULED with no poller for at least
+// stall_seconds, skipping any task_id already in seen. Newly-found stalls are added to
+// seen before returning.
 pub(super) fn find_new_stalls(
     workflow: &Workflow,
     stall_seconds: f64,

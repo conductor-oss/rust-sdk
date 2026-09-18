@@ -1,10 +1,10 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! MCP tool discovery — discovers individual tools from a live MCP server at compile time.
-//!
-//! Not wired into the runtime automatically: call [`discover_mcp_tools`]/[`expand_mcp_tool_def`]
-//! explicitly before handing tools to [`super::AgentDef::with_tool`].
+// MCP tool discovery — discovers individual tools from a live MCP server at compile time.
+//
+// Not wired into the runtime automatically: call discover_mcp_tools/expand_mcp_tool_def
+// explicitly before handing tools to super::AgentDef::with_tool.
 
 use std::collections::HashMap;
 use std::sync::Mutex;

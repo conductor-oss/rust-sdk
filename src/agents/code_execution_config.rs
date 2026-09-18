@@ -1,16 +1,16 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! First-class code execution configuration for agents.
-//!
-//! [`CodeExecutionConfig`] declares whether/how an agent may run LLM-written code; when attached
-//! via [`super::AgentDef::with_code_execution`], an `execute_code` tool backed by a local handler
-//! is appended to the agent's tool list automatically.
-//!
-//! [`ConfiguredExecutor::Local`] rebuilds a fresh [`LocalCodeExecutor`] on every call using the
-//! LLM-selected language; [`ConfiguredExecutor::Custom`] uses a fixed executor as-is regardless
-//! of the selected language. Validation failures (disallowed language/command) are retryable
-//! errors, not terminal.
+// First-class code execution configuration for agents.
+//
+// CodeExecutionConfig declares whether/how an agent may run LLM-written code; when attached
+// via super::AgentDef::with_code_execution, an `execute_code` tool backed by a local handler
+// is appended to the agent's tool list automatically.
+//
+// ConfiguredExecutor::Local rebuilds a fresh LocalCodeExecutor on every call using the
+// LLM-selected language; ConfiguredExecutor::Custom uses a fixed executor as-is regardless
+// of the selected language. Validation failures (disallowed language/command) are retryable
+// errors, not terminal.
 
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -280,7 +280,7 @@ fn is_json_falsy(value: Option<&Value>) -> bool {
     }
 }
 
-/// Run one code-execution call per `config`.
+// Run one code-execution call per `config`.
 async fn run_code_execution(config: &CodeExecutionConfig, args: Value) -> Result<Value> {
     let code_arg = args.get("code");
     if is_json_falsy(code_arg) {
@@ -352,7 +352,7 @@ async fn run_code_execution(config: &CodeExecutionConfig, args: Value) -> Result
     }
 }
 
-/// Build the auto-attached `execute_code` tool for `config`.
+// Build the auto-attached `execute_code` tool for `config`.
 pub(super) fn code_execution_tool(
     config: &CodeExecutionConfig,
     agent_name: Option<&str>,

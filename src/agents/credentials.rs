@@ -1,12 +1,12 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Resolved tool/agent credentials, read inside a tool body.
-//!
-//! [`Credentials::from_task`] builds a read-only view over the values the Conductor server
-//! attached to a [`crate::models::Task`]'s `runtime_metadata`; [`Credentials::get`] reads it,
-//! failing closed on a declared name the server didn't attach. Credentials never fall back to
-//! env vars, and there's no accessor that returns every value at once.
+// Resolved tool/agent credentials, read inside a tool body.
+//
+// Credentials::from_task builds a read-only view over the values the Conductor server
+// attached to a crate::models::Task's runtime_metadata; Credentials::get reads it,
+// failing closed on a declared name the server didn't attach. Credentials never fall back to
+// env vars, and there's no accessor that returns every value at once.
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -1,11 +1,11 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Code executors — sandboxed environments for running LLM-generated code.
-//!
-//! - [`LocalCodeExecutor`] — runs code in a local subprocess (no sandbox).
-//! - [`DockerCodeExecutor`] — runs code inside a Docker container.
-//! - [`ServerlessCodeExecutor`] — POSTs code to a remote execution HTTP endpoint.
+// Code executors — sandboxed environments for running LLM-generated code.
+//
+// - LocalCodeExecutor — runs code in a local subprocess (no sandbox).
+// - DockerCodeExecutor — runs code inside a Docker container.
+// - ServerlessCodeExecutor — POSTs code to a remote execution HTTP endpoint.
 
 use std::collections::HashMap;
 use std::process::Stdio;

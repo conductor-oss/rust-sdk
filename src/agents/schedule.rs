@@ -1,10 +1,10 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Cron schedules for agents, wired through [`super::AgentRuntime::deploy_with_schedules`].
-//!
-//! [`Schedule`] is what a caller declares; [`ScheduleInfo`] is what the server reports back.
-//! [`reconcile`] applies the tri-state semantics `deploy_with_schedules` documents.
+// Cron schedules for agents, wired through `super::AgentRuntime::deploy_with_schedules`.
+//
+// `Schedule` is what a caller declares; `ScheduleInfo` is what the server reports back.
+// `reconcile` applies the tri-state semantics `deploy_with_schedules` documents.
 
 use std::collections::{HashMap, HashSet};
 
@@ -119,7 +119,7 @@ impl Schedule {
         self
     }
 
-    /// Checks that `start_at < end_at` when both are set.
+    // Checks that `start_at < end_at` when both are set.
     fn validate(&self) -> Result<()> {
         if let (Some(start), Some(end)) = (self.start_at, self.end_at) {
             if start >= end {
@@ -234,20 +234,18 @@ pub async fn list_schedules(
         .collect())
 }
 
-/// Apply the declarative tri-state semantics [`super::AgentRuntime::deploy_with_schedules`]
-/// documents:
-///
-/// - `desired` is `None`: no-op, existing schedules for `agent_name` are left untouched.
-/// - `desired` is `Some(&[])`: every schedule for `agent_name` is deleted.
-/// - `desired` is `Some(non-empty)`: each listed schedule is upserted; any existing schedule for
-///   `agent_name` *not* in the list is deleted (pruned).
-///
-/// # Errors
-///
-/// Returns [`ConductorError::Agent`] if `desired` has duplicate [`Schedule::name`]s, if any
-/// schedule fails its own [`Schedule::validate`] check, or any of the transport/server errors
-/// [`SchedulerClient::save_schedule`]/[`SchedulerClient::delete_schedule`]/
-/// [`SchedulerClient::get_all_schedules`] return.
+// Apply the declarative tri-state semantics `super::AgentRuntime::deploy_with_schedules`
+// documents:
+//
+// - `desired` is `None`: no-op, existing schedules for `agent_name` are left untouched.
+// - `desired` is `Some(&[])`: every schedule for `agent_name` is deleted.
+// - `desired` is `Some(non-empty)`: each listed schedule is upserted; any existing schedule for
+//   `agent_name` *not* in the list is deleted (pruned).
+//
+// Errors: returns `ConductorError::Agent` if `desired` has duplicate `Schedule::name`s, if any
+// schedule fails its own `Schedule::validate` check, or any of the transport/server errors
+// `SchedulerClient::save_schedule`/`SchedulerClient::delete_schedule`/
+// `SchedulerClient::get_all_schedules` return.
 pub async fn reconcile(
     scheduler: &SchedulerClient,
     agent_name: &str,

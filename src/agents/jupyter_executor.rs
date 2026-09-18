@@ -1,23 +1,18 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! `JupyterCodeExecutor` — stateful code execution against a real Jupyter kernel.
-//! Feature-gated behind the `jupyter` Cargo feature.
-//!
-//! # Caveat
-//!
-//! The socket-level kernel round trip (spawn, connect over ZeroMQ, execute, read back results)
-//! has not been exercised against a real kernel; only kernelspec lookup, connection-file shape,
-//! HMAC-SHA256 signing, and message framing/parsing are covered by tests. Treat this as
-//! best-effort pending real-world verification.
-//!
-//! # Wire protocol
-//!
-//! A Jupyter kernel exposes 5 `ZeroMQ` sockets; this client uses only shell (DEALER, for
-//! `execute_request`) and iopub (SUB, for streamed output). Each message is a multipart
-//! `ZeroMQ` message `[b"<IDS|MSG>", hmac_signature, header_json, parent_header_json,
-//! metadata_json, content_json]`, signed with HMAC-SHA256 over the four JSON frames (empty
-//! signature if the connection file's `key` is empty).
+// JupyterCodeExecutor — stateful code execution against a real Jupyter kernel.
+// Feature-gated behind the `jupyter` Cargo feature.
+//
+// Caveat: the socket-level kernel round trip (spawn, connect over ZeroMQ, execute, read back
+// results) has not been exercised against a real kernel; only kernelspec lookup,
+// connection-file shape, HMAC-SHA256 signing, and message framing/parsing are covered by tests.
+//
+// Wire protocol: a Jupyter kernel exposes 5 ZeroMQ sockets; this client uses only shell
+// (DEALER, for execute_request) and iopub (SUB, for streamed output). Each message is a
+// multipart ZeroMQ message [b"<IDS|MSG>", hmac_signature, header_json, parent_header_json,
+// metadata_json, content_json], signed with HMAC-SHA256 over the four JSON frames (empty
+// signature if the connection file's `key` is empty).
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -51,8 +46,8 @@ fn to_hex(bytes: &[u8]) -> String {
     })
 }
 
-/// HMAC-SHA256 signature over the four JSON frames, per the Jupyter wire protocol's
-/// `hmac-sha256` scheme. An empty `key` means "unsigned" and returns an empty signature string.
+// HMAC-SHA256 signature over the four JSON frames, per the Jupyter wire protocol's
+// hmac-sha256 scheme. An empty `key` means "unsigned" and returns an empty signature string.
 fn sign(key: &str, parts: [&[u8]; 4]) -> String {
     if key.is_empty() {
         return String::new();
@@ -68,13 +63,13 @@ fn sign(key: &str, parts: [&[u8]; 4]) -> String {
     to_hex(&mac.finalize().into_bytes())
 }
 
-/// A Jupyter kernelspec's launch command, read from a `kernel.json` file.
+// A Jupyter kernelspec's launch command, read from a kernel.json file.
 #[derive(Debug, Clone, PartialEq)]
 struct KernelSpec {
     argv: Vec<String>,
 }
 
-/// Standard Jupyter kernelspec search directories across platforms (a fixed, best-effort list).
+// Standard Jupyter kernelspec search directories across platforms (a fixed, best-effort list).
 fn kernelspec_search_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(jupyter_path) = std::env::var("JUPYTER_PATH") {
@@ -135,8 +130,8 @@ fn free_port() -> std::io::Result<u16> {
     Ok(listener.local_addr()?.port())
 }
 
-/// A kernel connection file's contents (`shell_port`, `iopub_port`, ..., `key`,
-/// `signature_scheme`, `kernel_name`).
+// A kernel connection file's contents (shell_port, iopub_port, ..., key,
+// signature_scheme, kernel_name).
 #[derive(Debug, Clone)]
 struct ConnectionInfo {
     shell_port: u16,
@@ -181,7 +176,7 @@ impl ConnectionInfo {
     }
 }
 
-/// One decoded Jupyter message's four JSON frames.
+// One decoded Jupyter message's four JSON frames.
 struct DecodedMessage {
     header: Value,
     parent_header: Value,
@@ -236,9 +231,9 @@ fn encode_message(key: &str, message: &Value) -> Result<ZmqMessage> {
     Ok(zmq_message)
 }
 
-/// Decode a received multipart message, scanning for the `<IDS|MSG>` delimiter rather than
-/// assuming a fixed frame count — a DEALER/SUB socket may or may not see a leading
-/// ROUTER-identity frame first.
+// Decode a received multipart message, scanning for the <IDS|MSG> delimiter rather than
+// assuming a fixed frame count — a DEALER/SUB socket may or may not see a leading
+// ROUTER-identity frame first.
 fn decode_message(raw: ZmqMessage) -> Option<DecodedMessage> {
     let frames = raw.into_vec();
     let delimiter_idx = frames.iter().position(|f| f.as_ref() == DELIMITER)?;
@@ -351,9 +346,9 @@ impl JupyterConnection {
         Ok(msg_id)
     }
 
-    /// Poll iopub until the kernel reports `idle` for this request or `timeout_duration`
-    /// elapses. Returns `(output, error, timed_out_with_nothing_captured)` — a timeout after
-    /// some output was already captured still returns that output normally.
+    // Poll iopub until the kernel reports idle for this request or timeout_duration
+    // elapses. Returns (output, error, timed_out_with_nothing_captured) — a timeout after
+    // some output was already captured still returns that output normally.
     async fn poll_until_idle(
         &mut self,
         msg_id: &str,

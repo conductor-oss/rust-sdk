@@ -562,8 +562,8 @@ mod tests {
         );
     }
 
-    /// Nested And/Or composition: (`TextMention` OR `StopMessage`) AND `MaxMessage`, built
-    /// directly rather than via operator-flattening.
+    // Nested And/Or composition: (TextMention OR StopMessage) AND MaxMessage, built
+    // directly rather than via operator-flattening.
     #[test]
     fn test_nested_and_or_composition() {
         let inner_or = TerminationCondition::or(vec![

@@ -1,19 +1,19 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Typed plan builders for `Strategy::PlanExecute`.
-//!
-//! These types produce the JSON shape PAC (the server's `PLAN_AND_COMPILE` task) consumes —
-//! construct a [`Plan`] in Rust instead of hand-building the JSON, then hand its
-//! [`Plan::to_value`] to [`AgentRuntime::start`](super::runtime::AgentRuntime::start) as the
-//! `static_plan` field to skip the planner LLM and run a fully deterministic pipeline.
-//!
-//! Embed a [`Ref`] anywhere a [`serde_json::Value`] is expected via [`Ref::to_value`] (or
-//! `From<Ref> for Value`), e.g. `json!({"document": my_ref.to_value()})`.
-//!
-//! [`Op`]'s `args`/`generate` are mutually exclusive, modeled as an enum
-//! ([`OpBody::Args`]/[`OpBody::Generate`]) so the invalid state is unrepresentable —
-//! [`Op::with_args`]/[`Op::with_generate`] are the only constructors.
+// Typed plan builders for `Strategy::PlanExecute`.
+//
+// These types produce the JSON shape PAC (the server's `PLAN_AND_COMPILE` task) consumes —
+// construct a `Plan` in Rust instead of hand-building the JSON, then hand its
+// `Plan::to_value` to `AgentRuntime::start` (super::runtime::AgentRuntime::start) as the
+// `static_plan` field to skip the planner LLM and run a fully deterministic pipeline.
+//
+// Embed a `Ref` anywhere a `serde_json::Value` is expected via `Ref::to_value` (or
+// `From<Ref> for Value`), e.g. `json!({"document": my_ref.to_value()})`.
+//
+// `Op`'s `args`/`generate` are mutually exclusive, modeled as an enum
+// (`OpBody::Args`/`OpBody::Generate`) so the invalid state is unrepresentable —
+// `Op::with_args`/`Op::with_generate` are the only constructors.
 
 use serde_json::{Map, Value};
 

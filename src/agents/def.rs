@@ -57,10 +57,9 @@ impl Strategy {
     }
 }
 
-/// Structured-output typing for an agent's final response. The caller supplies both the schema
-/// (generate one via
-/// [`crate::schema::generate_schema::<T>(true)`](crate::schema::generate_schema) for a type `T`
-/// implementing `JsonSchema`) and `T`'s name as `class_name`.
+// Structured-output typing for an agent's final response. The caller supplies both the schema
+// (generate one via `crate::schema::generate_schema::<T>(true)` for a type `T`
+// implementing `JsonSchema`) and `T`'s name as `class_name`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutputType {
     pub schema: Value,
@@ -877,14 +876,14 @@ fn is_valid_agent_name(name: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-/// Sanitize an agent name for use in a derived task/reference name (`{name}_stop_when`,
-/// `{name}_termination`, `{name}_{position}`, etc.).
-///
-/// `AgentDef::new`'s own name regex allows hyphens, but the Conductor server replaces `-` with
-/// `_` wherever it derives a task/reference name from an agent name. Every worker-name and
-/// wire-reference construction site in this module/`serializer.rs` that derives a name from
-/// `agent.name` must go through this function, or its registered task name silently never
-/// matches what the compiled workflow actually polls for.
+// Sanitize an agent name for use in a derived task/reference name (`{name}_stop_when`,
+// `{name}_termination`, `{name}_{position}`, etc.).
+//
+// `AgentDef::new`'s own name regex allows hyphens, but the Conductor server replaces `-` with
+// `_` wherever it derives a task/reference name from an agent name. Every worker-name and
+// wire-reference construction site in this module/`serializer.rs` that derives a name from
+// `agent.name` must go through this function, or its registered task name silently never
+// matches what the compiled workflow actually polls for.
 pub(super) fn sanitize_for_task_name(name: &str) -> String {
     name.replace('-', "_")
 }
@@ -911,9 +910,9 @@ mod tests {
         AgentDef::new("").unwrap_err();
     }
 
-    /// Regression test: the Conductor server replaces `-` with `_` wherever it derives a
-    /// task/reference name from an agent name, so hyphenated agent names must be sanitized or
-    /// their `stop_when`/`termination`/`callback` worker registers under the wrong task name.
+    // Regression test: the Conductor server replaces `-` with `_` wherever it derives a
+    // task/reference name from an agent name, so hyphenated agent names must be sanitized or
+    // their `stop_when`/`termination`/`callback` worker registers under the wrong task name.
     #[test]
     fn test_sanitize_for_task_name_replaces_hyphens() {
         assert_eq!(
@@ -1016,8 +1015,8 @@ mod tests {
             .unwrap();
     }
 
-    /// Regression test: a `PLAN_EXECUTE` parent with no tools must be rejected here rather than
-    /// silently compiling and failing confusingly server-side.
+    // Regression test: a PLAN_EXECUTE parent with no tools must be rejected here rather than
+    // silently compiling and failing confusingly server-side.
     #[test]
     fn test_with_strategy_plan_execute_requires_tools() {
         let planner = AgentDef::new("planner").unwrap();
@@ -1036,7 +1035,7 @@ mod tests {
             .unwrap();
     }
 
-    /// A PARALLEL parent with no model of its own inherits the first child's model.
+    // A PARALLEL parent with no model of its own inherits the first child's model.
     #[test]
     fn test_with_strategy_parallel_inherits_first_child_model() {
         let child_without_model = AgentDef::new("child_a").unwrap();
@@ -1079,8 +1078,8 @@ mod tests {
         agent.with_strategy(Strategy::Parallel).unwrap_err();
     }
 
-    /// A SEQUENTIAL parent with no model of its own inherits the first child's model; see the
-    /// comment on `with_strategy`.
+    // A SEQUENTIAL parent with no model of its own inherits the first child's model; see the
+    // comment on `with_strategy`.
     #[test]
     fn test_with_strategy_sequential_inherits_first_child_model() {
         let researcher = AgentDef::new("researcher").unwrap().with_model("gpt-4o");
@@ -1176,9 +1175,9 @@ mod tests {
         assert_eq!(agent.termination, Some(termination));
     }
 
-    /// Minimal mock handler, adapted from `callback.rs`'s own `NoopHandler` test fixture:
-    /// overrides nothing, so it exercises only "does this type implement `CallbackHandler` and
-    /// can it be registered," not any particular hook behavior.
+    // Minimal mock handler, adapted from `callback.rs`'s own `NoopHandler` test fixture:
+    // overrides nothing, so it exercises only "does this type implement `CallbackHandler` and
+    // can it be registered," not any particular hook behavior.
     struct MockCallbackHandler;
 
     #[async_trait::async_trait]

@@ -1,14 +1,14 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Composable lifecycle hooks for agent execution.
-//!
-//! [`CallbackHandler`] defines six overridable hooks — `on_agent_start`/`on_agent_end`,
-//! `on_model_start`/`on_model_end`, `on_tool_start`/`on_tool_end` — fired around agent, model,
-//! and tool lifecycle events. Each hook takes a [`CallbackContext`] and returns `Option<Value>`:
-//! `None` defers to the next handler in a chain, `Some(value)` short-circuits it. All hooks
-//! default to `None`. This module defines only the hook contract; chaining/dispatch and
-//! registration on `AgentDef` are handled elsewhere.
+// Composable lifecycle hooks for agent execution.
+//
+// CallbackHandler defines six overridable hooks — on_agent_start/on_agent_end,
+// on_model_start/on_model_end, on_tool_start/on_tool_end — fired around agent, model,
+// and tool lifecycle events. Each hook takes a CallbackContext and returns Option<Value>:
+// None defers to the next handler in a chain, Some(value) short-circuits it. All hooks
+// default to None. This module defines only the hook contract; chaining/dispatch and
+// registration on AgentDef are handled elsewhere.
 
 use async_trait::async_trait;
 use serde_json::{Map, Value};
@@ -103,7 +103,7 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    /// Handler that overrides nothing; every hook resolves via the trait defaults.
+    // Handler that overrides nothing; every hook resolves via the trait defaults.
     struct NoopHandler;
 
     #[async_trait]
@@ -121,8 +121,8 @@ mod tests {
         assert_eq!(handler.on_tool_end(&ctx).await, None);
     }
 
-    /// Mock handler exercising all six hooks, recording call order and returning a distinct
-    /// value from each.
+    // Mock handler exercising all six hooks, recording call order and returning a distinct
+    // value from each.
     struct RecordingHandler {
         calls: Mutex<Vec<&'static str>>,
     }
@@ -238,8 +238,8 @@ mod tests {
         );
     }
 
-    /// Confirms the trait stays object-safe with `#[async_trait]` and dispatches through a
-    /// boxed trait object.
+    // Confirms the trait stays object-safe with #[async_trait] and dispatches through a
+    // boxed trait object.
     #[tokio::test]
     async fn test_usable_as_boxed_trait_object() {
         let handlers: Vec<Box<dyn CallbackHandler>> =

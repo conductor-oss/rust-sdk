@@ -78,8 +78,8 @@ impl OnFail {
     }
 }
 
-/// `on_fail = Human` is only valid for `position = Output`; input guardrails are client-side
-/// and cannot pause a workflow.
+// `on_fail = Human` is only valid for `position = Output`; input guardrails are client-side
+// and cannot pause a workflow.
 fn validate_position_on_fail(position: Position, on_fail: OnFail) -> Result<()> {
     if on_fail == OnFail::Human && position == Position::Input {
         return Err(ConductorError::agent(
@@ -449,17 +449,17 @@ impl LlmGuardrail {
     }
 }
 
-/// The evaluation prompt sent to the LLM for a given policy and content.
+// The evaluation prompt sent to the LLM for a given policy and content.
 fn llm_guardrail_prompt(policy: &str, content: &str) -> String {
     format!(
         "You are a content safety evaluator. Evaluate the following content against this policy:\n\nPOLICY: {policy}\n\nCONTENT: {content}\n\nRespond with ONLY a JSON object: {{\"passed\": true/false, \"reason\": \"...\"}}"
     )
 }
 
-/// Parse an LLM's raw response text into a [`GuardrailResult`]. Expects strict JSON
-/// `{"passed": bool, "reason": string}` (no fenced-code-block stripping); a missing key defaults
-/// `passed` to `false` and `reason` to `""`. An unparseable response fails closed with the first
-/// 200 characters of the raw text.
+// Parse an LLM's raw response text into a GuardrailResult. Expects strict JSON
+// `{"passed": bool, "reason": string}` (no fenced-code-block stripping); a missing key defaults
+// `passed` to `false` and `reason` to `""`. An unparseable response fails closed with the first
+// 200 characters of the raw text.
 fn parse_llm_guardrail_response(result_text: &str) -> GuardrailResult {
     if let Ok(Value::Object(data)) = serde_json::from_str::<Value>(result_text.trim()) {
         let passed = data.get("passed").and_then(Value::as_bool).unwrap_or(false);
@@ -481,7 +481,7 @@ fn parse_llm_guardrail_response(result_text: &str) -> GuardrailResult {
     }
 }
 
-/// Build the `OpenAI` Chat Completions request body for one evaluation call.
+// Build the OpenAI Chat Completions request body for one evaluation call.
 fn openai_request_body(model: &str, prompt: &str, max_tokens: Option<u32>) -> Value {
     let mut body = serde_json::json!({
         "model": model,
@@ -494,7 +494,7 @@ fn openai_request_body(model: &str, prompt: &str, max_tokens: Option<u32>) -> Va
     body
 }
 
-/// Extract the assistant's reply text from an `OpenAI` Chat Completions response body.
+// Extract the assistant's reply text from an OpenAI Chat Completions response body.
 fn extract_openai_content(response: &Value) -> Option<String> {
     response
         .get("choices")?
@@ -505,8 +505,8 @@ fn extract_openai_content(response: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Build the Anthropic Messages request body for one evaluation call. Anthropic requires
-/// `max_tokens`; defaults to `1024` if not set.
+// Build the Anthropic Messages request body for one evaluation call. Anthropic requires
+// `max_tokens`; defaults to `1024` if not set.
 fn anthropic_request_body(model: &str, prompt: &str, max_tokens: Option<u32>) -> Value {
     serde_json::json!({
         "model": model,
@@ -516,7 +516,7 @@ fn anthropic_request_body(model: &str, prompt: &str, max_tokens: Option<u32>) ->
     })
 }
 
-/// Extract the assistant's reply text from an Anthropic Messages response body.
+// Extract the assistant's reply text from an Anthropic Messages response body.
 fn extract_anthropic_content(response: &Value) -> Option<String> {
     response
         .get("content")?
@@ -526,10 +526,10 @@ fn extract_anthropic_content(response: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Run `future` to completion on a dedicated OS thread with its own single-threaded Tokio
-/// runtime, blocking the calling thread on a channel `recv` rather than `Handle::block_on` —
-/// safe to call even from within an existing async runtime. `Err` covers both ways the thread
-/// can fail to deliver a result (couldn't build its own runtime, or panicked before sending).
+// Run `future` to completion on a dedicated OS thread with its own single-threaded Tokio
+// runtime, blocking the calling thread on a channel `recv` rather than `Handle::block_on` --
+// safe to call even from within an existing async runtime. `Err` covers both ways the thread
+// can fail to deliver a result (couldn't build its own runtime, or panicked before sending).
 fn run_blocking<F>(future: F) -> std::result::Result<F::Output, String>
 where
     F: std::future::Future + Send + 'static,
@@ -556,9 +556,9 @@ where
     })
 }
 
-/// Call the given provider's chat/messages API and return the assistant's raw reply text, or an
-/// error message describing what went wrong (missing API key, transport error, non-2xx status,
-/// or an unrecognized provider).
+// Call the given provider's chat/messages API and return the assistant's raw reply text, or an
+// error message describing what went wrong (missing API key, transport error, non-2xx status,
+// or an unrecognized provider).
 async fn call_llm_provider(
     provider: &str,
     model: &str,
@@ -867,9 +867,9 @@ mod tests {
         assert!(result.message.contains("not-a-provider-slash-model"));
     }
 
-    /// Regression test: a missing API key must fail closed with a clear message, not panic.
-    /// Only asserts when `OPENAI_API_KEY` happens to be unset in the test environment, rather
-    /// than mutating a real, process-global env var another test/thread might read concurrently.
+    // Regression test: a missing API key must fail closed with a clear message, not panic.
+    // Only asserts when `OPENAI_API_KEY` happens to be unset in the test environment, rather
+    // than mutating a real, process-global env var another test/thread might read concurrently.
     #[test]
     fn test_call_llm_provider_fails_closed_when_api_key_missing() {
         let result = run_blocking(async {
@@ -972,8 +972,8 @@ mod tests {
         assert!(!result.passed);
     }
 
-    /// Regression test: a model that wraps its JSON answer in triple-backtick fences fails
-    /// closed rather than being leniently parsed.
+    // Regression test: a model that wraps its JSON answer in triple-backtick fences fails
+    // closed rather than being leniently parsed.
     #[test]
     fn test_parse_llm_guardrail_response_fails_closed_on_fenced_json() {
         let result = parse_llm_guardrail_response("```json\n{\"passed\": true}\n```");

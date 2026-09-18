@@ -1,20 +1,20 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Agent Skills integration: load an [agentskills.io](https://agentskills.io) skill directory (a
-//! `SKILL.md` file plus optional `*-agent.md`/`scripts/`/`references/`/`examples/`/`assets/`
-//! entries) as a runnable agent.
-//!
-//! A loaded skill is **not** an [`super::AgentDef`] tree. [`load_skill`] returns a [`SkillAgent`]
-//! carrying a `raw_config` framework marker, usable directly with
-//! [`super::AgentRuntime::compile_framework`]/[`super::AgentRuntime::deploy_framework`]/
-//! [`super::AgentRuntime::start_framework`]/[`super::AgentRuntime::run_framework`], or converted
-//! with [`SkillAgent::into_agent_def`] to nest it as a sub-agent of an ordinary agent tree via
-//! [`super::AgentDef::with_sub_agent`]/[`super::ToolDef::agent`].
-//!
-//! [`create_skill_workers`] builds one tool per discovered script (runs it as a subprocess, 300s
-//! timeout) plus one `read_skill_file` tool if there are any allowed resource files; register the
-//! result with [`super::AgentRuntime::serve_tools`].
+// Agent Skills integration: load an [agentskills.io](https://agentskills.io) skill directory (a
+// `SKILL.md` file plus optional `*-agent.md`/`scripts/`/`references/`/`examples/`/`assets/`
+// entries) as a runnable agent.
+//
+// A loaded skill is **not** an [`super::AgentDef`] tree. [`load_skill`] returns a [`SkillAgent`]
+// carrying a `raw_config` framework marker, usable directly with
+// [`super::AgentRuntime::compile_framework`]/[`super::AgentRuntime::deploy_framework`]/
+// [`super::AgentRuntime::start_framework`]/[`super::AgentRuntime::run_framework`], or converted
+// with [`SkillAgent::into_agent_def`] to nest it as a sub-agent of an ordinary agent tree via
+// [`super::AgentDef::with_sub_agent`]/[`super::ToolDef::agent`].
+//
+// [`create_skill_workers`] builds one tool per discovered script (runs it as a subprocess, 300s
+// timeout) plus one `read_skill_file` tool if there are any allowed resource files; register the
+// result with [`super::AgentRuntime::serve_tools`].
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -42,11 +42,11 @@ static CROSS_SKILL_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| 
     Regex::new(r"(?i)(?:invoke|use|call)\s+(?:the\s+)?([a-z][a-z0-9-]*)\s+skill").unwrap()
 });
 
-/// Characters (~15K tokens) above which a `SKILL.md` body is auto-split into `##`-heading
-/// sections.
+// Characters (~15K tokens) above which a SKILL.md body is auto-split into ##-heading
+// sections.
 const SECTION_SPLIT_THRESHOLD: usize = 50_000;
 
-/// The `name` and default `params` extracted from `SKILL.md`'s YAML frontmatter.
+// The name and default params extracted from SKILL.md's YAML frontmatter.
 #[derive(Debug)]
 struct Frontmatter {
     name: String,
@@ -100,7 +100,7 @@ fn yaml_to_json(value: &serde_yaml_ng::Value) -> Result<Value> {
         .map_err(|e| ConductorError::agent(format!("invalid YAML value: {e}")))
 }
 
-/// Extract the markdown body after frontmatter.
+// Extract the markdown body after frontmatter.
 fn extract_body(content: &str) -> String {
     match BODY_RE.captures(content) {
         Some(caps) => caps[1].trim().to_owned(),
@@ -108,7 +108,7 @@ fn extract_body(content: &str) -> String {
     }
 }
 
-/// Slugify a heading: lowercase, spaces to hyphens, strip special chars.
+// Slugify a heading: lowercase, spaces to hyphens, strip special chars.
 fn slugify(text: &str) -> String {
     let lowered = text.to_lowercase();
     let filtered: String = lowered
@@ -131,9 +131,9 @@ fn slugify(text: &str) -> String {
     slug.trim_matches('-').to_owned()
 }
 
-/// Split a `SKILL.md` body into sections by `##` headings. Returns ordered
-/// `(slug, section_text)` pairs (heading line included in each section's text); content before
-/// the first `##` heading is dropped.
+// Split a SKILL.md body into sections by ## headings. Returns ordered
+// (slug, section_text) pairs (heading line included in each section's text); content before
+// the first ## heading is dropped.
 fn split_into_sections(body: &str) -> Vec<(String, String)> {
     let mut result = Vec::new();
     let mut current_heading: Option<String> = None;
@@ -172,7 +172,7 @@ fn extension_language(ext: &str) -> Option<&'static str> {
     }
 }
 
-/// Detect script language from file extension or shebang.
+// Detect script language from file extension or shebang.
 fn detect_language(path: &Path) -> String {
     let ext = path
         .extension()
@@ -202,7 +202,7 @@ fn detect_language(path: &Path) -> String {
     "bash".to_owned()
 }
 
-/// Format skill parameters as a prompt prefix.
+// Format skill parameters as a prompt prefix.
 fn format_skill_params(params: &[(String, Value)]) -> String {
     if params.is_empty() {
         return String::new();
@@ -231,8 +231,8 @@ pub fn format_prompt_with_params(prompt: &str, params: &[(String, Value)]) -> St
     format!("{prefix}\n\n[User Request]\n{prompt}")
 }
 
-/// Merge *overrides* onto *defaults*: an existing key keeps its position but takes the
-/// override's value; a brand-new key is appended in override order.
+// Merge *overrides* onto *defaults*: an existing key keeps its position but takes the
+// override's value; a brand-new key is appended in override order.
 fn merge_ordered_params(
     defaults: &[(String, Value)],
     overrides: &[(String, Value)],
@@ -248,7 +248,7 @@ fn merge_ordered_params(
     result
 }
 
-/// A discovered skill script.
+// A discovered skill script.
 #[derive(Debug, Clone)]
 struct ScriptInfo {
     filename: String,
@@ -315,8 +315,8 @@ fn interpreter_for_language(language: &str) -> &'static str {
     }
 }
 
-/// Run one skill script as a subprocess. Never raises — errors surface as `"ERROR..."`-prefixed
-/// successful tool output, not a failed task.
+// Run one skill script as a subprocess. Never raises -- errors surface as "ERROR..."-prefixed
+// successful tool output, not a failed task.
 async fn run_skill_script(interpreter: &str, script_path: &Path, args: &Value) -> Value {
     let command = args.get("command").and_then(Value::as_str).unwrap_or("");
     let extra_args = if command.is_empty() {
@@ -346,9 +346,9 @@ async fn run_skill_script(interpreter: &str, script_path: &Path, args: &Value) -
     Value::String(String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"))
 }
 
-/// Read one allowed skill resource (or virtual `skill_section:*` entry). Never raises, same as
-/// [`run_skill_script`]. Rejects paths not in `allowed` and paths that resolve outside
-/// `skill_dir`.
+// Read one allowed skill resource (or virtual skill_section:* entry). Never raises, same as
+// run_skill_script. Rejects paths not in `allowed` and paths that resolve outside
+// `skill_dir`.
 fn read_skill_file(
     skill_dir: &Path,
     allowed: &HashSet<String>,
@@ -391,9 +391,9 @@ fn read_skill_file(
     }
 }
 
-/// The input schema every skill worker tool declares: `{"command": string}`. Note:
-/// `read_skill_file`'s actual parameter is `path`, not `command` — its handler reads `path` from
-/// the task input regardless of this declared schema.
+// The input schema every skill worker tool declares: {"command": string}. Note:
+// read_skill_file's actual parameter is `path`, not `command` -- its handler reads `path` from
+// the task input regardless of this declared schema.
 fn skill_worker_input_schema() -> Value {
     json!({
         "type": "object",
@@ -592,9 +592,9 @@ fn walk_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Resolve cross-skill references found in `SKILL.md`'s body. Scans for patterns like
-/// `"invoke writing-plans skill"` and resolves them from `search_path` plus the standard
-/// sibling/`.agents/skills` locations.
+// Resolve cross-skill references found in SKILL.md's body. Scans for patterns like
+// "invoke writing-plans skill" and resolves them from `search_path` plus the standard
+// sibling/.agents/skills locations.
 fn resolve_cross_skills(
     skill_md: &str,
     skill_path: &Path,

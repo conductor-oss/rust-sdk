@@ -1,13 +1,13 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Observability helpers built on the `tracing` crate.
-//!
-//! Provides spans/helpers for agent runs, compilation, LLM calls, tool calls, and handoffs
-//! (`agent.run`, `agent.compile`, `agent.llm_call`, `agent.tool_call`, `agent.handoff`). These
-//! are opt-in: nothing in this crate's runtime calls them automatically, and a `tracing::info_span!`
-//! costs effectively nothing when no subscriber is registered. Bridge to a real backend (e.g.
-//! OpenTelemetry) with the `tracing-opentelemetry` crate.
+// Observability helpers built on the `tracing` crate.
+//
+// Provides spans/helpers for agent runs, compilation, LLM calls, tool calls, and handoffs
+// (`agent.run`, `agent.compile`, `agent.llm_call`, `agent.tool_call`, `agent.handoff`). These
+// are opt-in: nothing in this crate's runtime calls them automatically, and a `tracing::info_span!`
+// costs effectively nothing when no subscriber is registered. Bridge to a real backend (e.g.
+// OpenTelemetry) with the `tracing-opentelemetry` crate.
 
 use std::future::Future;
 
@@ -177,8 +177,8 @@ mod tests {
     use tracing::span::{Attributes, Id, Record};
     use tracing::subscriber::Subscriber;
 
-    /// A minimal test subscriber that records every field value it's given, keyed by field
-    /// name, across span creation and `record()` calls.
+    // A minimal test subscriber that records every field value it's given, keyed by field
+    // name, across span creation and `record()` calls.
     #[derive(Default)]
     struct RecordingSubscriber {
         fields: Arc<Mutex<std::collections::HashMap<String, String>>>,

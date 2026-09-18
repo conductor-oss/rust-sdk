@@ -1,13 +1,13 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Non-blocking control surface for a running agent execution.
-//!
-//! [`AgentHandle`] is what `AgentRuntime::start` returns instead of blocking to a result the
-//! way `AgentRuntime::run` does. [`AgentHandle::approve`]/[`AgentHandle::reject`]/
-//! [`AgentHandle::respond`] always target this handle's own `execution_id`. Build a separate
-//! `AgentHandle` (via `AgentClient`/`AgentHandle::new`) over a different execution id if a
-//! nested sub-execution needs a direct response.
+// Non-blocking control surface for a running agent execution.
+//
+// AgentHandle is what AgentRuntime::start returns instead of blocking to a result the
+// way AgentRuntime::run does. AgentHandle::approve/AgentHandle::reject/
+// AgentHandle::respond always target this handle's own execution_id. Build a separate
+// AgentHandle (via AgentClient/AgentHandle::new) over a different execution id if a
+// nested sub-execution needs a direct response.
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -21,13 +21,13 @@ use super::liveness::{find_new_stalls, StallPolicy};
 use super::result::{AgentResult, AgentStatus};
 use super::stream::AgentStream;
 
-/// Interval between `get_status` polls in [`AgentHandle::join`].
+// Interval between get_status polls in AgentHandle::join.
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
-/// Default stall threshold for [`AgentHandle::join`]'s built-in stall detection.
+// Default stall threshold for AgentHandle::join's built-in stall detection.
 const DEFAULT_STALL_SECONDS: f64 = 30.0;
 
-/// Default interval between stall checks.
+// Default interval between stall checks.
 const DEFAULT_STALL_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Non-blocking handle to a running (or already-finished) agent execution.

@@ -112,9 +112,9 @@ impl ToolContext {
             .clone()
     }
 
-    /// Build a context pre-seeded with `state` — used by
-    /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve)'s tool dispatch to inject
-    /// the polled task's `_agent_state`; not intended for other callers.
+    // Build a context pre-seeded with `state` — used by
+    // AgentRuntime::serve's tool dispatch to inject
+    // the polled task's `_agent_state`; not intended for other callers.
     pub(super) fn with_initial_state(mut self, state: HashMap<String, Value>) -> Self {
         self.state = Arc::new(std::sync::Mutex::new(state));
         self
@@ -662,7 +662,7 @@ impl ToolDef {
         tool
     }
 
-    /// Internal helper shared by [`ToolDef::image`]/[`ToolDef::audio`]/[`ToolDef::video`].
+    // Internal helper shared by ToolDef::image/ToolDef::audio/ToolDef::video.
     #[expect(clippy::too_many_arguments)]
     fn media_tool(
         tool_type: ToolType,
@@ -901,7 +901,7 @@ fn validate_credential_placeholders(
     Ok(())
 }
 
-/// Extracts the names inside `${NAME}` placeholders from a string, in order of appearance.
+// Extracts the names inside `${NAME}` placeholders from a string, in order of appearance.
 fn extract_placeholders(value: &str) -> Vec<&str> {
     let mut placeholders = Vec::new();
     let mut rest = value;

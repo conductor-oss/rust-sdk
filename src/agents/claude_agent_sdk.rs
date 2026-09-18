@@ -1,42 +1,42 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Bare subprocess + `stream-json` transport for the Anthropic **Claude Agent SDK** CLI
-//! (`claude`), gated behind the `claude-agent-sdk` Cargo feature.
-//!
-//! # Passthrough only
-//!
-//! The `claude` CLI's own execution loop (planning, tool calls, sub-agent turns) is opaque to
-//! this crate: everything it does between spawn and exit happens outside Conductor's view, so
-//! no [`crate::agents::Guardrail`], [`crate::agents::TerminationCondition`], or handoff applies
-//! to it.
-//!
-//! This module provides only: [`ClaudeAgentSdkOptions`] (a builder for the CLI flags it knows
-//! how to set), [`build_args`] (turns those options into the CLI argument list), and
-//! [`ClaudeAgentSdkQuery`] (spawns `claude` and hands back a [`ClaudeAgentSdkStream`] over its
-//! newline-delimited JSON stdout).
-//!
-//! [`push_event_nonblocking`]/[`update_task_progress_nonblocking`]/[`ProgressMetadata`]/
-//! [`ProgressThrottle`] are optional helpers a caller wrapping a [`ClaudeAgentSdkStream`] in
-//! their own `impl Worker` can use for event push and throttled progress updates.
-//!
-//! # Event shape
-//!
-//! Each stdout line is handed back as a raw [`serde_json::Value`] rather than a typed enum,
-//! since the `claude` CLI's stream-json shape is version-dependent and not a contract this
-//! crate controls. Callers that want a typed view can layer their own `serde::Deserialize` shape
-//! on top.
-//!
-//! # Credentials
-//!
-//! This module never reads or mutates the current process's environment. Resolve any API key
-//! (e.g. `ANTHROPIC_API_KEY`) yourself and hand it to [`ClaudeAgentSdkOptions::with_env`], which
-//! is applied via `Command::env()` scoped to the spawned child only.
-//!
-//! # Testing
-//!
-//! The `claude` CLI binary is not installed in this crate's build/CI environment, so tests here
-//! cover only the pure [`build_args`] function; nothing spawns a real process.
+// Bare subprocess + `stream-json` transport for the Anthropic **Claude Agent SDK** CLI
+// (`claude`), gated behind the `claude-agent-sdk` Cargo feature.
+//
+// # Passthrough only
+//
+// The `claude` CLI's own execution loop (planning, tool calls, sub-agent turns) is opaque to
+// this crate: everything it does between spawn and exit happens outside Conductor's view, so
+// no `crate::agents::Guardrail`, `crate::agents::TerminationCondition`, or handoff applies
+// to it.
+//
+// This module provides only: `ClaudeAgentSdkOptions` (a builder for the CLI flags it knows
+// how to set), `build_args` (turns those options into the CLI argument list), and
+// `ClaudeAgentSdkQuery` (spawns `claude` and hands back a `ClaudeAgentSdkStream` over its
+// newline-delimited JSON stdout).
+//
+// `push_event_nonblocking`/`update_task_progress_nonblocking`/`ProgressMetadata`/
+// `ProgressThrottle` are optional helpers a caller wrapping a `ClaudeAgentSdkStream` in
+// their own `impl Worker` can use for event push and throttled progress updates.
+//
+// # Event shape
+//
+// Each stdout line is handed back as a raw `serde_json::Value` rather than a typed enum,
+// since the `claude` CLI's stream-json shape is version-dependent and not a contract this
+// crate controls. Callers that want a typed view can layer their own `serde::Deserialize` shape
+// on top.
+//
+// # Credentials
+//
+// This module never reads or mutates the current process's environment. Resolve any API key
+// (e.g. `ANTHROPIC_API_KEY`) yourself and hand it to `ClaudeAgentSdkOptions::with_env`, which
+// is applied via `Command::env()` scoped to the spawned child only.
+//
+// # Testing
+//
+// The `claude` CLI binary is not installed in this crate's build/CI environment, so tests here
+// cover only the pure `build_args` function; nothing spawns a real process.
 
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -48,7 +48,7 @@ use tokio::process::{Child, Command};
 
 use crate::error::{ConductorError, Result};
 
-/// Name of the `claude` CLI binary this transport shells out to.
+// Name of the `claude` CLI binary this transport shells out to.
 const CLAUDE_BINARY: &str = "claude";
 
 /// Resolve a short Claude Agent SDK model alias (e.g. `"opus"`) to its full model id.
@@ -149,13 +149,13 @@ impl ClaudeAgentSdkOptions {
     }
 }
 
-/// Pure argument-builder: turns [`ClaudeAgentSdkOptions`] (plus an optional one-shot prompt and
-/// a streaming-input flag) into the `claude` CLI argument list. Does not include the `claude`
-/// binary name itself.
-///
-/// - `prompt`: the one-shot prompt text. Ignored when `streaming_input` is `true`.
-/// - `streaming_input`: `false` for one-shot mode (`--print -- <prompt>` appended); `true` for
-///   streaming-input mode (`--input-format stream-json` added, no positional prompt).
+// Pure argument-builder: turns `ClaudeAgentSdkOptions` (plus an optional one-shot prompt and
+// a streaming-input flag) into the `claude` CLI argument list. Does not include the `claude`
+// binary name itself.
+//
+// - `prompt`: the one-shot prompt text. Ignored when `streaming_input` is `true`.
+// - `streaming_input`: `false` for one-shot mode (`--print -- <prompt>` appended); `true` for
+//   streaming-input mode (`--input-format stream-json` added, no positional prompt).
 fn build_args(
     prompt: Option<&str>,
     opts: &ClaudeAgentSdkOptions,
@@ -269,8 +269,8 @@ impl ClaudeAgentSdkQuery {
     }
 }
 
-/// Turn a piped child's stdout into a stream of parsed `serde_json::Value`, one per
-/// newline-delimited JSON line (blank lines are skipped).
+// Turn a piped child's stdout into a stream of parsed `serde_json::Value`, one per
+// newline-delimited JSON line (blank lines are skipped).
 fn tokio_stream_lines(
     stdout: tokio::process::ChildStdout,
 ) -> impl Stream<Item = Result<Value>> + Send + 'static {
@@ -372,8 +372,8 @@ impl ProgressMetadata {
     }
 }
 
-/// A `tool_result` content block's `content` field is either a plain string or an array of
-/// nested content blocks (Anthropic Messages API allows both) — this extracts text either way.
+// A `tool_result` content block's `content` field is either a plain string or an array of
+// nested content blocks (Anthropic Messages API allows both) — this extracts text either way.
 fn extract_tool_result_text(block: &Value) -> Option<String> {
     match block.get("content") {
         Some(Value::String(s)) => Some(s.clone()),
@@ -447,7 +447,7 @@ impl ProgressThrottle {
     }
 }
 
-/// Max characters of `last_tool_output` included in a progress update.
+// Max characters of `last_tool_output` included in a progress update.
 const PROGRESS_SNIPPET_MAX_CHARS: usize = 500;
 
 /// Fire-and-forget `IN_PROGRESS` task update carrying `metadata`: lets the server (and any

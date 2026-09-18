@@ -1,12 +1,12 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Semantic memory — long-term, similarity-based recall across agent sessions.
-//!
-//! This is a standalone, opt-in type: it is not wired into [`super::AgentDef`] or
-//! `AgentRuntime`; callers use it directly to build/search memories. Memory IDs, when not
-//! supplied, are a random UUIDv4 truncated to 16 hex characters. [`InMemoryStore`] preserves
-//! insertion order, overwriting an existing ID in place rather than moving it.
+// Semantic memory — long-term, similarity-based recall across agent sessions.
+//
+// This is a standalone, opt-in type: it is not wired into AgentDef or AgentRuntime; callers use
+// it directly to build/search memories. Memory IDs, when not supplied, are a random UUIDv4
+// truncated to 16 hex characters. InMemoryStore preserves insertion order, overwriting an
+// existing ID in place rather than moving it.
 
 use std::collections::HashMap;
 use std::fmt;

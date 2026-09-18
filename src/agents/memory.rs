@@ -1,10 +1,10 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Conversation memory — session message history management.
-//!
-//! Accumulates and trims message history for an agent session. Persistence across process
-//! restarts is the caller's responsibility, not this module's.
+// Conversation memory — session message history management.
+//
+// Accumulates and trims message history for an agent session. Persistence across process
+// restarts is the caller's responsibility, not this module's.
 
 use serde_json::Value;
 
@@ -162,11 +162,11 @@ impl ConversationMemory {
         self.messages.clear();
     }
 
-    /// Trim messages to stay within `max_messages`.
-    ///
-    /// Preserves original ordering: removes the oldest non-system messages first while keeping
-    /// all system messages in their original positions. `max_messages == Some(0)` disables
-    /// trimming entirely (treated the same as unset, not "keep zero messages").
+    // Trim messages to stay within `max_messages`.
+    //
+    // Preserves original ordering: removes the oldest non-system messages first while keeping
+    // all system messages in their original positions. `max_messages == Some(0)` disables
+    // trimming entirely (treated the same as unset, not "keep zero messages").
     fn trim(&mut self) {
         let Some(max_messages) = self.max_messages else {
             return;

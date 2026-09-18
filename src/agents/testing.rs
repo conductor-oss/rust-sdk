@@ -1,9 +1,9 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Deterministic agent testing without an LLM or a live Conductor server: [`mock_run`] executes
-//! a scripted event sequence, and the fluent [`expect`] API asserts on the resulting
-//! [`AgentResult`].
+// Deterministic agent testing without an LLM or a live Conductor server: `mock_run` executes
+// a scripted event sequence, and the fluent `expect` API asserts on the resulting
+// `AgentResult`.
 
 use serde_json::Value;
 

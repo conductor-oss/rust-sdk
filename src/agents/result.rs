@@ -1,13 +1,13 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Runtime result/status types for agent executions.
-//!
-//! `AgentStatus::status` is a raw string passed through verbatim from the server's
-//! `GET /agent/{executionId}/status` response, not parsed into an enum. `AgentResult::error` is
-//! derived, not read from a dedicated wire field: it's set to the status's `reason` only when
-//! `status` is `"FAILED"` or `"TERMINATED"`, and stays `None` for every other terminal status
-//! (including `"TIMED_OUT"`).
+// Runtime result/status types for agent executions.
+//
+// AgentStatus::status is a raw string passed through verbatim from the server's
+// GET /agent/{executionId}/status response, not parsed into an enum. AgentResult::error is
+// derived, not read from a dedicated wire field: it's set to the status's reason only when
+// status is "FAILED" or "TERMINATED", and stays None for every other terminal status
+// (including "TIMED_OUT").
 
 use serde_json::Value;
 
@@ -275,8 +275,8 @@ mod tests {
         assert!(result.is_failed());
     }
 
-    /// Regression test: `TIMED_OUT` does not surface `reason` as `error`, even though it's a
-    /// reason-bearing terminal failure like `FAILED`/`TERMINATED`.
+    // Regression test: TIMED_OUT does not surface reason as error, even though it's a
+    // reason-bearing terminal failure like FAILED/TERMINATED.
     #[test]
     fn test_agent_result_does_not_surface_error_for_timed_out_status() {
         let status = AgentStatus::from_response(

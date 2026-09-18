@@ -1,15 +1,15 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! Server-Sent Events decoding for a running agent execution.
-//!
-//! Wraps the byte stream returned by `crate::client::AgentClient::stream` and decodes it into a
-//! sequence of [`AgentEvent`]s. `execution_id` is mandatory on every variant.
-//!
-//! # Known limitation
-//!
-//! This enum has no catch-all fallback variant, so a server event kind not listed here makes
-//! [`AgentStream::next`] return a deserialization `Err` and stop iteration.
+// Server-Sent Events decoding for a running agent execution.
+//
+// Wraps the byte stream returned by `crate::client::AgentClient::stream` and decodes it into a
+// sequence of `AgentEvent`s. `execution_id` is mandatory on every variant.
+//
+// # Known limitation
+//
+// This enum has no catch-all fallback variant, so a server event kind not listed here makes
+// `AgentStream::next` return a deserialization `Err` and stop iteration.
 
 use futures::{StreamExt as _, TryStreamExt as _};
 use serde::{Deserialize, Serialize};
@@ -155,9 +155,9 @@ impl AgentEvent {
     }
 }
 
-/// Incremental SSE frame decoder: buffers raw bytes and yields complete frames (delimited by a
-/// blank line) as they become available, tolerating a frame's bytes arriving split across
-/// multiple pushes.
+// Incremental SSE frame decoder: buffers raw bytes and yields complete frames (delimited by a
+// blank line) as they become available, tolerating a frame's bytes arriving split across
+// multiple pushes.
 #[derive(Debug, Default)]
 struct SseDecoder {
     buffer: String,
@@ -169,18 +169,18 @@ impl SseDecoder {
         Self::default()
     }
 
-    /// Append newly received bytes to the internal buffer.
+    // Append newly received bytes to the internal buffer.
     fn push(&mut self, chunk: &[u8]) {
         self.buffer.push_str(&String::from_utf8_lossy(chunk));
     }
 
-    /// Signal that the underlying stream has ended; any bytes still buffered afterwards are
-    /// treated as one final, unterminated frame.
+    // Signal that the underlying stream has ended; any bytes still buffered afterwards are
+    // treated as one final, unterminated frame.
     fn finish(&mut self) {
         self.finished = true;
     }
 
-    /// Pop the next complete frame's `data:` payload out of the buffer, if one is available.
+    // Pop the next complete frame's `data:` payload out of the buffer, if one is available.
     fn next_data(&mut self) -> Option<String> {
         loop {
             let boundary = Self::find_boundary(&self.buffer).or_else(|| {
@@ -204,8 +204,8 @@ impl SseDecoder {
         }
     }
 
-    /// Find the earliest blank-line frame boundary (`"\n\n"` or `"\r\n\r\n"`), returning
-    /// `(frame_end, bytes_consumed_including_delimiter)`.
+    // Find the earliest blank-line frame boundary (`"\n\n"` or `"\r\n\r\n"`), returning
+    // `(frame_end, bytes_consumed_including_delimiter)`.
     fn find_boundary(buffer: &str) -> Option<(usize, usize)> {
         let lf = buffer.find("\n\n").map(|i| (i, i + 2));
         let crlf = buffer.find("\r\n\r\n").map(|i| (i, i + 4));
@@ -217,8 +217,8 @@ impl SseDecoder {
         }
     }
 
-    /// Join every `data:` line in a frame with `\n`, per the SSE spec; ignores `event:`/`id:`/
-    /// `retry:` lines and `:`-prefixed comment lines.
+    // Join every `data:` line in a frame with `\n`, per the SSE spec; ignores `event:`/`id:`/
+    // `retry:` lines and `:`-prefixed comment lines.
     fn extract_data(raw_frame: &str) -> String {
         let mut lines = Vec::new();
         for line in raw_frame.split('\n') {

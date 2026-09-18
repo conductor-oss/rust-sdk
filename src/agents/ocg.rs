@@ -1,20 +1,20 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! OCG (Open Context Graph) retrieval sub-agent.
-//!
-//! OCG is a retrieval engine over a knowledge graph of entities (messages, channels, people)
-//! linked by claims and relationships. Every tool compiles to a plain Conductor HTTP task with
-//! URI templating (see [`super::tool::ToolDef::http_templated`]) — there is no OCG-specific
-//! server code.
-//!
-//! `url` is required for [`ocg_tools`]/[`ocg_agent`] — there is no server-side default.
-//! `credential` names an entry in the server's credential store; the secret itself never
-//! appears in Rust code or serialized configs.
-//!
-//! Agents bound to different OCG instances must have distinct names: inline `agent_tool` child
-//! workflows are registered by agent name, so two differently-configured agents sharing a name
-//! would overwrite each other's workflow definition.
+// OCG (Open Context Graph) retrieval sub-agent.
+//
+// OCG is a retrieval engine over a knowledge graph of entities (messages, channels, people)
+// linked by claims and relationships. Every tool compiles to a plain Conductor HTTP task with
+// URI templating (see `super::tool::ToolDef::http_templated`) — there is no OCG-specific
+// server code.
+//
+// `url` is required for `ocg_tools`/`ocg_agent` — there is no server-side default.
+// `credential` names an entry in the server's credential store; the secret itself never
+// appears in Rust code or serialized configs.
+//
+// Agents bound to different OCG instances must have distinct names: inline `agent_tool` child
+// workflows are registered by agent name, so two differently-configured agents sharing a name
+// would overwrite each other's workflow definition.
 
 use std::collections::HashMap;
 
@@ -101,8 +101,8 @@ Good (step 1): {
 Then parse the returned citations, extract cluster names from titles,
 build the frequency table in your reasoning.";
 
-/// One OCG tool's endpoint shape, resolved into a [`ToolDef`] by [`ocg_tools`] once the common
-/// `base_url`/`headers`/`credentials` are known.
+// One OCG tool's endpoint shape, resolved into a `ToolDef` by `ocg_tools` once the common
+// `base_url`/`headers`/`credentials` are known.
 struct OcgToolSpec {
     name: &'static str,
     method: &'static str,
@@ -640,8 +640,8 @@ mod tests {
         assert!(err.to_string().contains("requires a non-blank url"));
     }
 
-    /// Pins the exact prompt text (length + interior anchors) so an edit that breaks the
-    /// wrapping is caught here.
+    // Pins the exact prompt text (length + interior anchors) so an edit that breaks the
+    // wrapping is caught here.
     #[test]
     fn test_ocg_system_prompt_matches_python_exactly() {
         // str::len() counts UTF-8 bytes: the prompt has 3738 chars including 10 em-dashes (3

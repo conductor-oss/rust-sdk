@@ -1,8 +1,8 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-//! [`FrameworkAgent`] adapter for the `async-openai` crate. Gated behind the `openai-adapter`
-//! Cargo feature so plain consumers of this crate never pull in `async-openai`.
+// FrameworkAgent adapter for the async-openai crate. Gated behind the openai-adapter
+// Cargo feature so plain consumers of this crate never pull in async-openai.
 
 use std::collections::HashMap;
 

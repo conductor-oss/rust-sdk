@@ -380,8 +380,8 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     Value::Object(map)
 }
 
-/// Serializes an [`OutputType`] to the `OutputTypeConfig` wire shape: a JSON `schema` plus the
-/// originating `className` for server-side validation.
+// Serializes an OutputType to the OutputTypeConfig wire shape: a JSON `schema` plus the
+// originating `className` for server-side validation.
 fn serialize_output_type(output_type: &OutputType) -> Value {
     let mut map = Map::new();
     map.insert("schema".to_owned(), output_type.schema.clone());
@@ -392,9 +392,9 @@ fn serialize_output_type(output_type: &OutputType) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`Guardrail`] to the `GuardrailConfig` wire shape: common fields
-/// (`name`/`position`/`onFail`/`maxRetries`) plus the `guardrailType` discriminant and that
-/// type's own fields, contributed by [`Guardrail::guardrail_type_fields`].
+// Serializes a Guardrail to the GuardrailConfig wire shape: common fields
+// (`name`/`position`/`onFail`/`maxRetries`) plus the `guardrailType` discriminant and that
+// type's own fields, contributed by Guardrail::guardrail_type_fields.
 fn serialize_guardrail(guardrail: &Guardrail) -> Value {
     let mut map = Map::new();
 
@@ -413,9 +413,9 @@ fn serialize_guardrail(guardrail: &Guardrail) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`TerminationCondition`] to the `TerminationConfig` wire shape: a `"type"`
-/// discriminant (from [`TerminationCondition::type_str`]) plus that variant's own fields, with
-/// `And`/`Or` recursing into their `conditions` via this same function.
+// Serializes a TerminationCondition to the TerminationConfig wire shape: a `"type"`
+// discriminant (from TerminationCondition::type_str) plus that variant's own fields, with
+// `And`/`Or` recursing into their `conditions` via this same function.
 fn serialize_termination(condition: &TerminationCondition) -> Value {
     let mut map = Map::new();
     map.insert(
@@ -472,10 +472,10 @@ fn serialize_termination(condition: &TerminationCondition) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`ConversationMemory`] to the `MemoryConfig` wire shape. `messages` is omitted
-/// when empty; `maxMessages` is omitted when unset or explicitly set to `0` (treated as falsy).
-/// This function can return an empty object (`{}`) — the top-level `memory` key is emitted
-/// whenever `AgentDef.memory` is `Some`, even if that produces `"memory": {}`.
+// Serializes a ConversationMemory to the MemoryConfig wire shape. `messages` is omitted
+// when empty; `maxMessages` is omitted when unset or explicitly set to `0` (treated as falsy).
+// This function can return an empty object (`{}`) — the top-level `memory` key is emitted
+// whenever `AgentDef.memory` is `Some`, even if that produces `"memory": {}`.
 fn serialize_memory(memory: &ConversationMemory) -> Value {
     let mut map = Map::new();
 
@@ -494,10 +494,10 @@ fn serialize_memory(memory: &ConversationMemory) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`Message`] to its wire dict shape. Note the mixed casing: `message`/
-/// `tool_calls` stay `snake_case` while `toolCallId`/`taskReferenceName` are camelCase.
-/// `tool_calls` is only ever populated for `MessageRole::ToolCall`; `tool_call_id`/
-/// `task_reference_name` only for `MessageRole::Tool` — both omitted otherwise.
+// Serializes a Message to its wire dict shape. Note the mixed casing: `message`/
+// `tool_calls` stay `snake_case` while `toolCallId`/`taskReferenceName` are camelCase.
+// `tool_calls` is only ever populated for `MessageRole::ToolCall`; `tool_call_id`/
+// `task_reference_name` only for `MessageRole::Tool` — both omitted otherwise.
 fn serialize_message(message: &Message) -> Value {
     let mut map = Map::new();
 
@@ -526,8 +526,8 @@ fn serialize_message(message: &Message) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`ToolCall`] (a [`Message`]'s `tool_calls` entry) to its
-/// `{"name", "taskReferenceName", "input"}` dict shape.
+// Serializes a ToolCall (a Message's `tool_calls` entry) to its
+// `{"name", "taskReferenceName", "input"}` dict shape.
 fn serialize_tool_call(tool_call: &ToolCall) -> Value {
     let mut map = Map::new();
 
@@ -541,13 +541,13 @@ fn serialize_tool_call(tool_call: &ToolCall) -> Value {
     Value::Object(map)
 }
 
-/// Serializes a [`SwarmTransition`] to the `HandoffConfig` wire shape: `target` plus a `type`
-/// discriminant (from [`SwarmTransition::as_str`]) and that variant's own fields.
-///
-/// `OnCondition` carries an arbitrary Rust closure ([`super::swarm::SwarmConditionFn`]), which
-/// has no JSON representation, so it serializes as a `taskName` of
-/// `"{agent_name}_handoff_{target}"`, deferring evaluation to a runtime task registered under
-/// that name.
+// Serializes a SwarmTransition to the HandoffConfig wire shape: `target` plus a `type`
+// discriminant (from SwarmTransition::as_str) and that variant's own fields.
+//
+// `OnCondition` carries an arbitrary Rust closure (super::swarm::SwarmConditionFn), which
+// has no JSON representation, so it serializes as a `taskName` of
+// `"{agent_name}_handoff_{target}"`, deferring evaluation to a runtime task registered under
+// that name.
 fn serialize_swarm_transition(transition: &SwarmTransition, agent_name: &str) -> Value {
     let mut map = Map::new();
 
@@ -815,8 +815,8 @@ mod tests {
         );
     }
 
-    /// Regression test: a hyphenated agent name's `stopWhen.taskName` must match the sanitized
-    /// name the server expects.
+    // Regression test: a hyphenated agent name's `stopWhen.taskName` must match the sanitized
+    // name the server expects.
     #[test]
     fn test_serialize_stop_when_sanitizes_hyphens_in_task_name() {
         let agent = AgentDef::new("triage-agent")
@@ -923,9 +923,9 @@ mod tests {
         );
     }
 
-    /// Regression test: a `PLAN_EXECUTE` coordinator has no entries in `agents` (its sub-agents
-    /// live in `planner`/`fallback` instead), so checking `agents.is_empty()` alone omitted
-    /// `strategy` from the wire payload, and the server defaulted to `Strategy.HANDOFF`.
+    // Regression test: a `PLAN_EXECUTE` coordinator has no entries in `agents` (its sub-agents
+    // live in `planner`/`fallback` instead), so checking `agents.is_empty()` alone omitted
+    // `strategy` from the wire payload, and the server defaulted to `Strategy.HANDOFF`.
     #[test]
     fn test_strategy_emitted_for_plan_execute_with_only_planner_no_sub_agents() {
         let planner = AgentDef::new("planner").unwrap().with_model("gpt-4");
@@ -1531,9 +1531,9 @@ mod tests {
         assert!(!h.contains_key("resultContains"));
     }
 
-    /// `OnCondition` wraps an arbitrary Rust closure, which has no JSON representation, so it
-    /// serializes as a `taskName` of `"{agent_name}_handoff_{target}"` and defers evaluation to
-    /// a runtime task registered under that name.
+    // `OnCondition` wraps an arbitrary Rust closure, which has no JSON representation, so it
+    // serializes as a `taskName` of `"{agent_name}_handoff_{target}"` and defers evaluation to
+    // a runtime task registered under that name.
     #[test]
     fn test_serialize_on_condition_transition_emits_task_name_reference() {
         let agent =
