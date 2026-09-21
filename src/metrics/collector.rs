@@ -4,7 +4,7 @@
 //! Prometheus implementation of the canonical Conductor SDK metric catalog.
 //!
 //! Metric names, label names, label values, and types here are intentionally
-//! identical to the Java, Go, and Python SDKs. See `sdk-metrics-harmonization.md`
+//! identical across every Conductor SDK. See `sdk-metrics-harmonization.md`
 //! at <https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md>.
 
 use parking_lot::RwLock;
@@ -23,7 +23,7 @@ use crate::http::HttpMetricsObserver;
 
 use super::MetricsSettings;
 
-/// Canonical time histogram buckets — identical to Java/Go/Python SDKs.
+/// Canonical time histogram buckets, shared across every Conductor SDK.
 ///
 /// These buckets are finer-grained at the millisecond range than Prometheus'
 /// defaults, reflecting Conductor's sub-second worker poll/update latencies.
@@ -31,7 +31,7 @@ const SECONDS_BUCKETS: &[f64] = &[
     0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
 ];
 
-/// Canonical size histogram buckets — identical to Java/Go/Python SDKs.
+/// Canonical size histogram buckets, shared across every Conductor SDK.
 const SIZE_BUCKETS: &[f64] = &[
     100.0,
     1_000.0,
@@ -367,9 +367,9 @@ impl MetricsCollector {
 
     /// Surface-only: increment `task_ack_error_total`. The current rust-sdk
     /// does not perform a separate ack RPC (poll returns tasks directly), so
-    /// this counter is registered to keep the metric surface identical to
-    /// Java/Go/Python but is never incremented by the SDK itself. Kept
-    /// available for user code that performs its own acknowledgement flow.
+    /// this counter is registered to keep the metric surface complete but is
+    /// never incremented by the SDK itself. Kept available for user code
+    /// that performs its own acknowledgement flow.
     pub fn increment_task_ack_error(&self, task_type: &str, exception: &str) {
         self.task_ack_error_total
             .with_label_values(&[task_type, exception])

@@ -5,8 +5,7 @@ use crate::models::Task;
 
 /// Context for the currently executing task.
 ///
-/// This provides convenient access to task metadata and execution state,
-/// similar to Python SDK's `get_task_context()`.
+/// This provides convenient access to task metadata and execution state.
 ///
 /// # Example
 ///

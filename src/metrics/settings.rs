@@ -23,10 +23,9 @@ pub struct MetricsSettings {
 
     /// Optional namespace prefix for all metric names. Defaults to `""` so
     /// that metric names emitted by this SDK match the canonical Conductor
-    /// SDK metric catalog used by the Java, Go, and Python SDKs (which do
-    /// not prefix metric names). Set this via [`Self::with_namespace`] if you
-    /// need to isolate Conductor SDK metrics from other metrics sharing the
-    /// same Prometheus registry.
+    /// SDK metric catalog, which doesn't prefix metric names. Set this via
+    /// [`Self::with_namespace`] if you need to isolate Conductor SDK metrics
+    /// from other metrics sharing the same Prometheus registry.
     pub namespace: String,
 }
 
