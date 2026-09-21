@@ -2,9 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 //! LLM/vector-DB provider identifiers and their `configuration` payloads, for
-//! [`crate::client::AiOrchestrator`]. Ports python's `conductor.client.ai.configuration`
-//! (`LLMProvider`/`VectorDB`) and `conductor.client.ai.integrations` (`IntegrationConfig` and
-//! its concrete subclasses).
+//! [`crate::client::AiOrchestrator`].
 //!
 //! [`LlmProvider`]/[`VectorDb`] deliberately don't derive `Serialize`/`Deserialize`: they're
 //! only ever written into an [`crate::models::IntegrationUpdate::integration_type`] string, never
@@ -45,8 +43,8 @@ pub enum LlmProvider {
 }
 
 impl LlmProvider {
-    /// The exact wire string the server's integration-provider registry expects, matching
-    /// python's `LLMProvider` enum values byte-for-byte (including `Grok`'s inconsistent casing).
+    /// The exact wire string the server's integration-provider registry expects (including
+    /// `Grok`'s inconsistent casing).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -79,8 +77,7 @@ pub enum VectorDb {
 }
 
 impl VectorDb {
-    /// The exact wire string the server's integration-provider registry expects, matching
-    /// python's `VectorDB` enum values.
+    /// The exact wire string the server's integration-provider registry expects.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -98,9 +95,9 @@ impl VectorDb {
 /// canonical schema, since each integration provider plugin reads whatever keys it expects
 /// (confirmed against `docs/agents/` and the real server's `ai/VECTORDB_CONFIGURATION.md`, which
 /// describes a *different*, static YAML-configured set of vector-DB instances, not this dynamic
-/// per-provider map). Implementations here match python's exactly, including its inconsistent
-/// key casing (`"api_key"` vs. `"projectName"` on the same [`PineconeConfig`]) -- that isn't a
-/// bug to "fix," it's whatever each real provider integration already reads server-side.
+/// per-provider map). That includes inconsistent key casing (`"api_key"` vs. `"projectName"` on
+/// the same [`PineconeConfig`]) -- that isn't a bug to "fix," it's whatever each real provider
+/// integration already reads server-side.
 pub trait IntegrationConfig {
     /// Build the `configuration` map to send as part of an `IntegrationUpdate`/
     /// `IntegrationApiUpdate`.
@@ -114,8 +111,8 @@ pub struct WeaviateConfig {
     pub api_key: String,
     /// Weaviate endpoint URL.
     pub endpoint: String,
-    /// Weaviate class name. Stored for callers who need it, but -- matching python's
-    /// `WeaviateConfig.to_dict()` exactly -- **not** included in [`IntegrationConfig::to_config`].
+    /// Weaviate class name. Stored for callers who need it, but deliberately **not** included
+    /// in [`IntegrationConfig::to_config`].
     pub classname: String,
 }
 
@@ -161,7 +158,7 @@ impl OpenAiConfig {
     }
 
     /// Create a new `OpenAI` configuration, reading the API key from the `OPENAI_API_KEY`
-    /// environment variable (matching python's `OpenAIConfig(api_key=None)` fallback).
+    /// environment variable.
     #[must_use]
     pub fn from_env() -> Self {
         Self {
@@ -239,8 +236,7 @@ impl PineconeConfig {
     }
 
     /// Create a new Pinecone configuration, reading any unset field from
-    /// `PINECONE_API_KEY`/`PINECONE_ENDPOINT`/`PINECONE_ENV`/`PINECONE_PROJECT` (matching
-    /// python's `PineconeConfig(...)` per-field fallback).
+    /// `PINECONE_API_KEY`/`PINECONE_ENDPOINT`/`PINECONE_ENV`/`PINECONE_PROJECT`.
     #[must_use]
     pub fn from_env() -> Self {
         Self {
@@ -254,8 +250,8 @@ impl PineconeConfig {
 
 impl IntegrationConfig for PineconeConfig {
     fn to_config(&self) -> HashMap<String, Value> {
-        // `projectName` is camelCase while every other key here is snake_case -- ported exactly
-        // from python's `PineconeConfig.to_dict()`; see this module's doc comment for why.
+        // `projectName` is camelCase while every other key here is snake_case, deliberately --
+        // see this module's doc comment for why.
         HashMap::from([
             (
                 "api_key".to_owned(),

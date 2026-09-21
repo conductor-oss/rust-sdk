@@ -9,8 +9,6 @@ use crate::models::{
 
 /// Client for managing the service registry: HTTP/gRPC service definitions,
 /// their methods, proto files, and circuit breakers.
-///
-/// Matches the Python SDK's `ServiceRegistryClient`.
 #[derive(Clone)]
 pub struct ServiceRegistryClient {
     api: ApiClient,

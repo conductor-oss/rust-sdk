@@ -8,15 +8,14 @@ use crate::http::{ApiClient, ApiPath};
 
 /// Client for the Agent Runtime control-plane API (`/agent/*`).
 ///
-/// Mirrors python-sdk's `conductor.client.agent_client.AgentClient` /
-/// `conductor.client.orkes.orkes_agent_client.OrkesAgentClient`, including `stream_sse`
-/// (here: [`stream`](Self::stream)) — the response body is handed back as a raw byte stream
-/// via [`ApiClient::get_stream`], with SSE framing/decoding into `crate::agents::AgentEvent`
-/// left to `crate::agents::AgentStream`.
+/// [`stream`](Self::stream) hands the response body back as a raw byte stream via
+/// [`ApiClient::get_stream`], with SSE framing/decoding into `crate::agents::AgentEvent` left to
+/// `crate::agents::AgentStream`.
 ///
-/// Request/response bodies are passed through as raw [`Value`] rather than typed models —
-/// there is no typed `AgentExecution`/`AgentStatus`/etc. in this crate yet (those belong to the
-/// deferred `AgentRuntime` follow-up), so callers build/inspect JSON directly for now.
+/// Every other request/response body is passed through as raw [`Value`] rather than a typed
+/// model -- this client is deliberately just the thin `/agent/*` transport layer; the typed
+/// `crate::agents::AgentStatus`/`AgentResult`/etc. built from these raw responses live one layer
+/// up, in `crate::agents::AgentRuntime`/`AgentHandle`.
 #[derive(Clone)]
 pub struct AgentClient {
     api: ApiClient,
@@ -159,7 +158,7 @@ impl AgentClient {
     }
 
     /// Open the Server-Sent Events stream for a running agent execution.
-    /// `GET /agent/stream/{execution_id}` (python-sdk: `stream_sse`).
+    /// `GET /agent/stream/{execution_id}`.
     ///
     /// Returns the raw [`reqwest::Response`]; wrap it in `crate::agents::AgentStream` to decode
     /// SSE frames into `crate::agents::AgentEvent`s.
@@ -175,8 +174,7 @@ impl AgentClient {
     }
 
     /// Push a raw progress/telemetry event for an agent execution.
-    /// `POST /agent/events/{execution_id}` (python-sdk's `frameworks/claude_agent_sdk.py`
-    /// `_push_event_nonblocking`'s target endpoint). Intended for frameworks that run an opaque
+    /// `POST /agent/events/{execution_id}`. Intended for frameworks that run an opaque
     /// subprocess loop outside Conductor's normal task lifecycle — e.g. the Claude Agent SDK
     /// passthrough transport (`crate::agents::claude_agent_sdk`, `claude-agent-sdk` feature) —
     /// to surface what's happening inside that loop to the Conductor UI/API in near-real-time.

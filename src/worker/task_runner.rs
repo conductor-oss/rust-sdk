@@ -475,9 +475,9 @@ impl TaskRunner {
 
         let exec_start = Instant::now();
 
-        // Start a lease-extension heartbeat alongside execution, if configured -- matches
-        // python-sdk's `LeaseManager`, translated to a per-task spawned tokio task (cheap here,
-        // unlike an OS thread) rather than a shared background-thread manager.
+        // Start a lease-extension heartbeat alongside execution, if configured -- a per-task
+        // spawned tokio task (cheap here, unlike an OS thread) rather than a shared
+        // background-thread manager.
         let heartbeat_handle = Self::maybe_spawn_lease_heartbeat(task_client, &task, config);
 
         // Execute the worker - pass reference to avoid clone in worker trait
@@ -568,7 +568,7 @@ impl TaskRunner {
 
     /// Start a background heartbeat loop for `task`, if lease extension is enabled and the
     /// task's `response_timeout_seconds` makes it worthwhile. Returns `None` (spawning nothing)
-    /// when disabled, matching python-sdk's `_track_lease`'s early-return conditions exactly.
+    /// when disabled.
     fn maybe_spawn_lease_heartbeat(
         task_client: &TaskClient,
         task: &Arc<Task>,
@@ -581,8 +581,7 @@ impl TaskRunner {
             return None;
         }
         let interval_secs = task.response_timeout_seconds as f64 * config.lease_extend_threshold;
-        // Matches python's `LeaseManager.track`: an interval under a second isn't worth
-        // scheduling a repeating heartbeat for.
+        // An interval under a second isn't worth scheduling a repeating heartbeat for.
         if interval_secs < 1.0 {
             return None;
         }
@@ -601,10 +600,8 @@ impl TaskRunner {
     }
 
     /// Send a lease-extension heartbeat every `interval`, starting `interval` after this is
-    /// spawned (not immediately) -- matches python's `LeaseManager`, which arms
-    /// `last_heartbeat_time` at `track()` time and only fires once that much time has elapsed.
-    /// Runs until the caller aborts the returned `JoinHandle` (when the task finishes), which is
-    /// the only way this loop ends.
+    /// spawned (not immediately). Runs until the caller aborts the returned `JoinHandle` (when
+    /// the task finishes), which is the only way this loop ends.
     #[expect(clippy::infinite_loop)]
     async fn send_lease_heartbeats(
         task_client: TaskClient,
@@ -612,10 +609,10 @@ impl TaskRunner {
         workflow_instance_id: String,
         interval: Duration,
     ) {
-        // Matches python's `LeaseManager._send_heartbeat`: a short, fixed retry count with fast
-        // backoff -- deliberately not `TaskClient::update_task_with_retry`'s 10/20/30s schedule,
-        // which is sized for terminal completion updates, not a fast-repeating keep-alive that
-        // will just get another chance at the next tick anyway.
+        // A short, fixed retry count with fast backoff -- deliberately not
+        // `TaskClient::update_task_with_retry`'s 10/20/30s schedule, which is sized for
+        // terminal completion updates, not a fast-repeating keep-alive that will just get
+        // another chance at the next tick anyway.
         const LEASE_EXTEND_RETRY_COUNT: u32 = 3;
 
         let mut ticker = tokio::time::interval_at(tokio::time::Instant::now() + interval, interval);
@@ -728,7 +725,7 @@ mod tests {
     #[test]
     fn test_lease_heartbeat_not_spawned_when_interval_too_short() {
         let task_client = test_task_client();
-        // 1s timeout * 0.8 threshold = 0.8s, matching python's "< 1 second" skip.
+        // 1s timeout * 0.8 threshold = 0.8s, under the 1-second skip threshold.
         let task = Arc::new(Task {
             response_timeout_seconds: 1,
             ..Default::default()

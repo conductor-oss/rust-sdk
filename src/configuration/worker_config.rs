@@ -38,13 +38,12 @@ pub struct WorkerConfig {
     pub paused: bool,
 
     /// Whether to automatically extend a task's server-side lease with periodic heartbeats
-    /// while it's still executing, matching python-sdk's `LeaseManager`. Off by default —
-    /// only useful for workers whose execution time can approach `responseTimeoutSeconds`.
+    /// while it's still executing. Off by default — only useful for workers whose execution
+    /// time can approach `responseTimeoutSeconds`.
     pub lease_extend_enabled: bool,
 
     /// Fraction of a task's `responseTimeoutSeconds` after which a heartbeat is sent (and
-    /// repeated at the same interval for as long as the task keeps running). Matches
-    /// python-sdk's `LEASE_EXTEND_DURATION_FACTOR`.
+    /// repeated at the same interval for as long as the task keeps running).
     pub lease_extend_threshold: f64,
 }
 
@@ -149,7 +148,7 @@ impl WorkerConfig {
 
 /// Resolve worker configuration from environment variables.
 ///
-/// This follows the Python SDK's hierarchical configuration pattern:
+/// This follows the same hierarchical configuration pattern used across Conductor SDKs:
 /// 1. Worker-specific env: `CONDUCTOR_WORKER_{WORKER_NAME}_{PROPERTY}`
 /// 2. Global env: `CONDUCTOR_WORKER_ALL_{PROPERTY}`
 /// 3. Code defaults

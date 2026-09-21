@@ -502,8 +502,7 @@ impl WorkflowTask {
         }
     }
 
-    /// Create a `LIST_MCP_TOOLS` task — lists available tools from an MCP server, matching
-    /// python-sdk's `ListMcpTools` task wrapper.
+    /// Create a `LIST_MCP_TOOLS` task — lists available tools from an MCP server.
     pub fn list_mcp_tools(
         task_ref_name: impl Into<String>,
         mcp_server: impl Into<String>,

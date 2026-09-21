@@ -3,14 +3,10 @@
 
 //! [`AiOrchestrator`] -- a thin typed convenience layer over [`IntegrationClient`]/
 //! [`PromptClient`], for registering LLM/vector-DB integrations and testing prompt templates.
-//! Ports python's `conductor.client.ai.orchestrator.AIOrchestrator`.
 //!
-//! Two deliberate omissions from the python original, both dead even there:
-//! - `prompt_test_workflow_name`: stored by python's `__init__` but never read by any method on
-//!   the class (confirmed by searching the whole python-sdk repo for other references -- there
-//!   are none). Not ported.
-//! - `workflow_client`/`workflow_executor`: also stored but unused by any method here. Anyone
-//!   who wants one already has [`crate::client::ConductorClient::workflow_client`].
+//! Two fields are deliberately not present, since neither would actually be used by anything:
+//! `prompt_test_workflow_name` (never read anywhere), and `workflow_client`/`workflow_executor`
+//! (anyone who wants one already has [`crate::client::ConductorClient::workflow_client`]).
 
 use std::collections::HashMap;
 
@@ -132,9 +128,8 @@ impl AiOrchestrator {
 
     /// [`AiOrchestrator::test_prompt_template`] with explicit `stop_words`/`temperature`/`top_p`.
     ///
-    /// Python's version also accepts a `max_tokens` parameter that it never actually forwards to
-    /// the underlying request -- not ported, since replicating a dead parameter would just be
-    /// misleading about what this call does.
+    /// Deliberately has no `max_tokens` parameter: the server never forwards one for this
+    /// endpoint, so accepting one here would be misleading about what the call actually does.
     ///
     /// # Errors
     ///
@@ -194,7 +189,7 @@ impl AiOrchestrator {
 
     /// Register (or update) a vector-DB integration and its indices.
     ///
-    /// `description` defaults to `name` if omitted, matching python. See
+    /// `description` defaults to `name` if omitted. See
     /// [`AiOrchestrator::add_ai_integration`] for the existence/`overwrite` semantics.
     ///
     /// # Errors

@@ -59,19 +59,17 @@ impl TaskHandler {
 
     /// Add a worker to the handler.
     ///
-    /// Registration is always explicit -- there is no scan-a-package auto-discovery here,
-    /// unlike python-sdk's `worker_loader.py`/`runtime/discovery.py`. Python needs that because
-    /// it has no compile-time registry to lean on; Rust's callers already write out every
-    /// `TaskDef`/`AgentDef`/`ToolDef` by hand at a well-typed call site, so scanning for them
-    /// would only add indirection, not remove real boilerplate. A crate-level `inventory`
-    /// dependency was carried for a while in anticipation of a `#[worker]`-style attribute macro
-    /// doing `inventory::submit!`-based collection instead, but was removed unused (Wave 8):
-    /// besides never having a caller, that approach has a real sharp edge `inventory` itself
-    /// documents -- registrations only get linked in if the registering crate is a *direct*
-    /// dependency of the final binary, which link-time dead-code elimination can silently defeat
-    /// depending on build settings. `add_worker`/`add_workers` (and
-    /// [`TaskHandlerBuilder::worker`]/[`TaskHandlerBuilder::workers`]) staying explicit sidesteps
-    /// that class of bug entirely.
+    /// Registration is always explicit -- there is no scan-a-package auto-discovery here.
+    /// Rust's callers already write out every `TaskDef`/`AgentDef`/`ToolDef` by hand at a
+    /// well-typed call site, so scanning for them would only add indirection, not remove real
+    /// boilerplate. A crate-level `inventory` dependency was carried for a while in anticipation
+    /// of a `#[worker]`-style attribute macro doing `inventory::submit!`-based collection
+    /// instead, but was removed unused: besides never having a caller, that approach has a real
+    /// sharp edge `inventory` itself documents -- registrations only get linked in if the
+    /// registering crate is a *direct* dependency of the final binary, which link-time
+    /// dead-code elimination can silently defeat depending on build settings.
+    /// `add_worker`/`add_workers` (and [`TaskHandlerBuilder::worker`]/
+    /// [`TaskHandlerBuilder::workers`]) staying explicit sidesteps that class of bug entirely.
     pub fn add_worker(&mut self, worker: impl Worker + 'static) {
         self.workers.push(Arc::new(worker));
     }
@@ -219,24 +217,14 @@ impl TaskHandler {
     /// least one real poll attempt against the server, within `timeout`. Call this right after
     /// [`TaskHandler::start`].
     ///
-    /// Rust-native analog of python-sdk's `LocalLivenessCheck` -- **not** a literal port; see
-    /// this crate's `docs/agents/README.md` for why one wouldn't make sense.
-    /// Python's workers run as OS subprocesses, so it verifies each expected worker has a live
-    /// `pid` right after registration, guarding against `fork()` failing or an exception being
-    /// swallowed during subprocess bootstrap. This crate's workers are `tokio::spawn`ed futures
-    /// in the same process, where spawning itself essentially never fails silently the way
-    /// `fork()` can -- so the equivalent real risk isn't "did the task get scheduled," it's "did
-    /// this worker's task actually reach and complete its first poll," which catches an early
-    /// panic during setup (before or shortly into [`TaskRunner::run`]) or a spawned task that's
-    /// starved and never reaches the network call. [`TaskRunner::poll_attempt_count`] is the
-    /// signal used to tell that apart from [`TaskRunner::is_running`] merely being `true`, which
-    /// happens before the first poll is even attempted.
-    ///
-    /// (Worth noting since it shaped this method's design: python's own `LocalLivenessCheck` is
-    /// unreachable dead code today -- defined, but never called from `runtime.py`/
-    /// `worker_manager.py`, has no config field wired up, and no test covers it. This isn't
-    /// "port an existing python behavior," it's "build the rust-native version of the same
-    /// underlying safety net," since there's no real python behavior to match against.)
+    /// This crate's workers are `tokio::spawn`ed futures in the same process, where spawning
+    /// itself essentially never fails silently -- so the real risk isn't "did the task get
+    /// scheduled," it's "did this worker's task actually reach and complete its first poll,"
+    /// which catches an early panic during setup (before or shortly into [`TaskRunner::run`])
+    /// or a spawned task that's starved and never reaches the network call.
+    /// [`TaskRunner::poll_attempt_count`] is the signal used to tell that apart from
+    /// [`TaskRunner::is_running`] merely being `true`, which happens before the first poll is
+    /// even attempted.
     ///
     /// No-op (returns `Ok(())` immediately) if [`TaskHandler::start`] hasn't been called yet, or
     /// registered no workers -- there's nothing to verify.
