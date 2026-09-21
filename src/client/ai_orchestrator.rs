@@ -100,7 +100,7 @@ impl AiOrchestrator {
         Ok(())
     }
 
-    /// Render and run a prompt template against a model, using python's defaults
+    /// Render and run a prompt template against a model, using defaults
     /// (`temperature = 0.0`, `top_p = 1.0`, no stop words). See
     /// [`AiOrchestrator::test_prompt_template_with_options`] to override them.
     ///

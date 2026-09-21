@@ -48,7 +48,7 @@ impl Default for Configuration {
 }
 
 impl Configuration {
-    /// Default token TTL in minutes (45 minutes, same as Python SDK).
+    /// Default token TTL in minutes (45 minutes).
     const DEFAULT_TOKEN_TTL_MINUTES: u64 = 45;
 
     /// Create configuration from environment variables.

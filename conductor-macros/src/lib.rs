@@ -332,8 +332,6 @@ fn generate_worker(args: WorkerArgs, input_fn: ItemFn) -> syn::Result<TokenStrea
 }
 
 /// Alias for `#[worker]` - marks a function as a Conductor worker task.
-///
-/// This is provided for familiarity with Python SDK's `@worker_task` decorator.
 #[proc_macro_attribute]
 pub fn worker_task(args: TokenStream, input: TokenStream) -> TokenStream {
     worker(args, input)
