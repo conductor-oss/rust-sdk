@@ -17,7 +17,7 @@ use super::{
 /// Main Conductor client combining all API clients.
 ///
 /// This is the primary entry point for interacting with the Conductor API.
-/// Also available as `OrkesClients` alias for Python SDK compatibility.
+/// Also available as the `OrkesClients` alias.
 #[derive(Clone)]
 pub struct ConductorClient {
     api: ApiClient,
@@ -77,7 +77,7 @@ impl ConductorClient {
         TaskClient::new(self.api.clone())
     }
 
-    /// Alias for `task_client()` - matches Python SDK naming.
+    /// Alias for `task_client()`.
     #[must_use]
     pub fn get_task_client(&self) -> TaskClient {
         self.task_client()
@@ -89,7 +89,7 @@ impl ConductorClient {
         WorkflowClient::new_with_events(self.api.clone(), self.events.clone())
     }
 
-    /// Alias for `workflow_client()` - matches Python SDK naming.
+    /// Alias for `workflow_client()`.
     #[must_use]
     pub fn get_workflow_client(&self) -> WorkflowClient {
         self.workflow_client()
@@ -101,7 +101,7 @@ impl ConductorClient {
         MetadataClient::new(self.api.clone())
     }
 
-    /// Alias for `metadata_client()` - matches Python SDK naming.
+    /// Alias for `metadata_client()`.
     #[must_use]
     pub fn get_metadata_client(&self) -> MetadataClient {
         self.metadata_client()
@@ -116,7 +116,7 @@ impl ConductorClient {
         OrkesMetadataClient::new(self.api.clone())
     }
 
-    /// Alias for `orkes_metadata_client()` - matches Python SDK naming.
+    /// Alias for `orkes_metadata_client()`.
     #[must_use]
     pub fn get_orkes_metadata_client(&self) -> OrkesMetadataClient {
         self.orkes_metadata_client()
@@ -128,7 +128,7 @@ impl ConductorClient {
         SchedulerClient::new(self.api.clone())
     }
 
-    /// Alias for `scheduler_client()` - matches Python SDK naming.
+    /// Alias for `scheduler_client()`.
     #[must_use]
     pub fn get_scheduler_client(&self) -> SchedulerClient {
         self.scheduler_client()
@@ -140,7 +140,7 @@ impl ConductorClient {
         SecretClient::new(self.api.clone())
     }
 
-    /// Alias for `secret_client()` - matches Python SDK naming.
+    /// Alias for `secret_client()`.
     #[must_use]
     pub fn get_secret_client(&self) -> SecretClient {
         self.secret_client()
@@ -152,7 +152,7 @@ impl ConductorClient {
         AuthorizationClient::new(self.api.clone())
     }
 
-    /// Alias for `authorization_client()` - matches Python SDK naming.
+    /// Alias for `authorization_client()`.
     #[must_use]
     pub fn get_authorization_client(&self) -> AuthorizationClient {
         self.authorization_client()
@@ -164,7 +164,7 @@ impl ConductorClient {
         IntegrationClient::new(self.api.clone())
     }
 
-    /// Alias for `integration_client()` - matches Python SDK naming.
+    /// Alias for `integration_client()`.
     #[must_use]
     pub fn get_integration_client(&self) -> IntegrationClient {
         self.integration_client()
@@ -183,7 +183,7 @@ impl ConductorClient {
         PromptClient::new(self.api.clone())
     }
 
-    /// Alias for `prompt_client()` - matches Python SDK naming.
+    /// Alias for `prompt_client()`.
     #[must_use]
     pub fn get_prompt_client(&self) -> PromptClient {
         self.prompt_client()
@@ -195,7 +195,7 @@ impl ConductorClient {
         SchemaClient::new(self.api.clone())
     }
 
-    /// Alias for `schema_client()` - matches Python SDK naming.
+    /// Alias for `schema_client()`.
     #[must_use]
     pub fn get_schema_client(&self) -> SchemaClient {
         self.schema_client()
@@ -207,7 +207,7 @@ impl ConductorClient {
         EventClient::new(self.api.clone())
     }
 
-    /// Alias for `event_client()` - matches Python SDK naming.
+    /// Alias for `event_client()`.
     #[must_use]
     pub fn get_event_client(&self) -> EventClient {
         self.event_client()
@@ -222,7 +222,7 @@ impl ConductorClient {
         AgentClient::new(self.api.clone())
     }
 
-    /// Alias for `agent_client()` - matches Python SDK naming.
+    /// Alias for `agent_client()`.
     #[cfg(feature = "agents")]
     #[must_use]
     pub fn get_agent_client(&self) -> AgentClient {
@@ -236,7 +236,7 @@ impl ConductorClient {
         ServiceRegistryClient::new(self.api.clone())
     }
 
-    /// Alias for `service_registry_client()` - matches Python SDK naming.
+    /// Alias for `service_registry_client()`.
     #[must_use]
     pub fn get_service_registry_client(&self) -> ServiceRegistryClient {
         self.service_registry_client()

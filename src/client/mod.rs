@@ -38,5 +38,5 @@ pub use workflow_client::{
     WorkflowClient, WorkflowRun, WorkflowStateUpdate,
 };
 
-/// Alias for `ConductorClient`, matching the Python SDK's `OrkesClients`.
+/// Alias for `ConductorClient`.
 pub type OrkesClients = ConductorClient;
