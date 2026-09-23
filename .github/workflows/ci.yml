@@ -246,8 +246,7 @@ jobs:
   # anything else fails the job. Rust compile errors and example process
   # failures (transport errors, panics) fail the job on their own steps.
   #
-  # The actions and recordings currently live on feature/llm_mock_impl
-  # (conductor-oss/conductor#1614); switch the ref to a release once it lands.
+  # Use Conductor main for the shared actions and recordings.
   agents-playback:
     name: Agents Playback
     runs-on: ubuntu-latest
@@ -264,7 +263,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: conductor-oss/conductor
-          ref: feature/llm_mock_impl
+          ref: main
           path: tmp/conductor
 
       - name: Install Rust
