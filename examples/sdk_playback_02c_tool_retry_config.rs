@@ -66,7 +66,7 @@ async fn main() -> Result<()> {
     );
 
     let agent = AgentDef::new("retry_config_demo")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_temperature(0.0)
         .with_instructions(
             "You help users fetch and process data. Use the appropriate tool for each request.",

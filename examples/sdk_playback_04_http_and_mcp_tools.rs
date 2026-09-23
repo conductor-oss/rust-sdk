@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
     )?;
 
     let agent = AgentDef::new("http_tools_demo")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You can reverse strings and format reports. \
              When asked to reverse a string, use reverse_string first, then format_report with the result.",

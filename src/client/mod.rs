@@ -3,7 +3,6 @@
 
 #[cfg(feature = "agents")]
 mod agent_client;
-mod ai_orchestrator;
 mod authorization_client;
 mod conductor_client;
 mod event_client;
@@ -14,13 +13,11 @@ mod prompt_client;
 mod scheduler_client;
 mod schema_client;
 mod secret_client;
-mod service_registry_client;
 mod task_client;
 mod workflow_client;
 
 #[cfg(feature = "agents")]
 pub use agent_client::AgentClient;
-pub use ai_orchestrator::AiOrchestrator;
 pub use authorization_client::AuthorizationClient;
 pub use conductor_client::{ConductorClient, ConductorClientBuilder};
 pub use event_client::{EventClient, QueueConfiguration};
@@ -31,7 +28,6 @@ pub use prompt_client::PromptClient;
 pub use scheduler_client::SchedulerClient;
 pub use schema_client::SchemaClient;
 pub use secret_client::SecretClient;
-pub use service_registry_client::ServiceRegistryClient;
 pub use task_client::TaskClient;
 pub use workflow_client::{
     CorrelationIdsSearchRequest, SearchResult, SignalResponse, TaskMock, TestWorkflowRequest,

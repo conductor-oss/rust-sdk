@@ -275,16 +275,9 @@ pub struct AgentDef {
     /// [`AgentRuntime::serve`](super::runtime::AgentRuntime::serve) for the worker that
     /// evaluates it.
     pub stop_when: Option<StopWhenHandler>,
-    /// CLI command execution config, set via [`AgentDef::with_cli_commands`]. Also appends a
-    /// `run_command` tool to [`AgentDef::tools`].
-    pub cli_config: Option<super::cli_config::CliConfig>,
-    /// Code execution config, set via [`AgentDef::with_code_execution`]/
-    /// [`AgentDef::with_local_code_execution`]. Also appends an `execute_code` tool to
-    /// [`AgentDef::tools`].
-    pub code_execution: Option<super::code_execution_config::CodeExecutionConfig>,
     /// A "framework" marker, set via [`AgentDef::with_framework`] — when `Some`, this agent
     /// serializes as a flattened passthrough of [`AgentDef::framework_config`] instead of the
-    /// normal `AgentConfig` shape. This is what lets a [`super::SkillAgent`] be nested as a
+    /// normal `AgentConfig` shape. This is what lets a framework-authored agent be nested as a
     /// sub-agent of an ordinary agent tree (`agents=[...]`/[`ToolDef::agent`]).
     pub framework: Option<String>,
     /// The raw wire config a `framework`-marked agent serializes verbatim (spread alongside
@@ -320,8 +313,6 @@ impl std::fmt::Debug for AgentDef {
             .field("prefill_tools", &self.prefill_tools)
             .field("gate", &self.gate)
             .field("stop_when", &self.stop_when.as_ref().map(|_| "<predicate>"))
-            .field("cli_config", &self.cli_config)
-            .field("code_execution", &self.code_execution)
             .field("framework", &self.framework)
             .field("framework_config", &self.framework_config)
             .field("router", &self.router)
@@ -389,8 +380,6 @@ impl AgentDef {
             prefill_tools: Vec::new(),
             gate: None,
             stop_when: None,
-            cli_config: None,
-            code_execution: None,
             framework: None,
             framework_config: None,
         })
@@ -420,62 +409,10 @@ impl AgentDef {
         self
     }
 
-    /// Attach CLI command execution: stores `config` and, when
-    /// [`super::cli_config::CliConfig::enabled`], immediately appends the auto-built
-    /// `{name}_run_command` tool to [`AgentDef::tools`].
-    #[must_use]
-    pub fn with_cli_commands(mut self, config: super::cli_config::CliConfig) -> Self {
-        if config.enabled {
-            let tool = super::cli_config::cli_command_tool(&config, Some(&self.name));
-            self.tools.push(tool);
-        }
-        self.cli_config = Some(config);
-        self
-    }
-
-    /// Attach code execution with full control: stores `config` and, when
-    /// [`super::code_execution_config::CodeExecutionConfig::enabled`], immediately appends the
-    /// auto-built `{name}_execute_code` tool to [`AgentDef::tools`].
-    #[must_use]
-    pub fn with_code_execution(
-        mut self,
-        config: super::code_execution_config::CodeExecutionConfig,
-    ) -> Self {
-        if config.enabled {
-            let tool = super::code_execution_config::code_execution_tool(&config, Some(&self.name));
-            self.tools.push(tool);
-        }
-        self.code_execution = Some(config);
-        self
-    }
-
-    /// Shorthand for [`AgentDef::with_code_execution`]: builds an enabled
-    /// [`super::code_execution_config::CodeExecutionConfig`] with the given lists, defaulting
-    /// `allowed_languages` to `["python"]` when empty, and leaving `allowed_commands`
-    /// unrestricted when empty.
-    #[must_use]
-    pub fn with_local_code_execution(
-        self,
-        allowed_languages: Vec<String>,
-        allowed_commands: Vec<String>,
-    ) -> Self {
-        let allowed_languages = if allowed_languages.is_empty() {
-            vec!["python".to_owned()]
-        } else {
-            allowed_languages
-        };
-        self.with_code_execution(
-            super::code_execution_config::CodeExecutionConfig::new()
-                .with_allowed_languages(allowed_languages)
-                .with_allowed_commands(allowed_commands),
-        )
-    }
-
     /// Mark this agent as a "framework" passthrough — see [`AgentDef::framework`]'s doc comment.
     /// `raw_config` is spread verbatim into the wire config alongside `name`/`model`/
     /// `_framework` when this agent is serialized, so it should already be in the exact wire
-    /// shape the target framework normalizer expects (e.g.
-    /// [`super::skill::SkillAgent::raw_config`]).
+    /// shape the target framework normalizer expects.
     #[must_use]
     pub fn with_framework(mut self, framework: impl Into<String>, raw_config: Value) -> Self {
         self.framework = Some(framework.into());

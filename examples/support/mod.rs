@@ -6,16 +6,11 @@ use conductor::configuration::Configuration;
 use conductor::error::Result;
 use serde_json::Value;
 
-/// `AgentRuntime::run` only starts an execution and polls it — it does not also register/poll
-/// local tool workers (`AgentRuntime::serve`) for the duration of the call. Every playback
-/// example that uses a client-side tool has to do that wiring itself: spawn `serve` on a second
-/// runtime instance pointed at the same server, `run` to completion, then abort the spawned
-/// poller. This is a real, currently-undocumented gap in `AgentRuntime::run` itself, not
-/// something specific to these examples.
-// This shared file is included by every `sdk_playback_*` example; the function is actually
-// called by most of them but not by `sdk_playback_09_human_in_the_loop`/`_09c_hitl_streaming`
-// (no client-side tools there), so `#[expect(dead_code)]` would be "unfulfilled" in the
-// examples that do call it. `allow` is the correct choice here, not a stale suppression.
+/// Run `agent` to completion while serving its client-side tools from this process.
+///
+/// `AgentRuntime::run` only starts and polls the execution; tool workers are polled by
+/// `AgentRuntime::serve`, which this spawns alongside and aborts once the run finishes.
+// Included by every `sdk_playback_*` example; the ones without client-side tools don't call it.
 #[allow(dead_code)]
 #[allow(clippy::allow_attributes)]
 pub async fn run_with_local_tools(
@@ -33,4 +28,14 @@ pub async fn run_with_local_tools(
     let result = runtime.run(agent, prompt).await;
     server.abort();
     result
+}
+
+/// Model every playback example runs against.
+///
+/// Defaults to the server's recording/playback provider (`mock/mockLLM`), which replays the
+/// shared recordings in conductor-oss/conductor's `llm-recordings/`. Set
+/// `CONDUCTOR_AGENT_LLM_MODEL` (for example `openai/gpt-4o-mini`) to run the same example
+/// against a real provider, for instance to record a new scenario.
+pub fn llm_model() -> String {
+    std::env::var("CONDUCTOR_AGENT_LLM_MODEL").unwrap_or_else(|_| "mock/mockLLM".to_owned())
 }

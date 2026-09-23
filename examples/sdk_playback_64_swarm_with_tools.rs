@@ -49,7 +49,7 @@ fn build_support_agent() -> Result<AgentDef> {
     );
 
     let billing_specialist = AgentDef::new("billing_specialist")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are a billing specialist. Use the check_balance tool to look up \
              account balances. Include the balance amount in your response.",
@@ -57,7 +57,7 @@ fn build_support_agent() -> Result<AgentDef> {
         .with_tool(check_balance);
 
     let order_specialist = AgentDef::new("order_specialist")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are an order specialist. Use the lookup_order tool to check \
              order status. Include the shipping status and ETA in your response.",
@@ -65,7 +65,7 @@ fn build_support_agent() -> Result<AgentDef> {
         .with_tool(lookup_order);
 
     AgentDef::new("support")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are front-line customer support. Triage customer requests. \
              Transfer to billing_specialist for account/payment questions, \

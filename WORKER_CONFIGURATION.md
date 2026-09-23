@@ -229,8 +229,6 @@ let worker = FnWorker::new("slow_report", |task| async move {
 .with_lease_extend_enabled(true);
 ```
 
-See **[LEASE_EXTENSION.md](LEASE_EXTENSION.md)** for the full design (timing, retries, and the
-`LEASE_EXTEND_THRESHOLD` property).
 
 ## Understanding `overwrite_task_def`
 
@@ -696,7 +694,6 @@ The hierarchical worker configuration system provides flexibility to:
 
 - **[DESIGN.md](DESIGN.md)** - Complete SDK architecture and API documentation
 - **[WORKER_COMPARISON.md](WORKER_COMPARISON.md)** - Feature comparison with Python SDK
-- **[LEASE_EXTENSION.md](LEASE_EXTENSION.md)** - Automatic lease-extension heartbeat design
 - **[examples/worker_config_example.rs](examples/worker_config_example.rs)** - Working example
 
 ---

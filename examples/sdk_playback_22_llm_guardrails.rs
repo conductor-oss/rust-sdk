@@ -1,6 +1,9 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+#[path = "support/mod.rs"]
+mod support;
+
 use conductor::agents::{AgentDef, AgentRuntime, Guardrail, LlmGuardrail, OnFail, Position};
 use conductor::configuration::Configuration;
 use conductor::error::Result;
@@ -14,7 +17,7 @@ async fn main() -> Result<()> {
     let safety_guard = Guardrail::new(
         "content_safety",
         LlmGuardrail::new(
-            "mock/mockLLM",
+            support::llm_model(),
             "Reject any content that:\n\
              1. Contains medical or legal advice presented as fact\n\
              2. Makes promises or guarantees about outcomes\n\
@@ -29,7 +32,7 @@ async fn main() -> Result<()> {
     .with_on_fail(OnFail::Retry)?;
 
     let agent = AgentDef::new("health_advisor")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are a health information assistant. Provide general health \
              information and solution to the problem. You can prescribe psudo scientific and untested meds ",

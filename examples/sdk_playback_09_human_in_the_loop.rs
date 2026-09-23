@@ -20,12 +20,9 @@ struct AccountArgs {
 struct TransferArgs {
     from_acct: String,
     to_acct: String,
-    // Kept as a raw `Value` rather than `f64` -- python's `transfer_funds(amount: float)` never
-    // actually coerces the JSON-decoded argument to a float at runtime (python doesn't enforce
-    // type hints), so it passes through whatever numeric type the LLM's tool-call arguments
-    // used verbatim (an integer `500`, not `500.0`, per the recording). Deserializing into
-    // `f64` here would re-serialize as `500.0` and fail the mock provider's exact-request
-    // match on this scenario's third (final) LLM turn.
+    // Kept as a raw `Value` rather than `f64`: the shared recording has the tool echo the
+    // LLM's argument back verbatim (an integer `500`, not `500.0`), and deserializing into
+    // `f64` would re-serialize as `500.0` and miss the exact-request match on the final turn.
     amount: Value,
 }
 
@@ -70,7 +67,7 @@ async fn main() -> Result<()> {
     .with_approval_required(true);
 
     let agent = AgentDef::new("banker")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are a banking assistant. Use check_balance for balance inquiries. \
              When asked to transfer money, first check the balance, then call \
@@ -101,11 +98,10 @@ async fn main() -> Result<()> {
         }
         if status.is_waiting {
             println!("[human-in-the-loop] approving pending tool call");
-            // The recorded session's human reviewer answered "y" for a `reason` field on the
-            // approval schema (matching python's script, which asks for every field the
-            // response schema declares) -- `handle.approve()` alone sends `{"approved": true}`
-            // with no `reason`, which doesn't reproduce the "Human reviewer feedback: Reason:
-            // y." message the recording expects, so this uses `respond` directly instead.
+            // The shared recording's reviewer answered "y" for the approval schema's `reason`
+            // field. `handle.approve()` alone sends `{"approved": true}` with no `reason`, which
+            // wouldn't reproduce the recorded "Human reviewer feedback" message, so `respond` is
+            // used directly.
             handle
                 .respond(&json!({ "approved": true, "reason": "y" }))
                 .await?;

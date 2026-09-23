@@ -17,15 +17,8 @@ while tool execution stays local. This is purely additive — the existing
 `multiagent_chat.rs` examples) remain the low-level workflow DSL that this layer sits above.
 
 Known, tracked gaps (not silently skipped — each has a reason on record):
-- Claude Agent SDK adapter delivers the bare subprocess/`stream-json` transport only; tracking-
-  workflow, server-side event-push, and hook-bridging are open follow-ups.
-- LangGraph's `GraphAgentDef` covers client-side authoring; server-side graph-execution wire
-  compatibility isn't verified yet.
 - `AgentEvent` has no `Unknown`/catch-all variant, so a future new server event kind would error
   `AgentStream::next` rather than degrade gracefully.
-- Agent testing/eval (`src/agents/testing.rs`) covers `mock_run`/`ScriptedEvent`/`expect(...)`
-  assertions only — no record/replay, no LLM-judge semantic assertions, no per-strategy
-  structural validators, no LLM-backed eval runner.
 - `start_agent` as an `EventHandler` action (start an agent execution in response to a
   workflow/task event) is not implemented — needs its exact wire shape confirmed against the
   server before building `EventHandlerAction::StartAgent`.
@@ -116,24 +109,6 @@ impl AgentClient {
 `stream_events` wraps SSE over `reqwest`'s streaming body: returns `ConductorError::SseUnavailable`
 on first-connect failure or on 15s of heartbeat-only traffic, and transparently reconnects with
 `Last-Event-ID` afterward.
-
-### Worker liveness / stall detection
-
-Two independent checks, both implemented:
-
-- `AgentHandle::join`/`join_with_options` periodically fetch the full workflow
-  (`WorkflowClient::get_workflow(execution_id, include_tasks=true)`) and detect `SCHEDULED` tasks
-  stuck at `poll_count == 0` past a stall threshold (default 30s, checked every 10s — see
-  `src/agents/liveness.rs`). Surfaces as `ConductorError::WorkerStall` (carrying the stalled task
-  list) under `StallPolicy::Raise`, or a `tracing::warn!` under the default `StallPolicy::Warn`.
-  Deliberately workflow-scoped rather than domain-scoped, since this crate has no
-  per-execution worker domain to scope by.
-- `TaskHandler::verify_workers_started(timeout)` (`src/worker/task_handler.rs`) — not
-  agent-specific, since "registered a worker that never actually started polling" applies to any
-  `TaskHandler` usage. Built on `TaskRunner::poll_attempt_count()` (incremented after each real
-  `batch_poll` call) plus each spawned task's `JoinHandle::is_finished()`, polled every 50ms until
-  every registered worker clears both checks or `timeout` elapses. Catches an early panic during
-  setup, or a spawned task that's starved and never reaches its first network call.
 
 ## Core types
 
@@ -546,108 +521,6 @@ that tool's declared `credentials: Vec<String>`.
   this; a Conductor server can itself be configured against those providers.
 - JWT minting/verification for tool-call requests — add only if a concrete signed-request
   requirement shows up.
-
-## Frameworks
-
-"Framework adapter support" (running an object authored against someone else's agent SDK through
-Conductor) is a different concern from "LLM provider support" (`AgentDef.model = "openai/gpt-4o"`
-— a `provider/model` string resolved server-side against a Conductor integration). Provider
-strings are core `AgentDef` functionality and ship regardless of framework-adapter phasing.
-
-### `FrameworkAgent` — the generic adapter (Phase 1, shipped)
-
-```rust
-pub trait FrameworkAgent {
-    fn name(&self) -> &str;
-    fn instructions(&self) -> &str;
-    fn model(&self) -> &str;
-    fn tools(&self) -> Vec<ToolDef>;
-}
-
-impl<T: FrameworkAgent> From<T> for AgentDef { /* full extraction, always — no silent passthrough fallback */ }
-```
-
-Any Rust struct shaped like "name + instructions + model + tool list" converts into a real
-`AgentDef` for free — full extraction, so Conductor's guardrails/termination/`DoWhile` loop
-actually drives execution afterward. Deliberate design choice: if a type doesn't implement
-`FrameworkAgent` and no adapter exists for it, that's a compile error, not a runtime guess — it's
-obvious at compile time whether Conductor can see inside a given agent object, with no
-best-effort-extraction-with-silent-fallback path offered at all.
-
-One concrete adapter ships against this trait for the `async-openai` crate's function-calling
-tool shape (`ChatCompletionTool`) — the most-adopted Rust OpenAI client, and the most direct match
-for "OpenAI framework support" in Rust.
-
-Guardrails/termination applicability, stated explicitly rather than left for someone to discover
-via source or logs: content run through `FrameworkAgent` extraction gets Conductor
-guardrails/termination attached to it; content run through a passthrough adapter does not, and
-never will unless the loop is unwrapped into a real Conductor task.
-
-### `GraphAgentDef` — typed graph declaration (Phase 2, shipped as the Rust-native alternative)
-
-```rust
-pub struct GraphAgentDef { /* nodes, edges, conditional_edges, state reducers — all declared, not extracted */ }
-```
-
-Explicit nodes/edges/state, authored directly against a Conductor type — arbitrary DAGs with
-per-node LLM calls that Conductor's guardrails/termination can actually attach to, because the LLM
-call is a real node, not hidden inside a black box. `GraphAgentDef` (`src/agents/graph.rs`) is the
-intentional target here rather than an adapter *from* some external graph-orchestration crate's
-compiled-graph type — revisit only if a crate with real adoption and a stable API appears, and
-even then the adapter would go *into* `GraphAgentDef`, not replace it.
-
-### Claude Agent SDK — passthrough only (Phase 2, lowest priority)
-
-Subprocess + `stream-json` protocol over `tokio::process::Command`, with credential passing scoped
-via `Command::env()` (see Credentials above — no global mutation). Ranked lowest because it
-delivers the least "Conductor orchestrates" value of everything here: pure black-box passthrough
-with event-sniffing, plus it drags in a hard non-Rust runtime dependency (Node.js + the CLI
-binary) orthogonal to what makes this SDK compelling. `resolve_claude_code_model` (in
-`src/agents/claude_agent_sdk.rs`) resolves model aliases (`"opus"`, `"sonnet"`, `"haiku"`) via
-`ClaudeAgentSdkOptions::with_model_alias`, kept separate from `with_model`'s literal,
-unambiguous passthrough behavior.
-
-### LangChain-shaped need — deprioritized, no adapter written
-
-Re-checked against current crates.io data: the `rig`/`rig-agent` crates are now genuinely dominant
-(~2.8M all-time downloads), but `rig_agent::Agent`'s shape doesn't fit `FrameworkAgent`'s
-synchronous-extraction contract — its fields are private with only `name()`/`description()`/
-`model_handle()` getters (`model_handle()` returns an opaque handle, not a plain `"provider/model"`
-string), and tool discovery is `async` and prompt-dependent rather than a static list. This is
-structurally the same "can't do full extraction, only black-box passthrough" situation the Claude
-Agent SDK is in, not a `FrameworkAgent`-shaped gap. No adapter written; a passthrough adapter is
-the more plausible shape to build if a concrete user asks, not full extraction.
-
-### Google ADK — not planned
-
-No Rust equivalent exists to adapt from. The generic `FrameworkAgent` trait already covers this
-shape if a comparable crate ever appears.
-
-### Summary table
-
-| Framework | Mode | Phase |
-|---|---|---|
-| Provider strings (`model = "openai/..."` / `"anthropic/..."`) | native, core `AgentDef` | v1 |
-| OpenAI (framework) | full extraction via `FrameworkAgent` + `async-openai` adapter | 1 |
-| LangGraph-shaped need | `GraphAgentDef`, explicit declaration | 2 |
-| Claude Agent SDK | passthrough (subprocess + stream-json) | 2, low priority |
-| LangChain-shaped need (`rig`) | passthrough adapter, not yet built | deprioritized, build on concrete ask |
-| Google ADK | covered by `FrameworkAgent` if a crate appears | not planned |
-
-## Testing
-
-`src/agents/testing.rs` ports the LLM-free slice of agent testing: `mock_run`/`ScriptedEvent`
-(auto-executes a matching tool's real handler, or takes an explicit scripted result) and a fluent
-`expect(result)` assertion API (`completed`/`failed`/`no_errors`/`used_tool`/
-`used_tool_with_args`/`did_not_use_tool`/`output_contains`). `AgentResult` carries a
-`tool_calls: Vec<ToolCallRecord>` field that's populated on a `mock_run`-built result and empty on
-a live-poll result (consistent with every other field `result.rs`'s module doc already lists as
-deliberately unpopulated there). `ScriptedEvent` covers tool-call/result/done/error — narrower than
-the full `AgentEvent` set, since only those four have a scriptable real counterpart today.
-
-Not ported, tracked as separate follow-ups: record/replay, LLM-judge semantic assertions (needs an
-LLM client this crate doesn't have), per-strategy structural validators, an LLM-backed correctness
-eval runner.
 
 ## Worked examples
 

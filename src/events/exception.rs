@@ -38,8 +38,6 @@ pub fn exception_label(err: &ConductorError) -> &'static str {
         ConductorError::CredentialNotFound(_) => "CredentialNotFound",
         #[cfg(feature = "agents")]
         ConductorError::TerminalTool(_) => "TerminalTool",
-        #[cfg(feature = "agents")]
-        ConductorError::WorkerStall { .. } => "WorkerStall",
     }
 }
 

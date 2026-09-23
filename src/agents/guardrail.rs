@@ -885,7 +885,7 @@ mod tests {
     }
 
     #[test]
-    fn test_llm_guardrail_prompt_matches_python_wording() {
+    fn test_llm_guardrail_prompt_matches_recorded_wording() {
         let prompt = llm_guardrail_prompt("no harmful content", "hello there");
         assert!(prompt.contains("POLICY: no harmful content"));
         assert!(prompt.contains("CONTENT: hello there"));

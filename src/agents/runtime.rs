@@ -1006,7 +1006,7 @@ impl AgentRuntime {
     ///
     /// `framework` must name a normalizer the server actually has registered — e.g. `"openai"`,
     /// `"google_adk"`, `"langgraph"`, `"langchain"`, `"skill"`. This crate does not build a
-    /// correct `raw_config` for any of these itself ([`super::graph::GraphAgentDef`] included);
+    /// correct `raw_config` for any of these itself;
     /// callers must build `raw_config` themselves, matching whatever normalizer they're
     /// targeting.
     ///

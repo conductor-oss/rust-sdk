@@ -9,9 +9,8 @@ use crate::http::ApiClient;
 #[cfg(feature = "agents")]
 use super::AgentClient;
 use super::{
-    AiOrchestrator, AuthorizationClient, EventClient, IntegrationClient, MetadataClient,
-    OrkesMetadataClient, PromptClient, SchedulerClient, SchemaClient, SecretClient,
-    ServiceRegistryClient, TaskClient, WorkflowClient,
+    AuthorizationClient, EventClient, IntegrationClient, MetadataClient, OrkesMetadataClient,
+    PromptClient, SchedulerClient, SchemaClient, SecretClient, TaskClient, WorkflowClient,
 };
 
 /// Main Conductor client combining all API clients.
@@ -170,13 +169,6 @@ impl ConductorClient {
         self.integration_client()
     }
 
-    /// Get the AI orchestrator: a typed convenience layer over `integration_client()`/
-    /// `prompt_client()` for registering LLM/vector-DB integrations and testing prompts.
-    #[must_use]
-    pub fn ai_orchestrator(&self) -> AiOrchestrator {
-        AiOrchestrator::from_api_client(self.api.clone())
-    }
-
     /// Get the prompt client for AI prompt templates.
     #[must_use]
     pub fn prompt_client(&self) -> PromptClient {
@@ -227,19 +219,6 @@ impl ConductorClient {
     #[must_use]
     pub fn get_agent_client(&self) -> AgentClient {
         self.agent_client()
-    }
-
-    /// Get the service registry client for managing HTTP/gRPC service
-    /// definitions, methods, proto files, and circuit breakers.
-    #[must_use]
-    pub fn service_registry_client(&self) -> ServiceRegistryClient {
-        ServiceRegistryClient::new(self.api.clone())
-    }
-
-    /// Alias for `service_registry_client()`.
-    #[must_use]
-    pub fn get_service_registry_client(&self) -> ServiceRegistryClient {
-        self.service_registry_client()
     }
 
     /// Get the underlying API client.

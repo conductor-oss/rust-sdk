@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     let config = Configuration::from_env();
 
     let refund_agent = AgentDef::new("refund_specialist")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are a refund specialist. Process the customer's refund request. \
              Check eligibility, confirm the refund amount, and let them know the \
@@ -24,14 +24,14 @@ async fn main() -> Result<()> {
         );
 
     let tech_agent = AgentDef::new("tech_support")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are a technical support specialist. Diagnose the customer's \
          technical issue and provide clear troubleshooting steps.",
         );
 
     let support_agent = AgentDef::new("support")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are the front-line customer support agent. Triage customer requests. \
              If the customer needs a refund, transfer to the refund specialist. \

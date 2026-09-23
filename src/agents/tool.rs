@@ -1418,7 +1418,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_type_as_str_matches_python_wire_strings() {
+    fn test_tool_type_as_str_matches_wire_strings() {
         assert_eq!(ToolType::Api.as_str(), "api");
         assert_eq!(ToolType::GenerateImage.as_str(), "generate_image");
         assert_eq!(ToolType::GenerateAudio.as_str(), "generate_audio");

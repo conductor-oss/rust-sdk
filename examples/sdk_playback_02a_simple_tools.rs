@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
     );
 
     let agent = AgentDef::new("weather_stock_agent")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_temperature(0.0)
         .with_instructions("You are a helpful assistant. Use tools to answer questions.")
         .with_tool(get_weather)

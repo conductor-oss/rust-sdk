@@ -510,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    fn test_type_str_matches_python_wire_discriminants() {
+    fn test_type_str_matches_wire_discriminants() {
         assert_eq!(
             TerminationCondition::text_mention("x").type_str(),
             "text_mention"

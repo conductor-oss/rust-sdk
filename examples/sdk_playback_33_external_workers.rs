@@ -46,9 +46,8 @@ async fn main() -> Result<()> {
     let format_response = ToolDef::function(
         "format_response",
         "Format a data dictionary into a human-readable string.",
-        // `additionalProperties: {}` matches python's schema for an untyped `dict` type hint
-        // (`data: dict`, no value type given) -- a bare `{"type": "object"}` is a different
-        // JSON value and fails the mock provider's exact-request match.
+        // `additionalProperties: {}` matches the tool schema in the shared recording; a bare
+        // `{"type": "object"}` is a different JSON value and misses the exact-request match.
         json!({
             "type": "object",
             "properties": { "data": { "type": "object", "additionalProperties": {} } },
@@ -135,7 +134,7 @@ async fn main() -> Result<()> {
     );
 
     let agent = AgentDef::new("support_agent")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are a customer support agent. Use the available tools to \
              look up customers, check inventory, process orders, and format \

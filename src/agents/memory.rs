@@ -333,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn test_message_role_as_str_matches_python_wire_values() {
+    fn test_message_role_as_str_matches_wire_values() {
         assert_eq!(MessageRole::User.as_str(), "user");
         assert_eq!(MessageRole::Assistant.as_str(), "assistant");
         assert_eq!(MessageRole::System.as_str(), "system");

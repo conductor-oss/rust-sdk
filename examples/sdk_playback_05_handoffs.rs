@@ -70,22 +70,22 @@ async fn main() -> Result<()> {
     );
 
     let billing_agent = AgentDef::new("billing")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions("You handle billing questions: balances, payments, invoices.")
         .with_tool(check_balance);
 
     let technical_agent = AgentDef::new("technical")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions("You handle technical questions: order status, shipping, returns.")
         .with_tool(lookup_order);
 
     let sales_agent = AgentDef::new("sales")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions("You handle sales questions: pricing, products, promotions.")
         .with_tool(get_pricing);
 
     let support = AgentDef::new("support")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "Route customer requests to the right specialist: billing, technical, or sales.",
         )

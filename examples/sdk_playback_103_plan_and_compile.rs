@@ -27,12 +27,9 @@ struct CheckSummaryArgs {
     min_chars: i64,
 }
 
-// Rust's `\`-newline string continuation strips leading whitespace on the *next* line (unlike
-// python's triple-quoted strings, which preserve it verbatim) -- the 3-space indent under items
-// 2 and 3 below is written as an explicit `\n   ` rather than relying on source indentation, to
-// exactly reproduce python's `PLANNER_INSTRUCTIONS` string (a first attempt that leaned on
-// source indentation silently lost that whitespace and failed the mock provider's exact-request
-// match on the planner's first turn).
+// The planner instructions must match the shared recording byte for byte, including the
+// 3-space indent under items 2 and 3, so that whitespace is written as an explicit `\n   `
+// rather than relying on source indentation (which `\`-newline continuation would strip).
 const PLANNER_INSTRUCTIONS: &str = "You are a math-explainer planner. Plan a workflow that:\n\n1. Computes factorials of 1, 2, 3, 4, 5 in PARALLEL using ``factorial`` (static args).\n2. Writes a short prose summary about factorial growth using ``write_summary``\n   (use a ``generate`` block \u{2014} the LLM produces the ``text`` arg at run time).\n3. Validates the summary is at least 30 characters via ``check_summary``,\n   with ``success_condition: \"$.passed === true\"``.\n";
 
 fn factorial(n: i64) -> String {
@@ -46,10 +43,8 @@ fn factorial(n: i64) -> String {
 async fn main() -> Result<()> {
     let config = Configuration::from_env();
 
-    // Descriptions below reproduce python's `@tool`-decorated functions' *full* docstrings
-    // verbatim (not just the first line) -- python's `@tool` uses the whole docstring,
-    // "Args:" section included, as the tool description, and that full text is what the
-    // server's planner-prompt "## Available tools" block embeds.
+    // Tool descriptions below match the shared recording verbatim, "Args:" sections included,
+    // because the server embeds the full description in the planner prompt.
     let factorial_tool = ToolDef::function(
         "factorial",
         "Compute n! and return it as a string.\n\nArgs:\n    n: Non-negative integer. Capped at 20 to keep things sane.",
@@ -100,7 +95,7 @@ async fn main() -> Result<()> {
             fallback_instructions: Some(
                 "The plan failed. Use the available tools to recover.".to_owned(),
             ),
-            model: Some("mock/mockLLM".to_owned()),
+            model: Some(support::llm_model()),
             fallback_max_turns: Some(4),
             planner_context: Vec::new(),
         },

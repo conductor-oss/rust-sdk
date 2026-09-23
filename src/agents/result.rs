@@ -101,8 +101,7 @@ pub struct ToolCallRecord {
 
 /// Terminal outcome of an agent execution, returned by `AgentRuntime::run`/`AgentHandle::join`.
 ///
-/// `tool_calls` is always empty on a result built via [`AgentResult::from_status`]; it's
-/// populated on results built by [`super::testing::mock_run`].
+/// `tool_calls` is always empty on a result built via [`AgentResult::from_status`].
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentResult {
@@ -120,8 +119,7 @@ pub struct AgentResult {
     /// `"TIMED_OUT"`.
     pub error: Option<String>,
 
-    /// Tool calls observed during the run, in call order. Always empty outside
-    /// [`super::testing::mock_run`].
+    /// Tool calls observed during the run, in call order. Always empty on a live-poll result.
     #[serde(default)]
     pub tool_calls: Vec<ToolCallRecord>,
 }

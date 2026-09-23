@@ -682,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    fn test_plan_to_value_matches_python_shape() {
+    fn test_plan_to_value_matches_wire_shape() {
         let plan = Plan::new(vec![
             Step::new(
                 "setup",

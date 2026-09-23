@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
         .with_on_fail(OnFail::Retry)?;
 
     let agent = AgentDef::new("support_agent")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are a customer support assistant. Use the available tools to \
              answer questions about orders and customers. Always include all \

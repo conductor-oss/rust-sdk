@@ -175,9 +175,7 @@ impl AgentClient {
 
     /// Push a raw progress/telemetry event for an agent execution.
     /// `POST /agent/events/{execution_id}`. Intended for frameworks that run an opaque
-    /// subprocess loop outside Conductor's normal task lifecycle — e.g. the Claude Agent SDK
-    /// passthrough transport (`crate::agents::claude_agent_sdk`, `claude-agent-sdk` feature) —
-    /// to surface what's happening inside that loop to the Conductor UI/API in near-real-time.
+    /// subprocess loop outside Conductor's normal task lifecycle, to surface what's happening inside that loop to the Conductor UI/API in near-real-time.
     ///
     /// # Errors
     ///

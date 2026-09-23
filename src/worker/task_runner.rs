@@ -35,6 +35,15 @@ enum TaskOutcome {
 }
 
 /// Task runner for a single worker type.
+/// Aborts the wrapped tokio task when dropped.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 pub struct TaskRunner {
     worker: Arc<dyn Worker>,
     task_client: TaskClient,
@@ -478,15 +487,17 @@ impl TaskRunner {
         // Start a lease-extension heartbeat alongside execution, if configured -- a per-task
         // spawned tokio task (cheap here, unlike an OS thread) rather than a shared
         // background-thread manager.
-        let heartbeat_handle = Self::maybe_spawn_lease_heartbeat(task_client, &task, config);
+        // The guard aborts the heartbeat when it goes out of scope, including by unwinding if
+        // the worker future panics -- a bare `JoinHandle` only detaches on drop, which would
+        // leave the heartbeat extending the lease indefinitely.
+        let heartbeat_guard =
+            Self::maybe_spawn_lease_heartbeat(task_client, &task, config).map(AbortOnDrop);
 
         // Execute the worker - pass reference to avoid clone in worker trait
         let exec_result = worker.execute(&task).await;
         let exec_duration = exec_start.elapsed();
 
-        if let Some(handle) = heartbeat_handle {
-            handle.abort();
-        }
+        drop(heartbeat_guard);
 
         // Convert result to TaskResult
         let task_result = match exec_result {

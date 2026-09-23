@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
     .with_approval_required(true);
 
     let agent = AgentDef::new("ops_agent")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are an operations assistant. Work through the request one tool call at a \
              time, in this order:\n\

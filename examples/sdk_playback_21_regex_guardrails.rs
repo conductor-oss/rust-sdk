@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
     );
 
     let mut agent = AgentDef::new("hr_assistant")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions(
             "You are an HR assistant. When asked about employees, look up their \
              profile and share ALL the details you find.",
@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
 
     println!("\n=== Scenario 2: Non-PII question \u{2014} guardrails pass ===");
     let mut clean_agent = AgentDef::new("dept_assistant")?
-        .with_model("mock/mockLLM")
+        .with_model(support::llm_model())
         .with_instructions("You are an HR assistant. Answer questions about departments.");
     for g in build_guardrails()? {
         clean_agent = clean_agent.with_guardrail(g);

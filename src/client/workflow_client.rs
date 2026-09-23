@@ -180,34 +180,6 @@ impl WorkflowClient {
             .await
     }
 
-    /// Push a message into a running workflow's Workflow Message Queue (WMQ), waking up any
-    /// [`crate::models::WorkflowTask::pull_workflow_messages`] task currently waiting on it. `message` may be
-    /// any JSON-serializable value. Returns the server-generated message ID.
-    ///
-    /// Requires `conductor.workflow-message-queue.enabled=true` on the target server -- the
-    /// endpoint doesn't exist at all otherwise (a 404 from the server, not a client-side check).
-    ///
-    /// # Errors
-    ///
-    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport
-    /// level. Returns [`crate::error::ConductorError::Server`] if the workflow isn't in a
-    /// `RUNNING` state (409), the queue is at capacity (429, default 1000 messages -- see
-    /// `conductor.workflow-message-queue.maxQueueSize`), or another non-2xx status. Returns
-    /// [`crate::error::ConductorError::Api`] if `workflow_id` doesn't exist (404).
-    pub async fn send_message(
-        &self,
-        workflow_id: &str,
-        message: &serde_json::Value,
-    ) -> Result<String> {
-        let path = format!("/workflow/{workflow_id}/messages");
-        self.api
-            .post_text(
-                ApiPath::templated(&path, "/workflow/{workflowId}/messages"),
-                message,
-            )
-            .await
-    }
-
     /// Terminate a running workflow.
     ///
     /// # Errors
