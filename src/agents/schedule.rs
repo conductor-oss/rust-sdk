@@ -205,6 +205,12 @@ impl ScheduleInfo {
 }
 
 /// The wire-level schedule name the server stores: `"{agent_name}-{short_name}"`.
+///
+/// Known, non-blocking collision: this plain `-`-join means two different `(agent_name,
+/// short_name)` pairs can produce the same wire name if either contains a `-` at the right
+/// spot (e.g. agent `"foo"` + schedule `"bar-baz"` collides with agent `"foo-bar"` + schedule
+/// `"baz"`). This matches the wire format every Conductor SDK already uses, so it isn't fixable
+/// on the Rust side alone without breaking cross-SDK compatibility.
 #[must_use]
 pub fn wire_name(agent_name: &str, short_name: &str) -> String {
     format!("{agent_name}-{short_name}")
@@ -269,15 +275,19 @@ pub async fn reconcile(
     let existing = list_schedules(scheduler, agent_name).await?;
     let desired_short: HashSet<&str> = desired.iter().map(|s| s.name.as_str()).collect();
 
+    // Save every desired schedule before deleting anything pruned: `save_schedule` is an
+    // upsert, so if a transient error aborts this partway through, the worst case is some
+    // stale schedules are left un-pruned -- saving after deleting instead could abort with
+    // every existing schedule already deleted and none of the desired ones created yet.
+    for schedule in desired {
+        let request = to_save_request(schedule, agent_name);
+        scheduler.save_schedule(&request).await?;
+    }
+
     for info in &existing {
         if !desired_short.contains(info.short_name.as_str()) {
             scheduler.delete_schedule(&info.name).await?;
         }
-    }
-
-    for schedule in desired {
-        let request = to_save_request(schedule, agent_name);
-        scheduler.save_schedule(&request).await?;
     }
 
     Ok(())

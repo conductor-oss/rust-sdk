@@ -61,7 +61,7 @@ pub enum TaskStatus {
 }
 
 /// A task in a Conductor workflow.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     /// Unique task ID.
@@ -180,18 +180,58 @@ pub struct Task {
     #[serde(default)]
     pub iteration: i32,
 
-    /// Server-resolved runtime metadata attached to this specific poll, keyed by name.
-    ///
-    /// This is the delivery half of the Agents credential contract (see
-    /// `rust-sdk/docs/agents/README.md`): a tool/agent declares credential
-    /// *names* it needs, the server resolves each name against its own secret store, and
-    /// attaches the resolved values here — never persisted to `input_data`, never a separate
-    /// fetch call, never cached by the SDK beyond this `Task`. Read via
-    /// `conductor::agents::Credentials::from_task(&task)`, which fails closed
-    /// (`ConductorError::CredentialNotFound`) on a declared name missing from this map, rather
-    /// than falling back to the process environment.
+    /// Server-resolved credential values for this poll, keyed by declared name. Read via
+    /// [`crate::agents::Credentials::from_task`] rather than directly. May contain secrets --
+    /// see the manual [`std::fmt::Debug`] impl below, which redacts values.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub runtime_metadata: HashMap<String, String>,
+}
+
+impl std::fmt::Debug for Task {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut runtime_metadata_keys: Vec<&str> =
+            self.runtime_metadata.keys().map(String::as_str).collect();
+        runtime_metadata_keys.sort_unstable();
+        f.debug_struct("Task")
+            .field("task_id", &self.task_id)
+            .field("task_type", &self.task_type)
+            .field("reference_task_name", &self.reference_task_name)
+            .field("status", &self.status)
+            .field("input_data", &self.input_data)
+            .field("output_data", &self.output_data)
+            .field("workflow_instance_id", &self.workflow_instance_id)
+            .field("workflow_type", &self.workflow_type)
+            .field("task_def_name", &self.task_def_name)
+            .field("retry_count", &self.retry_count)
+            .field("poll_count", &self.poll_count)
+            .field("worker_id", &self.worker_id)
+            .field("domain", &self.domain)
+            .field("scheduled_time", &self.scheduled_time)
+            .field("start_time", &self.start_time)
+            .field("end_time", &self.end_time)
+            .field("update_time", &self.update_time)
+            .field("queue_wait_time", &self.queue_wait_time)
+            .field("callback_after_seconds", &self.callback_after_seconds)
+            .field("response_timeout_seconds", &self.response_timeout_seconds)
+            .field("execution_name_space", &self.execution_name_space)
+            .field("isolation_group_id", &self.isolation_group_id)
+            .field("correlation_id", &self.correlation_id)
+            .field("reason_for_incompletion", &self.reason_for_incompletion)
+            .field(
+                "external_input_payload_storage_path",
+                &self.external_input_payload_storage_path,
+            )
+            .field(
+                "external_output_payload_storage_path",
+                &self.external_output_payload_storage_path,
+            )
+            .field("logs", &self.logs)
+            .field("sub_workflow_id", &self.sub_workflow_id)
+            .field("iteration", &self.iteration)
+            // Names only -- never the resolved values, which may be secrets.
+            .field("runtime_metadata_keys", &runtime_metadata_keys)
+            .finish()
+    }
 }
 
 impl Task {
@@ -327,6 +367,21 @@ mod tests {
         assert_eq!(task.task_type, "simple_task");
         assert_eq!(task.status, TaskStatus::InProgress);
         assert_eq!(task.get_input_string("name"), Some("test".to_owned()));
+    }
+
+    #[test]
+    fn test_task_debug_redacts_runtime_metadata_values() {
+        let task = Task {
+            runtime_metadata: HashMap::from([(
+                "GH_TOKEN".to_owned(),
+                "ghp_super_secret".to_owned(),
+            )]),
+            ..Default::default()
+        };
+
+        let debug = format!("{task:?}");
+        assert!(debug.contains("GH_TOKEN"));
+        assert!(!debug.contains("ghp_super_secret"));
     }
 
     #[test]

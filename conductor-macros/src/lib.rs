@@ -363,7 +363,7 @@ struct ToolArgs {
 /// - **one parameter**: a struct implementing `JsonSchema + DeserializeOwned`, or
 /// - **two parameters**: that same args struct, followed by `&conductor::agents::Credentials`,
 ///   for tools that declare `credentials = [...]` and need to read resolved values via
-///   `Credentials::get` (see `docs/agents/README.md`).
+///   `Credentials::get`.
 ///
 /// The args struct's JSON schema is generated automatically via
 /// `conductor::schema::generate_schema`.

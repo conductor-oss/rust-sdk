@@ -243,6 +243,7 @@ members = [".", "conductor-macros", "harness"]
 [dependencies]
 # Async runtime
 tokio = { version = "1.35", features = ["full", "macros", "rt-multi-thread", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # HTTP client
 reqwest = { version = "0.11", features = ["json", "rustls-tls", "stream"], default-features = false }

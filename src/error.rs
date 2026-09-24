@@ -79,10 +79,9 @@ pub enum ConductorError {
 
     /// One or more declared credentials were not present in `Task.runtime_metadata`.
     ///
-    /// Per `docs/agents/README.md`, credential resolution fails closed: a
-    /// name a tool/agent declared but that the server didn't attach to the polled `Task` is
-    /// always an error, never a silent fallback to the process environment. Carries only the
-    /// missing *names*, never a value.
+    /// Credential resolution fails closed: a name a tool/agent declared but that the server
+    /// didn't attach to the polled `Task` is always an error, never a silent fallback to the
+    /// process environment. Carries only the missing *names*, never a value.
     #[cfg(feature = "agents")]
     #[error("Required credentials not found: {}", .0.join(", "))]
     CredentialNotFound(Vec<String>),
