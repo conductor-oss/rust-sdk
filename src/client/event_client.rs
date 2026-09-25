@@ -4,6 +4,7 @@
 use crate::error::Result;
 use crate::http::{ApiClient, ApiPath};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Client for event operations (queue configurations)
 #[derive(Clone)]
@@ -119,7 +120,20 @@ impl EventClient {
     }
 
     /// Get all queue configurations
-    pub async fn get_all_queue_configurations(&self) -> Result<Vec<QueueConfiguration>> {
+    ///
+    /// Unlike `get_queue_configuration`, the server's "get all" endpoint
+    /// (`GET /event/queue/config`) returns a `{queueIdentifier: value}` object
+    /// rather than a list of `QueueConfiguration`. The `HashMap<String, String>`
+    /// here matches the server signature exactly: Orkes declares
+    /// `Map<String, String> getQueueNames()` in `EventResource`.
+    ///
+    /// That method returns a hardcoded `Map.of()` -- queue/broker integrations
+    /// moved to the Integrations API and the sibling `putQueueConfig` is
+    /// `@Deprecated(forRemoval = true)` -- so in practice this is always empty on
+    /// Orkes. Plain OSS Conductor has no queue-config routes at all
+    /// (`rest/.../EventResource.java` maps only the event-handler endpoints), so
+    /// it answers 404.
+    pub async fn get_all_queue_configurations(&self) -> Result<HashMap<String, String>> {
         self.api.get("/event/queue/config").await
     }
 

@@ -27,24 +27,37 @@ impl SecretClient {
     }
 
     /// Get a secret value
+    ///
+    /// The server returns this as `text/plain` (the raw secret value, not a
+    /// JSON string), so this uses `get_text` rather than the generic JSON
+    /// `get` -- see `ApiClient::get_text`.
     pub async fn get_secret(&self, key: &str) -> Result<String> {
         let path = format!("/secrets/{}", key);
         self.api
-            .get(ApiPath::templated(&path, "/secrets/{key}"))
+            .get_text(ApiPath::templated(&path, "/secrets/{key}"))
             .await
     }
 
     /// List all secret names
+    ///
+    /// This is `POST /secrets`, not `GET`. Both server families map the two
+    /// verbs to different operations: `POST` is the primary "list all secret
+    /// names" endpoint (`SecretController.listAllNames` on OSS,
+    /// `SecretResource.listAllSecretNames` on Orkes), while `GET` returns only
+    /// the names the caller has access to. On OSS the two happen to agree
+    /// because there is no RBAC, which is why the wrong verb went unnoticed.
     pub async fn list_all_secret_names(&self) -> Result<HashSet<String>> {
-        let names: Vec<String> = self.api.get("/secrets").await?;
+        let names: Vec<String> = self.api.post_no_body("/secrets").await?;
         Ok(names.into_iter().collect())
     }
 
-    /// List secrets that the user can grant access to
+    /// List secrets the caller has access to
+    ///
+    /// `GET /secrets`. Orkes filters by the `access` query parameter (defaulting
+    /// to `READ`, with AND semantics across multiple values); OSS has no RBAC and
+    /// returns every name.
     pub async fn list_secrets_that_user_can_grant_access_to(&self) -> Result<Vec<String>> {
-        self.api
-            .get_with_params("/secrets", &[("grantable", "true")])
-            .await
+        self.api.get("/secrets").await
     }
 
     /// Delete a secret
