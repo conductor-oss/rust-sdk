@@ -223,6 +223,31 @@ impl ApiClient {
             .await
     }
 
+    /// GET request returning raw text (for endpoints that respond with
+    /// `text/plain` rather than JSON, e.g. secret values)
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn get_text(&self, path: impl Into<ApiPath<'_>>) -> Result<String> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
+
+        let mut request = self.client.get(&url);
+        request = self.add_auth_header(request).await?;
+
+        let response = self
+            .send_observed("GET", p.path, p.metric_uri, request)
+            .await?;
+        let status = response.status();
+
+        if status.is_success() {
+            Ok(response.text().await?)
+        } else {
+            Err(self.handle_error_response(response).await)
+        }
+    }
+
     /// GET request with query parameters.
     ///
     /// # Errors
@@ -520,6 +545,34 @@ impl ApiClient {
         let mut request = self.client.put(&url);
         request = self.add_auth_header(request).await?;
         request = request.json(body);
+
+        let response = self
+            .send_observed("PUT", p.path, p.metric_uri, request)
+            .await?;
+        let status = response.status();
+
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(self.handle_error_response(response).await)
+        }
+    }
+
+    /// PUT request with no request body and no response body
+    ///
+    /// For endpoints mapped as a bare `@PutMapping` with no `@RequestBody` --
+    /// e.g. `/scheduler/schedules/{name}/pause`. Sends no payload and no
+    /// `Content-Type` at all, rather than a JSON `null`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
+    pub async fn put_no_body(&self, path: impl Into<ApiPath<'_>>) -> Result<()> {
+        let p = path.into();
+        let url = format!("{}{}", self.base_url, p.path);
+
+        let mut request = self.client.put(&url);
+        request = self.add_auth_header(request).await?;
 
         let response = self
             .send_observed("PUT", p.path, p.metric_uri, request)

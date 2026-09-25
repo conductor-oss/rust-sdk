@@ -1,7 +1,7 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-use crate::error::Result;
+use crate::error::{ConductorError, Result};
 use crate::http::{ApiClient, ApiPath};
 use crate::models::{
     MetadataTag, SaveScheduleRequest, SearchResultWorkflowScheduleExecution, WorkflowSchedule,
@@ -103,22 +103,39 @@ impl SchedulerClient {
             .await
     }
 
-    /// Pause a schedule.
+    /// Pause a schedule
+    ///
+    /// Per-schedule pause/resume is `PUT`-mapped on OSS Conductor
+    /// (`scheduler/core/.../rest/SchedulerResource.java` maps only `@PutMapping`).
+    /// Orkes Conductor accepts both `GET` and `PUT` as of the dual
+    /// `@RequestMapping(method = {GET, PUT})` added in 2026-07; deployments older
+    /// than that are `GET`-only. So PUT is tried first and a `405` falls back to
+    /// GET, which covers every server family without an extra probe.
     ///
     /// # Errors
     ///
     /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn pause_schedule(&self, name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{name}/pause");
-        self.api
-            .get_no_response(ApiPath::templated(
-                &path,
-                "/scheduler/schedules/{name}/pause",
-            ))
+        let template = "/scheduler/schedules/{name}/pause";
+        match self
+            .api
+            .put_no_body(ApiPath::templated(&path, template))
             .await
+        {
+            Err(ConductorError::Server { status: 405, .. }) => {
+                self.api
+                    .get_no_response(ApiPath::templated(&path, template))
+                    .await
+            }
+            result => result,
+        }
     }
 
-    /// Pause all schedules.
+    /// Pause all schedules
+    ///
+    /// `GET`-mapped on both server families (admin/debug endpoint), unlike the
+    /// per-schedule pause/resume calls above -- no PUT is ever sent here.
     ///
     /// # Errors
     ///
@@ -127,22 +144,34 @@ impl SchedulerClient {
         self.api.get_no_response("/scheduler/admin/pause").await
     }
 
-    /// Resume a schedule.
+    /// Resume a schedule
+    ///
+    /// See [`Self::pause_schedule`] for the PUT-with-GET-fallback rationale.
     ///
     /// # Errors
     ///
     /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn resume_schedule(&self, name: &str) -> Result<()> {
         let path = format!("/scheduler/schedules/{name}/resume");
-        self.api
-            .get_no_response(ApiPath::templated(
-                &path,
-                "/scheduler/schedules/{name}/resume",
-            ))
+        let template = "/scheduler/schedules/{name}/resume";
+        match self
+            .api
+            .put_no_body(ApiPath::templated(&path, template))
             .await
+        {
+            Err(ConductorError::Server { status: 405, .. }) => {
+                self.api
+                    .get_no_response(ApiPath::templated(&path, template))
+                    .await
+            }
+            result => result,
+        }
     }
 
-    /// Resume all schedules.
+    /// Resume all schedules
+    ///
+    /// `GET`-mapped on both server families (admin/debug endpoint), unlike the
+    /// per-schedule pause/resume calls above -- no PUT is ever sent here.
     ///
     /// # Errors
     ///
@@ -188,7 +217,10 @@ impl SchedulerClient {
             .await
     }
 
-    /// Requeue all execution records.
+    /// Requeue all execution records
+    ///
+    /// `GET`-mapped on both server families (admin/debug endpoint), unlike the
+    /// per-schedule pause/resume calls above -- no PUT is ever sent here.
     ///
     /// # Errors
     ///

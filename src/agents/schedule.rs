@@ -197,7 +197,7 @@ impl ScheduleInfo {
             description: ws.description.clone(),
             next_run: ws.next_run_time,
             create_time: ws.create_time,
-            update_time: ws.update_time,
+            update_time: ws.updated_time,
             created_by: ws.created_by.clone(),
             updated_by: ws.updated_by.clone(),
         }
@@ -386,7 +386,6 @@ mod tests {
         let ws = WorkflowSchedule {
             name: "digest-agent-daily".to_owned(),
             cron_expression: "0 0 * * * *".to_owned(),
-            workflow_name: "digest-agent".to_owned(),
             paused: true,
             paused_reason: Some("manually paused".to_owned()),
             ..WorkflowSchedule::default()

@@ -232,7 +232,13 @@ pub struct AccessKey {
     pub created_by: Option<String>,
 }
 
-/// Created access key (includes secret, only returned on creation).
+/// Created access key (includes secret, only returned on creation)
+///
+/// Note: unlike `AccessKey`, the server's create-access-key response
+/// (`POST /applications/{id}/accessKeys`) never includes a `status` field --
+/// it's only present on the list/toggle responses (`AccessKey`) -- so it's
+/// intentionally omitted here rather than left as a required field that
+/// would fail to deserialize.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatedAccessKey {
@@ -241,9 +247,6 @@ pub struct CreatedAccessKey {
 
     /// Key secret (only available on creation).
     pub secret: String,
-
-    /// Key status.
-    pub status: String,
 }
 
 /// Subject reference (user or group).
@@ -363,4 +366,9 @@ pub struct GrantedPermission {
     /// Access types granted.
     #[serde(default)]
     pub access: Vec<AccessType>,
+
+    /// Tag the grant was made through, when the grant came from a tag rather
+    /// than a direct target (server-side `GrantedAccess.tag`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
 }

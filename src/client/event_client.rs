@@ -4,6 +4,7 @@
 use crate::error::Result;
 use crate::http::{ApiClient, ApiPath};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Client for event operations (queue configurations).
 #[derive(Clone)]
@@ -136,12 +137,25 @@ impl EventClient {
             .await
     }
 
-    /// Get all queue configurations.
+    /// Get all queue configurations
+    ///
+    /// Unlike `get_queue_configuration`, the server's "get all" endpoint
+    /// (`GET /event/queue/config`) returns a `{queueIdentifier: value}` object
+    /// rather than a list of `QueueConfiguration`. The `HashMap<String, String>`
+    /// here matches the server signature exactly: Orkes declares
+    /// `Map<String, String> getQueueNames()` in `EventResource`.
+    ///
+    /// That method returns a hardcoded `Map.of()` -- queue/broker integrations
+    /// moved to the Integrations API and the sibling `putQueueConfig` is
+    /// `@Deprecated(forRemoval = true)` -- so in practice this is always empty on
+    /// Orkes. Plain OSS Conductor has no queue-config routes at all
+    /// (`rest/.../EventResource.java` maps only the event-handler endpoints), so
+    /// it answers 404.
     ///
     /// # Errors
     ///
     /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
-    pub async fn get_all_queue_configurations(&self) -> Result<Vec<QueueConfiguration>> {
+    pub async fn get_all_queue_configurations(&self) -> Result<HashMap<String, String>> {
         self.api.get("/event/queue/config").await
     }
 

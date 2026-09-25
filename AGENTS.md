@@ -205,14 +205,20 @@ tests/
 ### Start Local Server
 
 ```bash
-docker run -d -p 8080:8080 conductoross/conductor:latest
+docker compose -f scripts/docker-compose-oss.yaml up -d
 ```
 
 ### Wait for Ready
 
 ```bash
-while ! curl -s http://localhost:8080/health | grep -q "healthy"; do sleep 2; done
+timeout 180 bash -c 'until curl -sf http://localhost:8080/health; do sleep 5; done'
 ```
+
+`curl -sf` alone is the check: /health answers non-2xx while the server is still
+coming up, and grepping the body for `healthy` also matches `"healthy":false`.
+
+Or skip both steps and use `scripts/run-integration-oss.sh`, which starts the
+stack, waits, runs the suite, and tears it down.
 
 ### Run Tests
 

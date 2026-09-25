@@ -1,15 +1,29 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+//
+// Scheduler and event-handler calls are OSS-compatible (confirmed
+// empirically) and are asserted for real below. Secret reads are also
+// OSS-compatible against an env-backed secret seeded in
+// scripts/docker-compose-oss.yaml (see the Secret Client Tests section for
+// details); secret writes, Prompt, and event-queue-configuration calls are
+// not implemented by plain OSS Conductor (confirmed empirically: 404 "No
+// static resource ..." for Prompt/event-queue-config, 501 read-only backend
+// for secret writes) and skip/assert explicitly via `is_oss()` instead of
+// silently swallowing the resulting error the way this file used to.
 
 mod common;
 
 use common::*;
 use conductor::client::ConductorClient;
+use conductor::error::ConductorError;
 use conductor::models::SaveScheduleRequest;
 use std::time::Duration;
 
 // =============================================================================
 // Scheduler Client Tests
+//
+// Scheduler is an OSS-compatible feature, so these run and assert
+// unconditionally rather than gating on is_oss().
 // =============================================================================
 
 #[tokio::test]
@@ -26,36 +40,51 @@ async fn test_scheduler_save_and_get() {
     let workflow_def = conductor::models::WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(conductor::models::WorkflowTask::wait("wait_ref"));
+    metadata
+        .register_workflow_def(&workflow_def)
+        .await
+        .expect("register_workflow_def should succeed");
 
-    if let Err(e) = metadata.register_workflow_def(&workflow_def).await {
-        eprintln!("Warning: Could not create workflow for schedule test: {e:?}");
-        return;
-    }
+    // Deferred so a panic in the assertions still tears down the schedule and
+    // the workflow def -- this suite also runs against the shared Enterprise
+    // instance, where a failure between create and delete orphans both.
+    let outcome = save_and_get_flow(&scheduler, &schedule_name, &workflow_name).await;
 
-    // Save Schedule using the builder methods
-    let schedule_request = SaveScheduleRequest::new(&schedule_name, "0 0 * * *", &workflow_name)
+    scheduler.delete_schedule(&schedule_name).await.ok();
+    metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+
+    outcome.expect("save -> get flow should succeed");
+}
+
+/// The save -> get assertions, factored out so the caller can clean up
+/// unconditionally before surfacing a failure.
+async fn save_and_get_flow(
+    scheduler: &conductor::client::SchedulerClient,
+    schedule_name: &str,
+    workflow_name: &str,
+) -> Result<(), String> {
+    let schedule_request = SaveScheduleRequest::new(schedule_name, "0 0 0 * * ?", workflow_name)
         .with_version(1)
         .paused(true); // Create paused so it doesn't run
 
-    match scheduler.save_schedule(&schedule_request).await {
-        Ok(()) => {
-            // Get Schedule
-            match scheduler.get_schedule(&schedule_name).await {
-                Ok(schedule) => {
-                    assert_eq!(schedule.name, schedule_name);
-                }
-                Err(e) => eprintln!("Warning: get_schedule failed: {e:?}"),
-            }
+    scheduler
+        .save_schedule(&schedule_request)
+        .await
+        .map_err(|e| format!("save_schedule failed: {e:?}"))?;
 
-            // Cleanup
-            scheduler.delete_schedule(&schedule_name).await.ok();
-        }
-        Err(e) => {
-            eprintln!("Warning: save_schedule failed (may require specific permissions): {e:?}");
-        }
+    let schedule = scheduler
+        .get_schedule(schedule_name)
+        .await
+        .map_err(|e| format!("get_schedule failed: {e:?}"))?;
+
+    if schedule.name != schedule_name {
+        return Err(format!(
+            "expected schedule name {schedule_name:?}, got {:?}",
+            schedule.name
+        ));
     }
 
-    metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+    Ok(())
 }
 
 #[tokio::test]
@@ -72,38 +101,46 @@ async fn test_scheduler_pause_resume() {
     let workflow_def = conductor::models::WorkflowDef::new(&workflow_name)
         .with_version(1)
         .with_task(conductor::models::WorkflowTask::wait("wait_ref"));
+    metadata
+        .register_workflow_def(&workflow_def)
+        .await
+        .expect("register_workflow_def should succeed");
 
-    if let Err(e) = metadata.register_workflow_def(&workflow_def).await {
-        eprintln!("Warning: Could not create workflow: {e:?}");
-        return;
-    }
+    // Deferred for the same reason as test_scheduler_save_and_get above.
+    let outcome = pause_resume_flow(&scheduler, &schedule_name, &workflow_name).await;
 
-    // Save schedule
-    let schedule_request = SaveScheduleRequest::new(&schedule_name, "0 0 * * *", &workflow_name)
+    scheduler.delete_schedule(&schedule_name).await.ok();
+    metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+
+    outcome.expect("save -> pause -> resume flow should succeed");
+}
+
+/// The save -> pause -> resume steps, factored out so the caller can clean up
+/// unconditionally before surfacing a failure.
+async fn pause_resume_flow(
+    scheduler: &conductor::client::SchedulerClient,
+    schedule_name: &str,
+    workflow_name: &str,
+) -> Result<(), String> {
+    let schedule_request = SaveScheduleRequest::new(schedule_name, "0 0 0 * * ?", workflow_name)
         .with_version(1)
         .paused(false);
 
-    match scheduler.save_schedule(&schedule_request).await {
-        Ok(()) => {
-            // Pause schedule
-            if let Err(e) = scheduler.pause_schedule(&schedule_name).await {
-                eprintln!("Warning: pause_schedule failed: {e:?}");
-            }
+    scheduler
+        .save_schedule(&schedule_request)
+        .await
+        .map_err(|e| format!("save_schedule failed: {e:?}"))?;
 
-            // Resume schedule
-            if let Err(e) = scheduler.resume_schedule(&schedule_name).await {
-                eprintln!("Warning: resume_schedule failed: {e:?}");
-            }
+    scheduler
+        .pause_schedule(schedule_name)
+        .await
+        .map_err(|e| format!("pause_schedule failed: {e:?}"))?;
+    scheduler
+        .resume_schedule(schedule_name)
+        .await
+        .map_err(|e| format!("resume_schedule failed: {e:?}"))?;
 
-            // Cleanup
-            scheduler.delete_schedule(&schedule_name).await.ok();
-        }
-        Err(e) => {
-            eprintln!("Warning: save_schedule failed: {e:?}");
-        }
-    }
-
-    metadata.delete_workflow_def(&workflow_name, 1).await.ok();
+    Ok(())
 }
 
 #[tokio::test]
@@ -112,18 +149,25 @@ async fn test_scheduler_search_executions() {
     let client = ConductorClient::new(config).unwrap();
     let scheduler = client.scheduler_client();
 
-    // Search schedule executions
-    match scheduler
-        .search_schedule_executions(Some(0), Some(10), None, None, None)
+    // Search schedule executions. `total_hits >= 0` is vacuous for an i64, so
+    // assert the pagination contract instead: at most `size` rows come back, and
+    // the page can't claim more rows than the server says exist in total.
+    let size = 10;
+    let results = scheduler
+        .search_schedule_executions(Some(0), Some(size), None, None, None)
         .await
-    {
-        Ok(results) => {
-            assert!(results.total_hits >= 0);
-        }
-        Err(e) => {
-            eprintln!("Warning: search_schedule_executions failed: {e:?}");
-        }
-    }
+        .expect("search_schedule_executions should succeed");
+    assert!(
+        results.results.len() <= size as usize,
+        "page returned {} rows for size={size}",
+        results.results.len()
+    );
+    assert!(
+        results.total_hits >= results.results.len() as i64,
+        "total_hits {} < the {} rows on this page",
+        results.total_hits,
+        results.results.len()
+    );
 }
 
 #[tokio::test]
@@ -132,24 +176,49 @@ async fn test_scheduler_get_next_execution_times() {
     let client = ConductorClient::new(config).unwrap();
     let scheduler = client.scheduler_client();
 
-    // Get next 5 execution times for daily cron
-    match scheduler
-        .get_next_few_schedule_execution_times("0 0 * * *", None, None, Some(5))
+    // Conductor's scheduler parses cron with Spring's
+    // org.springframework.scheduling.support.CronExpression (see
+    // SchedulerService.parseCron), which requires a seconds field (6 parts); a
+    // plain 5-field Unix cron is rejected with "Invalid cron expression",
+    // regardless of server type.
+    let times = scheduler
+        .get_next_few_schedule_execution_times("0 0 0 * * ?", None, None, Some(5))
         .await
-    {
-        Ok(times) => {
-            assert!(!times.is_empty());
-            assert!(times.len() <= 5);
-        }
-        Err(e) => {
-            eprintln!("Warning: get_next_few_schedule_execution_times failed: {e:?}");
-        }
-    }
+        .expect("get_next_few_schedule_execution_times should succeed");
+    assert!(!times.is_empty());
+    assert!(times.len() <= 5);
 }
 
 // =============================================================================
 // Secret Client Tests
+//
+// OSS Conductor registers a full secrets CRUD controller by default (the
+// `agentspan` module's `conductor.integrations.ai.enabled=true` default), but
+// only ships read-only `SecretsDAO` backends: writes (put/delete) return a
+// real 501 "read-only backend" rather than a 404. Reads work against an
+// env-backed secret seeded via `CONDUCTOR_SECRET_RUST_SDK_INTEGRATION_TEST`
+// in scripts/docker-compose-oss.yaml.
+//
+// The OSS branches below assert outright rather than treating an error as
+// "secrets API unavailable here" and skipping: an error is not distinguishable
+// from the regression this is meant to catch. `GET /secrets/{key}` answers 404
+// both when the route is absent (an image predating the controller) and when
+// the route works but the secret is missing -- i.e. when the seeding in
+// docker-compose-oss.yaml has drifted out of sync with the constants below.
+// Any OSS version this suite runs against is expected to serve the secrets
+// API; if one deliberately doesn't, a red test saying so is the right signal.
+//
+// This is safe to test against with an unauthenticated OSS server: OSS
+// Conductor has no authentication/authorization at all (see
+// authorization_client_tests.rs), so an unauthenticated GET on
+// /api/secrets/{key} doesn't change the threat model versus any other
+// unauthenticated OSS endpoint. Only a dummy, non-sensitive value is seeded.
 // =============================================================================
+
+/// Name/value seeded via `CONDUCTOR_SECRET_RUST_SDK_INTEGRATION_TEST` in
+/// scripts/docker-compose-oss.yaml -- keep these two in sync.
+const OSS_SEEDED_SECRET_NAME: &str = "RUST_SDK_INTEGRATION_TEST";
+const OSS_SEEDED_SECRET_VALUE: &str = "rust-sdk-oss-secret-value";
 
 #[tokio::test]
 async fn test_secret_put_and_get() {
@@ -157,27 +226,43 @@ async fn test_secret_put_and_get() {
     let client = ConductorClient::new(config).unwrap();
     let secret = client.secret_client();
 
+    if client.is_oss().await {
+        let value = secret
+            .get_secret(OSS_SEEDED_SECRET_NAME)
+            .await
+            .expect("seeded OSS secret should be readable");
+        assert_eq!(value, OSS_SEEDED_SECRET_VALUE);
+
+        // The only bundled SecretsDAO backends (env-var, noop) are
+        // read-only, so writes are expected to fail with a real 501. Accept
+        // success too in case a future OSS release ships a writable backend.
+        let throwaway_key = generate_unique_name("test_secret_put");
+        match secret.put_secret(&throwaway_key, "value").await {
+            Ok(()) => {
+                secret.delete_secret(&throwaway_key).await.ok();
+            }
+            Err(ConductorError::Server { status: 501, .. }) => {}
+            Err(e) => {
+                panic!("expected put_secret to fail with 501 on a read-only backend, got: {e:?}")
+            }
+        }
+        return;
+    }
+
     let secret_key = generate_unique_name("test_secret");
     let secret_value = "my_secret_value_123";
 
-    // Put secret
-    match secret.put_secret(&secret_key, secret_value).await {
-        Ok(()) => {
-            // Get secret
-            match secret.get_secret(&secret_key).await {
-                Ok(value) => {
-                    assert_eq!(value, secret_value);
-                }
-                Err(e) => eprintln!("Warning: get_secret failed: {e:?}"),
-            }
+    secret
+        .put_secret(&secret_key, secret_value)
+        .await
+        .expect("put_secret should succeed");
+    let value = secret
+        .get_secret(&secret_key)
+        .await
+        .expect("get_secret should succeed");
+    assert_eq!(value, secret_value);
 
-            // Cleanup
-            secret.delete_secret(&secret_key).await.ok();
-        }
-        Err(e) => {
-            eprintln!("Warning: put_secret failed (may require specific permissions): {e:?}");
-        }
-    }
+    secret.delete_secret(&secret_key).await.ok();
 }
 
 #[tokio::test]
@@ -186,16 +271,23 @@ async fn test_secret_list_all() {
     let client = ConductorClient::new(config).unwrap();
     let secret = client.secret_client();
 
-    // List all secret names
-    match secret.list_all_secret_names().await {
-        Ok(secrets) => {
-            // Just verify we got a valid response (may be empty)
-            println!("Found {} secrets", secrets.len());
-        }
-        Err(e) => {
-            eprintln!("Warning: list_all_secret_names failed: {e:?}");
-        }
+    if client.is_oss().await {
+        let secrets = secret
+            .list_all_secret_names()
+            .await
+            .expect("list_all_secret_names should succeed against OSS");
+        assert!(
+            secrets.contains(OSS_SEEDED_SECRET_NAME),
+            "expected seeded secret {OSS_SEEDED_SECRET_NAME:?} in {secrets:?}"
+        );
+        return;
     }
+
+    let secrets = secret
+        .list_all_secret_names()
+        .await
+        .expect("list_all_secret_names should succeed");
+    println!("Found {} secrets", secrets.len());
 }
 
 #[tokio::test]
@@ -204,130 +296,135 @@ async fn test_secret_exists() {
     let client = ConductorClient::new(config).unwrap();
     let secret = client.secret_client();
 
+    if client.is_oss().await {
+        let exists = secret
+            .secret_exists(OSS_SEEDED_SECRET_NAME)
+            .await
+            .expect("secret_exists should succeed against OSS");
+        assert!(exists, "seeded secret should exist");
+
+        let missing_name = generate_unique_name("nonexistent_secret");
+        assert!(
+            !secret
+                .secret_exists(&missing_name)
+                .await
+                .expect("secret_exists should succeed"),
+            "never-created secret should not exist"
+        );
+        return;
+    }
+
     let secret_key = generate_unique_name("test_secret_exists");
 
-    // Put secret
-    match secret.put_secret(&secret_key, "value").await {
-        Ok(()) => {
-            // Check exists
-            match secret.secret_exists(&secret_key).await {
-                Ok(exists) => {
-                    assert!(exists, "Secret should exist after creation");
-                }
-                Err(e) => eprintln!("Warning: secret_exists failed: {e:?}"),
-            }
+    secret
+        .put_secret(&secret_key, "value")
+        .await
+        .expect("put_secret should succeed");
+    assert!(
+        secret
+            .secret_exists(&secret_key)
+            .await
+            .expect("secret_exists should succeed"),
+        "Secret should exist after creation"
+    );
 
-            // Delete
-            secret.delete_secret(&secret_key).await.ok();
+    secret.delete_secret(&secret_key).await.ok();
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
-            // Wait for deletion
-            tokio::time::sleep(Duration::from_millis(500)).await;
-
-            // Check doesn't exist
-            match secret.secret_exists(&secret_key).await {
-                Ok(exists) => {
-                    assert!(!exists, "Secret should not exist after deletion");
-                }
-                Err(e) => eprintln!("Warning: secret_exists after delete failed: {e:?}"),
-            }
-        }
-        Err(e) => {
-            eprintln!("Warning: put_secret failed: {e:?}");
-        }
-    }
+    assert!(
+        !secret
+            .secret_exists(&secret_key)
+            .await
+            .expect("secret_exists should succeed"),
+        "Secret should not exist after deletion"
+    );
 }
 
 // =============================================================================
 // Prompt Client Tests
+//
+// Not implemented by plain OSS Conductor (confirmed empirically: 404 "No
+// static resource api/prompts..."). Skip explicitly when is_oss(), assert for
+// real otherwise.
 // =============================================================================
 
 #[tokio::test]
 async fn test_prompt_save_and_get() {
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
+    if client.is_oss().await {
+        println!("Skipping: Prompt API requires Orkes Enterprise Conductor");
+        return;
+    }
     let prompt = client.prompt_client();
 
     let prompt_name = generate_unique_name("test_prompt");
 
-    // Save prompt
-    match prompt
+    prompt
         .save_prompt(
             &prompt_name,
             "Test prompt for integration tests",
             "Please analyze ${input} and provide insights.",
         )
         .await
-    {
-        Ok(()) => {
-            // Get prompt
-            match prompt.get_prompt(&prompt_name).await {
-                Ok(template) => {
-                    assert_eq!(template.name, prompt_name);
-                }
-                Err(e) => eprintln!("Warning: get_prompt failed: {e:?}"),
-            }
+        .expect("save_prompt should succeed");
 
-            // Cleanup
-            prompt.delete_prompt(&prompt_name).await.ok();
-        }
-        Err(e) => {
-            eprintln!("Warning: save_prompt failed (may require AI module): {e:?}");
-        }
-    }
+    let template = prompt
+        .get_prompt(&prompt_name)
+        .await
+        .expect("get_prompt should succeed");
+    assert_eq!(template.name, prompt_name);
+
+    prompt.delete_prompt(&prompt_name).await.ok();
 }
 
 #[tokio::test]
 async fn test_prompt_get_prompts() {
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
+    if client.is_oss().await {
+        println!("Skipping: Prompt API requires Orkes Enterprise Conductor");
+        return;
+    }
     let prompt = client.prompt_client();
 
-    // Get all prompts
-    match prompt.get_prompts().await {
-        Ok(prompts) => {
-            println!("Found {} prompts", prompts.len());
-        }
-        Err(e) => {
-            eprintln!("Warning: get_prompts failed: {e:?}");
-        }
-    }
+    let prompts = prompt
+        .get_prompts()
+        .await
+        .expect("get_prompts should succeed");
+    println!("Found {} prompts", prompts.len());
 }
 
 #[tokio::test]
 async fn test_prompt_test() {
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();
+    if client.is_oss().await {
+        println!("Skipping: Prompt API requires Orkes Enterprise Conductor");
+        return;
+    }
     let prompt = client.prompt_client();
 
     let prompt_name = generate_unique_name("test_prompt_test");
 
-    // Save a prompt first
-    match prompt
+    prompt
         .save_prompt(&prompt_name, "Test prompt", "Say hello to ${name}.")
         .await
-    {
-        Ok(()) => {
-            // Test the prompt (requires AI integration to be configured)
-            let mut vars: std::collections::HashMap<String, serde_json::Value> =
-                std::collections::HashMap::new();
-            vars.insert("name".to_owned(), serde_json::json!("World"));
+        .expect("save_prompt should succeed");
 
-            // Note: test_prompt requires a valid AI integration to be configured
-            // Also requires a valid LLM model name and integration
-            // Skipping actual test since we don't have AI configured
-            println!("Prompt created successfully. Skipping test_prompt as it requires AI configuration.");
+    // test_prompt itself additionally requires a valid AI integration/LLM
+    // model configured, which this suite does not set up; save/get above
+    // already cover the client's request/response handling.
+    println!("Prompt created successfully. Skipping test_prompt as it requires AI configuration.");
 
-            // Cleanup
-            prompt.delete_prompt(&prompt_name).await.ok();
-        }
-        Err(e) => {
-            eprintln!("Warning: save_prompt failed: {e:?}");
-        }
-    }
+    prompt.delete_prompt(&prompt_name).await.ok();
 }
 
 // =============================================================================
 // Event Client Tests
+//
+// Event handlers are OSS-compatible (confirmed empirically); queue
+// configuration is not (404 "No static resource api/event/queue/config").
 // =============================================================================
 
 #[tokio::test]
@@ -336,15 +433,11 @@ async fn test_get_all_event_handlers() {
     let client = ConductorClient::new(config).unwrap();
     let event = client.event_client();
 
-    // Get all event handlers
-    match event.get_all_event_handlers().await {
-        Ok(handlers) => {
-            println!("Found {} event handlers", handlers.len());
-        }
-        Err(e) => {
-            eprintln!("Warning: get_all_event_handlers failed: {e:?}");
-        }
-    }
+    let handlers = event
+        .get_all_event_handlers()
+        .await
+        .expect("get_all_event_handlers should succeed");
+    println!("Found {} event handlers", handlers.len());
 }
 
 #[tokio::test]
@@ -353,18 +446,11 @@ async fn test_event_handlers() {
     let client = ConductorClient::new(config).unwrap();
     let event = client.event_client();
 
-    // Try to get event handlers for a specific event
-    match event
+    let handlers = event
         .get_event_handlers("conductor:test_event", false)
         .await
-    {
-        Ok(handlers) => {
-            println!("Found {} handlers for event", handlers.len());
-        }
-        Err(e) => {
-            eprintln!("Warning: get_event_handlers failed: {e:?}");
-        }
-    }
+        .expect("get_event_handlers should succeed");
+    println!("Found {} handlers for event", handlers.len());
 }
 
 #[tokio::test]
@@ -373,13 +459,29 @@ async fn test_event_queue_configuration() {
     let client = ConductorClient::new(config).unwrap();
     let event = client.event_client();
 
-    // Get all queue configurations
-    match event.get_all_queue_configurations().await {
-        Ok(configs) => {
-            println!("Found {} queue configurations", configs.len());
-        }
-        Err(e) => {
-            eprintln!("Warning: get_all_queue_configurations failed (may require queue configuration): {e:?}");
-        }
+    if client.is_oss().await {
+        // Plain OSS Conductor maps no queue-config routes at all
+        // (rest/.../EventResource.java), so this must fail rather than quietly
+        // return an empty map -- which is also what proves the gate is real and
+        // not just a skip that would pass against any server.
+        let err = event
+            .get_all_queue_configurations()
+            .await
+            .expect_err("OSS Conductor has no /event/queue/config route");
+        println!("Skipping rest: queue configuration API requires Orkes Enterprise ({err:?})");
+        return;
     }
+
+    // Orkes maps this as `Map<String, String> getQueueNames()` returning a
+    // hardcoded `Map.of()` -- broker integrations moved to the Integrations API
+    // -- so an empty map is the correct, and only, answer here. The assertion
+    // that matters is that the response deserializes into the map shape at all.
+    let configs = event
+        .get_all_queue_configurations()
+        .await
+        .expect("get_all_queue_configurations should succeed");
+    assert!(
+        configs.is_empty(),
+        "EventResource.getQueueNames() returns Map.of(); got {configs:?}"
+    );
 }

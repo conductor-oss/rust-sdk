@@ -56,8 +56,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `get_secret()` | `GET /secrets/{key}` | Retrieve a secret value |
 | `delete_secret()` | `DELETE /secrets/{key}` | Delete a secret |
 | `secret_exists()` | `GET /secrets/{key}/exists` | Check if secret exists |
-| `list_all_secret_names()` | `GET /secrets` | List all secret names |
-| `list_secrets_that_user_can_grant_access_to()` | `GET /secrets?grantable=true` | List grantable secrets |
+| `list_all_secret_names()` | `POST /secrets` | List every secret name |
+| `list_secrets_that_user_can_grant_access_to()` | `GET /secrets` | List the secret names the caller can access |
+
+`POST /secrets` and `GET /secrets` are two different operations on both server
+families, not two spellings of one. `POST` is the list-everything endpoint;
+`GET` returns only the names the caller has access to (Orkes filters by the
+`access` query parameter, defaulting to `READ`). Open-source Conductor has no
+RBAC, so there the two return the same set — which is why calling the wrong one
+looks correct against OSS while silently returning a filtered subset against
+Orkes Enterprise.
 
 ### Tag Management
 
@@ -135,10 +143,11 @@ println!("API secrets: {:?}", api_keys);
 ### List Grantable Secrets
 
 ```rust
-// List secrets you can grant access to others
+// List the secrets the caller has access to (READ by default on Orkes;
+// every name on OSS, which has no RBAC)
 let grantable = secret_client.list_secrets_that_user_can_grant_access_to().await?;
 
-println!("Secrets you can share:");
+println!("Secrets you can access:");
 for name in &grantable {
     println!("  {}", name);
 }

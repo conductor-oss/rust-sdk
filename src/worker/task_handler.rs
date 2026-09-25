@@ -299,8 +299,8 @@ impl TaskHandler {
         let shutdown_timeout = std::time::Duration::from_secs(30);
         let start = std::time::Instant::now();
 
-        // Drain handles using futures::future::join_all for cleaner handling
-        let handles = std::mem::take(&mut self.handles);
+        // Take handles using futures::future::join_all for cleaner handling
+        let handles: Vec<_> = std::mem::take(&mut self.handles);
 
         if !handles.is_empty() {
             let wait_result =
