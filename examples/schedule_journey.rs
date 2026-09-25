@@ -66,9 +66,10 @@ async fn main() -> Result<()> {
 
     info!("Next 5 scheduled execution times:");
     for (i, timestamp) in next_times.iter().enumerate() {
-        let datetime = chrono::DateTime::from_timestamp_millis(*timestamp)
-            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_else(|| "Invalid".to_string());
+        let datetime = chrono::DateTime::from_timestamp_millis(*timestamp).map_or_else(
+            || "Invalid".to_owned(),
+            |dt| dt.format("%Y-%m-%d %H:%M:%S").to_string(),
+        );
         info!("  {}: {} ({})", i + 1, datetime, timestamp);
     }
 

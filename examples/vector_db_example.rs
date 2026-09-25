@@ -11,7 +11,7 @@ use conductor::{
 fn get_username() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "user".to_string())
+        .unwrap_or_else(|_| "user".to_owned())
 }
 
 #[tokio::main]
@@ -35,12 +35,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Define QA prompt
     let prompt_name = "us_constitution_qna";
-    let prompt_text = r#"
+    let prompt_text = "
     Here is the fragment of the us constitution ${text}.  
     I have a question ${question}.
     Given the text fragment from the constitution - please answer the question. 
     If you cannot answer from within this context of text then say I don't know.
-    "#;
+    ";
 
     prompt_client
         .save_prompt(prompt_name, "US Constitution QnA", prompt_text)
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Execute the workflow
     let request = StartWorkflowRequest::new(&workflow_def.name).with_version(1);
 
-    println!("\nAsking: {}", question);
+    println!("\nAsking: {question}");
     println!("Searching vector database and generating answer...\n");
 
     let result = workflow_client
@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Workflow status: {:?}", result.status);
     println!("\nAnswer:");
     if let Some(answer) = result.output.get("answer") {
-        println!("{}", answer);
+        println!("{answer}");
     }
 
     Ok(())
@@ -111,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Example: Indexing documents to the vector database
 /// This would typically be done separately before running RAG queries
-#[allow(dead_code)]
+#[expect(dead_code)]
 async fn index_document_example(
     clients: &OrkesClients,
     llm_provider: &str,
@@ -134,7 +134,7 @@ async fn index_document_example(
     .with_embedding_model(llm_provider, embedding_model)
     .with_metadata({
         let mut m = HashMap::new();
-        m.insert("source".to_string(), "constitution center".to_string());
+        m.insert("source".to_owned(), "constitution center".to_owned());
         m
     });
 

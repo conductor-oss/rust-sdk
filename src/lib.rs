@@ -11,7 +11,25 @@ pub mod models;
 pub mod schema;
 pub mod worker;
 
+#[cfg(feature = "agents")]
+pub mod agents;
+
 // Re-exports for convenience
+#[cfg(feature = "agents")]
+pub use agents::{
+    agent_run_span, compile_span, handoff_span, is_tracing_enabled, llm_call_span, plan_execute,
+    record_token_usage, tool_call_span, traced_agent_run, traced_tool_call, Action,
+    AgentConfigSerializer, AgentDef, AgentEvent, AgentHandle, AgentResult, AgentRuntime,
+    AgentStatus, AgentStream, CallbackContext, CallbackHandler, Context, ConversationMemory,
+    Credentials, FunctionGuardrail, GateCondition, GateHandler, Generate, Guardrail,
+    GuardrailCheck, GuardrailResult, LlmGuardrail, Message, MessageRole, OnFail, Op, OpBody, Plan,
+    PlanExecuteOptions, Position, PrefillToolCall, Ref, RegexGuardrail, RegexMode, RunSettings,
+    Step, StopWhenHandler, Strategy, SwarmConditionFn, SwarmContext, SwarmTransition,
+    TerminationCondition, TextGate, ToolCall, ToolContext, ToolDef, ToolHandler, ToolType,
+    Validation,
+};
+#[cfg(feature = "agents")]
+pub use client::AgentClient;
 pub use client::{
     AuthorizationClient, ConductorClient, EventClient, IntegrationClient, MetadataClient,
     OrkesClients, PromptClient, QueueConfiguration, SchedulerClient, SchemaClient, SecretClient,
@@ -37,5 +55,7 @@ pub use worker::{
 };
 
 // Re-export the procedural macros when the feature is enabled
+#[cfg(feature = "agents")]
+pub use conductor_macros::tool;
 #[cfg(feature = "macros")]
 pub use conductor_macros::{worker, worker_task};

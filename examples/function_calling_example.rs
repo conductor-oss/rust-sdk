@@ -119,9 +119,9 @@ async fn main() -> anyhow::Result<()> {
         }
     ]);
 
-    let system_prompt = r#"You are a customer service routing assistant.
+    let system_prompt = "You are a customer service routing assistant.
 Analyze the customer's message and classify their intent by calling the appropriate function.
-Always call exactly one function that best matches the customer's needs."#;
+Always call exactly one function that best matches the customer's needs.";
 
     let classify_task =
         WorkflowTask::llm_chat_complete("classify_intent_ref", LLM_PROVIDER, LLM_MODEL)
@@ -134,7 +134,7 @@ Always call exactly one function that best matches the customer's needs."#;
             .with_temperature(0.0);
 
     // Parse and format the result
-    let parse_script = r#"
+    let parse_script = "
     (function(){
         var output = $.llm_output;
         var result = {
@@ -159,7 +159,7 @@ Always call exactly one function that best matches the customer's needs."#;
         
         return result;
     })();
-    "#;
+    ";
 
     let parse_task = WorkflowTask::inline("parse_intent_ref", parse_script)
         .with_input_param("llm_output", "${classify_intent_ref.output}");
@@ -169,7 +169,7 @@ Always call exactly one function that best matches the customer's needs."#;
         .with_version(1)
         .with_task(classify_task)
         .with_task(parse_task)
-        .with_input_parameters(vec!["customer_message".to_string()])
+        .with_input_parameters(vec!["customer_message".to_owned()])
         .with_output_param("intent", "${parse_intent_ref.output.result.intent}")
         .with_output_param("parameters", "${parse_intent_ref.output.result.parameters}")
         .with_timeout(60, WorkflowTimeoutPolicy::TimeOutWf);
@@ -187,7 +187,7 @@ Always call exactly one function that best matches the customer's needs."#;
     metadata_client
         .register_or_update_workflow_def(&workflow, true)
         .await?;
-    println!("Workflow registered: {}", workflow_name);
+    println!("Workflow registered: {workflow_name}");
 
     // Test with example messages
     let test_messages = vec![
@@ -202,7 +202,7 @@ Always call exactly one function that best matches the customer's needs."#;
     println!("{}", "-".repeat(60));
 
     for message in test_messages {
-        println!("\nMessage: \"{}\"", message);
+        println!("\nMessage: \"{message}\"");
 
         let request = StartWorkflowRequest::new(workflow_name)
             .with_version(1)
@@ -214,7 +214,7 @@ Always call exactly one function that best matches the customer's needs."#;
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                 if let Ok(wf) = workflow_client.get_workflow(&id, false).await {
                     if let Some(intent) = wf.output.get("intent") {
-                        println!("  → Intent: {}", intent);
+                        println!("  → Intent: {intent}");
                     }
                     if let Some(params) = wf.output.get("parameters") {
                         println!(
@@ -224,7 +224,7 @@ Always call exactly one function that best matches the customer's needs."#;
                     }
                 }
             }
-            Err(e) => println!("  → Could not classify: {}", e),
+            Err(e) => println!("  → Could not classify: {e}"),
         }
     }
 
@@ -293,7 +293,7 @@ If information is not provided, make reasonable assumptions based on context."#;
             )
             .with_temperature(0.0);
 
-    let format_script = r#"
+    let format_script = "
     (function(){
         var output = $.llm_output;
         var booking = null;
@@ -311,7 +311,7 @@ If information is not provided, make reasonable assumptions based on context."#;
             is_complete: booking && booking.check_in_date && booking.check_out_date && booking.num_guests
         };
     })();
-    "#;
+    ";
 
     let format_task = WorkflowTask::inline("format_booking_ref", format_script)
         .with_input_param("llm_output", "${extract_params_ref.output}");
@@ -321,7 +321,7 @@ If information is not provided, make reasonable assumptions based on context."#;
         .with_version(1)
         .with_task(extract_task)
         .with_task(format_task)
-        .with_input_parameters(vec!["booking_request".to_string()])
+        .with_input_parameters(vec!["booking_request".to_owned()])
         .with_output_param("booking", "${format_booking_ref.output.result.booking}")
         .with_output_param(
             "is_complete",
@@ -336,7 +336,7 @@ If information is not provided, make reasonable assumptions based on context."#;
     metadata_client
         .register_or_update_workflow_def(&extraction_wf, true)
         .await?;
-    println!("Workflow registered: {}", extraction_workflow);
+    println!("Workflow registered: {extraction_workflow}");
 
     // Test extraction
     let booking_request =
@@ -345,7 +345,7 @@ If information is not provided, make reasonable assumptions based on context."#;
     println!("\n{}", "-".repeat(60));
     println!("TEST EXTRACTION");
     println!("{}", "-".repeat(60));
-    println!("\nRequest: \"{}\"", booking_request);
+    println!("\nRequest: \"{booking_request}\"");
 
     let request = StartWorkflowRequest::new(extraction_workflow)
         .with_version(1)
@@ -363,7 +363,7 @@ If information is not provided, make reasonable assumptions based on context."#;
                 }
             }
         }
-        Err(e) => println!("  Could not extract: {}", e),
+        Err(e) => println!("  Could not extract: {e}"),
     }
 
     // ==========================================================================
@@ -376,8 +376,8 @@ If information is not provided, make reasonable assumptions based on context."#;
 
     for name in [workflow_name, extraction_workflow] {
         match metadata_client.delete_workflow_def(name, 1).await {
-            Ok(_) => println!("  Deleted workflow: {}", name),
-            Err(e) => println!("  Could not delete {}: {}", name, e),
+            Ok(()) => println!("  Deleted workflow: {name}"),
+            Err(e) => println!("  Could not delete {name}: {e}"),
         }
     }
 

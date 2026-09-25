@@ -66,7 +66,7 @@ async fn main() -> Result<()> {
     let configured_worker = FnWorker::new("configured_task", |task: Task| async move {
         let name = task
             .get_input_string("name")
-            .unwrap_or_else(|| "Unknown".to_string());
+            .unwrap_or_else(|| "Unknown".to_owned());
         let priority: i32 = task.get_input("priority").unwrap_or(5);
 
         info!(
@@ -81,9 +81,7 @@ async fn main() -> Result<()> {
         Ok(WorkerOutput::completed_with_result(serde_json::json!({
             "result": format!("Processed {} with priority {}", name, priority),
             "processed_at": chrono::Utc::now().to_rfc3339(),
-            "worker_id": hostname::get()
-                .map(|h| h.to_string_lossy().into_owned())
-                .unwrap_or_else(|_| "unknown".to_string())
+            "worker_id": hostname::get().map_or_else(|_| "unknown".to_owned(), |h| h.to_string_lossy().into_owned())
         })))
     })
     // Configuration options (can be overridden by environment variables)
@@ -100,7 +98,7 @@ async fn main() -> Result<()> {
     // ==============================
     let schema_worker = FnWorker::new("schema_task", |task: Task| async move {
         let input: ConfiguredTaskInput = task.get_input("input").unwrap_or(ConfiguredTaskInput {
-            name: "default".to_string(),
+            name: "default".to_owned(),
             priority: 5,
             tags: vec![],
         });
@@ -129,8 +127,7 @@ async fn main() -> Result<()> {
         let data = task.get_input_string("data").unwrap_or_default();
         info!("[Minimal Worker] Processing: {}", data);
         Ok(WorkerOutput::completed_with_result(format!(
-            "Processed: {}",
-            data
+            "Processed: {data}"
         )))
     });
     // Uses defaults: thread_count=1, poll_interval=100ms, no domain, no schema

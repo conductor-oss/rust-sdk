@@ -72,22 +72,22 @@ async fn main() -> Result<()> {
 
     // Create mock outputs for each task
     let mut process_order_output = HashMap::new();
-    process_order_output.insert("order_id".to_string(), serde_json::json!("ORD-123"));
-    process_order_output.insert("total".to_string(), serde_json::json!(99.99));
-    process_order_output.insert("items".to_string(), serde_json::json!(["item1", "item2"]));
+    process_order_output.insert("order_id".to_owned(), serde_json::json!("ORD-123"));
+    process_order_output.insert("total".to_owned(), serde_json::json!(99.99));
+    process_order_output.insert("items".to_owned(), serde_json::json!(["item1", "item2"]));
 
     let mut validate_payment_output = HashMap::new();
-    validate_payment_output.insert("status".to_string(), serde_json::json!("SUCCESS"));
-    validate_payment_output.insert("transaction_id".to_string(), serde_json::json!("TXN-456"));
+    validate_payment_output.insert("status".to_owned(), serde_json::json!("SUCCESS"));
+    validate_payment_output.insert("transaction_id".to_owned(), serde_json::json!("TXN-456"));
 
     let mut send_notification_output = HashMap::new();
-    send_notification_output.insert("sent".to_string(), serde_json::json!(true));
-    send_notification_output.insert("channel".to_string(), serde_json::json!("email"));
+    send_notification_output.insert("sent".to_owned(), serde_json::json!(true));
+    send_notification_output.insert("channel".to_owned(), serde_json::json!("email"));
 
     // Create workflow input
     let mut workflow_input = HashMap::new();
-    workflow_input.insert("order_id".to_string(), serde_json::json!("ORD-123"));
-    workflow_input.insert("amount".to_string(), serde_json::json!(99.99));
+    workflow_input.insert("order_id".to_owned(), serde_json::json!("ORD-123"));
+    workflow_input.insert("amount".to_owned(), serde_json::json!(99.99));
 
     // Build test request
     let test_request = TestWorkflowRequest::new("test_workflow_example")
@@ -123,29 +123,29 @@ async fn main() -> Result<()> {
 
     // Mock payment validation failure
     let mut failed_payment_output = HashMap::new();
-    failed_payment_output.insert("status".to_string(), serde_json::json!("FAILED"));
-    failed_payment_output.insert("error".to_string(), serde_json::json!("Insufficient funds"));
+    failed_payment_output.insert("status".to_owned(), serde_json::json!("FAILED"));
+    failed_payment_output.insert("error".to_owned(), serde_json::json!("Insufficient funds"));
 
     let test_request_failure = TestWorkflowRequest::new("test_workflow_example")
         .with_version(1)
         .with_input({
             let mut input = HashMap::new();
-            input.insert("order_id".to_string(), serde_json::json!("ORD-789"));
-            input.insert("amount".to_string(), serde_json::json!(999999.99));
+            input.insert("order_id".to_owned(), serde_json::json!("ORD-789"));
+            input.insert("amount".to_owned(), serde_json::json!(999_999.99));
             input
         })
         .with_mock_output("process_order_ref", {
             let mut output = HashMap::new();
-            output.insert("order_id".to_string(), serde_json::json!("ORD-789"));
-            output.insert("total".to_string(), serde_json::json!(999999.99));
+            output.insert("order_id".to_owned(), serde_json::json!("ORD-789"));
+            output.insert("total".to_owned(), serde_json::json!(999_999.99));
             output
         })
         .with_mock_output("validate_payment_ref", failed_payment_output)
         .with_mock_output("send_notification_ref", {
             let mut output = HashMap::new();
-            output.insert("sent".to_string(), serde_json::json!(true));
+            output.insert("sent".to_owned(), serde_json::json!(true));
             output.insert(
-                "message".to_string(),
+                "message".to_owned(),
                 serde_json::json!("Payment failed notification"),
             );
             output
@@ -180,13 +180,13 @@ async fn main() -> Result<()> {
         .with_workflow_def(inline_workflow)
         .with_input({
             let mut input = HashMap::new();
-            input.insert("a".to_string(), serde_json::json!(10));
-            input.insert("b".to_string(), serde_json::json!(20));
+            input.insert("a".to_owned(), serde_json::json!(10));
+            input.insert("b".to_owned(), serde_json::json!(20));
             input
         })
         .with_mock_output("calc_ref", {
             let mut output = HashMap::new();
-            output.insert("sum".to_string(), serde_json::json!(30));
+            output.insert("sum".to_owned(), serde_json::json!(30));
             output
         });
 

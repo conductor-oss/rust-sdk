@@ -14,10 +14,10 @@ use conductor::{
 const LLM_PROVIDER: &str = "openai";
 const LLM_MODEL: &str = "gpt-4o-mini";
 
-const ASSISTANT_PERSONA: &str = r#"You are a helpful assistant engaged in a conversation.
+const ASSISTANT_PERSONA: &str = "You are a helpful assistant engaged in a conversation.
 Keep your responses concise and engaging.
 Ask follow-up questions to keep the conversation going.
-If the user wants to end the conversation, say goodbye politely."#;
+If the user wants to end the conversation, say goodbye politely.";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -85,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
             .with_max_tokens(200);
 
     // Format the conversation history
-    let format_script = r#"
+    let format_script = "
     (function(){
         var conversation = [];
         
@@ -120,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
             final_assistant_message: $.response_2 || $.response_1 || $.initial_response
         };
     })();
-    "#;
+    ";
 
     let format_task = WorkflowTask::inline("format_conversation_ref", format_script)
         .with_input_param("initial_message", "${workflow.input.initial_message}")
@@ -146,7 +146,7 @@ async fn main() -> anyhow::Result<()> {
         .with_task(wait_turn2)
         .with_task(response_turn2)
         .with_task(format_task)
-        .with_input_parameters(vec!["initial_message".to_string()])
+        .with_input_parameters(vec!["initial_message".to_owned()])
         .with_output_param(
             "conversation",
             "${format_conversation_ref.output.result.conversation}",
@@ -174,7 +174,7 @@ async fn main() -> anyhow::Result<()> {
     metadata_client
         .register_or_update_workflow_def(&workflow, true)
         .await?;
-    println!("  Workflow registered: {}", workflow_name);
+    println!("  Workflow registered: {workflow_name}");
 
     // ==========================================================================
     // Run Interactive Chat Demo
@@ -186,7 +186,7 @@ async fn main() -> anyhow::Result<()> {
 
     let initial_message =
         "Hello! I'm learning about workflow orchestration. Can you explain what Conductor is?";
-    println!("User: {}\n", initial_message);
+    println!("User: {initial_message}\n");
 
     let request = StartWorkflowRequest::new(workflow_name)
         .with_version(1)
@@ -194,7 +194,7 @@ async fn main() -> anyhow::Result<()> {
 
     match workflow_client.start_workflow(&request).await {
         Ok(workflow_id) => {
-            println!("Workflow started: {}", workflow_id);
+            println!("Workflow started: {workflow_id}");
             println!();
 
             // Wait for initial response
@@ -236,7 +236,7 @@ async fn main() -> anyhow::Result<()> {
                     println!("  task_client.update_task_sync(");
                     println!("      TaskResult::completed_with_output(json!({{\"human_message\": \"Your message\"}}))");
                     println!("          .with_task_id(\"{}\")", wait_task.task_id);
-                    println!("          .with_workflow_id(\"{}\"),", workflow_id);
+                    println!("          .with_workflow_id(\"{workflow_id}\"),");
                     println!("  ).await?;");
                     println!();
 
@@ -247,7 +247,7 @@ async fn main() -> anyhow::Result<()> {
                     println!();
 
                     let human_message_1 = "That's interesting! How does it handle task failures?";
-                    println!("Simulated Human: {}\n", human_message_1);
+                    println!("Simulated Human: {human_message_1}\n");
 
                     // Update the wait task with human input using update_task_sync
                     let output = serde_json::json!({
@@ -293,7 +293,7 @@ async fn main() -> anyhow::Result<()> {
                             {
                                 if wait_task2.status == TaskStatus::InProgress {
                                     let human_message_2 = "Thanks! That's very helpful. Goodbye!";
-                                    println!("Simulated Human: {}\n", human_message_2);
+                                    println!("Simulated Human: {human_message_2}\n");
 
                                     let output2 = serde_json::json!({
                                         "human_message": human_message_2
@@ -338,14 +338,14 @@ async fn main() -> anyhow::Result<()> {
                             }
                         }
                         Err(e) => {
-                            println!("Could not update task: {}", e);
+                            println!("Could not update task: {e}");
                         }
                     }
                 }
             }
         }
         Err(e) => {
-            println!("Could not start workflow: {}", e);
+            println!("Could not start workflow: {e}");
             println!();
             println!("This is expected if LLM integration is not configured.");
         }
@@ -384,8 +384,8 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     match metadata_client.delete_workflow_def(workflow_name, 1).await {
-        Ok(_) => println!("  Deleted workflow: {}", workflow_name),
-        Err(e) => println!("  Could not delete workflow: {}", e),
+        Ok(()) => println!("  Deleted workflow: {workflow_name}"),
+        Err(e) => println!("  Could not delete workflow: {e}"),
     }
 
     println!();

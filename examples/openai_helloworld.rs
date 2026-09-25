@@ -13,7 +13,7 @@ use conductor::{
 async fn get_friend_name(_task: conductor::Task) -> conductor::Result<WorkerOutput> {
     let name = std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "anonymous".to_string());
+        .unwrap_or_else(|_| "anonymous".to_owned());
 
     Ok(WorkerOutput::completed_with_result(serde_json::json!({
         "result": name
@@ -23,7 +23,7 @@ async fn get_friend_name(_task: conductor::Task) -> conductor::Result<WorkerOutp
 fn get_username() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "user".to_string())
+        .unwrap_or_else(|_| "user".to_owned())
 }
 
 #[tokio::main]
@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test the prompt
     let mut test_vars = HashMap::new();
-    test_vars.insert("friend_name".to_string(), serde_json::json!("Orkes"));
+    test_vars.insert("friend_name".to_owned(), serde_json::json!("Orkes"));
 
     let test_result = prompt_client
         .test_prompt(
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
-    println!("Test prompt result: {}", test_result);
+    println!("Test prompt result: {test_result}");
 
     // Create the workflow: get_friend_name -> LLM text complete
     let get_name_task = WorkflowTask::simple("get_friends_name", "get_friend_name_ref");

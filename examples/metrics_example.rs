@@ -62,8 +62,7 @@ async fn main() -> Result<()> {
         let delay_ms: u64 = task.get_input("delay_ms").unwrap_or(100);
         tokio::time::sleep(Duration::from_millis(delay_ms)).await;
         Ok(WorkerOutput::completed_with_result(format!(
-            "completed in {}ms",
-            delay_ms
+            "completed in {delay_ms}ms"
         )))
     })
     .with_thread_count(5);
@@ -139,7 +138,7 @@ async fn main() -> Result<()> {
         let request = StartWorkflowRequest::new("metrics_demo")
             .with_version(1)
             .with_input_value("task_type", "quick")
-            .with_correlation_id(format!("quick_{}", i));
+            .with_correlation_id(format!("quick_{i}"));
         let _ = workflow_client.start_workflow(&request).await;
     }
 
@@ -158,7 +157,7 @@ async fn main() -> Result<()> {
             .with_version(1)
             .with_input_value("task_type", "flaky")
             .with_input_value("fail_rate", 0.3) // 30% failure rate
-            .with_correlation_id(format!("flaky_{}", i));
+            .with_correlation_id(format!("flaky_{i}"));
         let _ = workflow_client.start_workflow(&request).await;
     }
 
@@ -183,7 +182,7 @@ async fn main() -> Result<()> {
         // Print first 50 lines
         for line in metrics.lines().take(50) {
             if !line.starts_with('#') && !line.is_empty() {
-                println!("  {}", line);
+                println!("  {line}");
             }
         }
         println!("  ... (see http://localhost:9090/metrics for full output)");
@@ -207,7 +206,7 @@ fn rand_fail(rate: f64) -> bool {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .subsec_nanos();
-    (nanos as f64 / u32::MAX as f64) < rate
+    (f64::from(nanos) / f64::from(u32::MAX)) < rate
 }
 
 async fn register_workflow(client: &ConductorClient) -> Result<()> {

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
@@ -15,9 +16,9 @@ use crate::models::{SchemaDef, TaskDef};
 
 use super::{TaskRunner, Worker};
 
-/// Task handler for managing multiple workers
+/// Task handler for managing multiple workers.
 pub struct TaskHandler {
-    #[allow(dead_code)] // Stored for potential future use (e.g., reconfiguration)
+    #[expect(dead_code)] // Stored for potential future use (e.g., reconfiguration)
     config: Configuration,
     api_client: ApiClient,
     event_dispatcher: EventDispatcher,
@@ -29,7 +30,11 @@ pub struct TaskHandler {
 }
 
 impl TaskHandler {
-    /// Create a new task handler with the given configuration
+    /// Create a new task handler with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the underlying `reqwest` client fails to build (see [`ApiClient::new`]).
     pub fn new(config: Configuration) -> Result<Self> {
         let api_client = ApiClient::new(config.clone())?;
         let event_dispatcher = EventDispatcher::new();
@@ -46,22 +51,35 @@ impl TaskHandler {
         })
     }
 
-    /// Create a builder for more flexible configuration
+    /// Create a builder for more flexible configuration.
+    #[must_use]
     pub fn builder(config: Configuration) -> TaskHandlerBuilder {
         TaskHandlerBuilder::new(config)
     }
 
-    /// Add a worker to the handler
+    /// Add a worker to the handler.
+    ///
+    /// Registration is always explicit -- there is no scan-a-package auto-discovery here.
+    /// Rust's callers already write out every `TaskDef`/`AgentDef`/`ToolDef` by hand at a
+    /// well-typed call site, so scanning for them would only add indirection, not remove real
+    /// boilerplate. A crate-level `inventory` dependency was carried for a while in anticipation
+    /// of a `#[worker]`-style attribute macro doing `inventory::submit!`-based collection
+    /// instead, but was removed unused: besides never having a caller, that approach has a real
+    /// sharp edge `inventory` itself documents -- registrations only get linked in if the
+    /// registering crate is a *direct* dependency of the final binary, which link-time
+    /// dead-code elimination can silently defeat depending on build settings.
+    /// `add_worker`/`add_workers` (and [`TaskHandlerBuilder::worker`]/
+    /// [`TaskHandlerBuilder::workers`]) staying explicit sidesteps that class of bug entirely.
     pub fn add_worker(&mut self, worker: impl Worker + 'static) {
         self.workers.push(Arc::new(worker));
     }
 
-    /// Add multiple workers
+    /// Add multiple workers.
     pub fn add_workers(&mut self, workers: impl IntoIterator<Item = Arc<dyn Worker>>) {
         self.workers.extend(workers);
     }
 
-    /// Register an event listener
+    /// Register an event listener.
     pub fn add_event_listener(&self, listener: Arc<dyn TaskRunnerEventsListener>) {
         self.event_dispatcher.register(listener);
     }
@@ -80,28 +98,32 @@ impl TaskHandler {
     pub fn enable_metrics(&mut self, settings: MetricsSettings) {
         let collector = Arc::new(MetricsCollector::new(settings));
         self.event_dispatcher
-            .register(collector.clone() as Arc<dyn TaskRunnerEventsListener>);
+            .register(Arc::clone(&collector) as Arc<dyn TaskRunnerEventsListener>);
         self.api_client
-            .set_http_observer(collector.clone() as Arc<dyn crate::http::HttpMetricsObserver>);
+            .set_http_observer(Arc::clone(&collector) as Arc<dyn crate::http::HttpMetricsObserver>);
         self.metrics_collector = Some(collector);
     }
 
-    /// Get the metrics collector
+    /// Get the metrics collector.
+    #[must_use]
     pub fn metrics_collector(&self) -> Option<&Arc<MetricsCollector>> {
         self.metrics_collector.as_ref()
     }
 
-    /// Get the event dispatcher
+    /// Get the event dispatcher.
+    #[must_use]
     pub fn event_dispatcher(&self) -> &EventDispatcher {
         &self.event_dispatcher
     }
 
-    /// Get a task client
+    /// Get a task client.
+    #[must_use]
     pub fn task_client(&self) -> TaskClient {
         TaskClient::new(self.api_client.clone())
     }
 
-    /// Get a metadata client
+    /// Get a metadata client.
+    #[must_use]
     pub fn metadata_client(&self) -> MetadataClient {
         MetadataClient::new(self.api_client.clone())
     }
@@ -112,17 +134,23 @@ impl TaskHandler {
     /// `WorkflowStartFailure` events emitted by the returned client's
     /// `WorkflowClient` flow into the same `MetricsCollector` that
     /// [`enable_metrics`](Self::enable_metrics) installed.
+    #[must_use]
     pub fn conductor_client(&self) -> ConductorClient {
         ConductorClient::from_api_client(self.api_client.clone())
             .with_event_dispatcher(self.event_dispatcher.clone())
     }
 
-    /// Get a schema client
+    /// Get a schema client.
+    #[must_use]
     pub fn schema_client(&self) -> SchemaClient {
         SchemaClient::new(self.api_client.clone())
     }
 
-    /// Start all workers
+    /// Start all workers.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Worker`] if no workers are registered.
     pub async fn start(&mut self) -> Result<()> {
         if self.workers.is_empty() {
             return Err(ConductorError::worker("No workers registered"));
@@ -185,12 +213,79 @@ impl TaskHandler {
         Ok(())
     }
 
-    /// Stop all workers gracefully
+    /// Verify that every registered worker's polling task actually started and completed at
+    /// least one real poll attempt against the server, within `timeout`. Call this right after
+    /// [`TaskHandler::start`].
+    ///
+    /// This crate's workers are `tokio::spawn`ed futures in the same process, where spawning
+    /// itself essentially never fails silently -- so the real risk isn't "did the task get
+    /// scheduled," it's "did this worker's task actually reach and complete its first poll,"
+    /// which catches an early panic during setup (before or shortly into [`TaskRunner::run`])
+    /// or a spawned task that's starved and never reaches the network call.
+    /// [`TaskRunner::poll_attempt_count`] is the signal used to tell that apart from
+    /// [`TaskRunner::is_running`] merely being `true`, which happens before the first poll is
+    /// even attempted.
+    ///
+    /// No-op (returns `Ok(())` immediately) if [`TaskHandler::start`] hasn't been called yet, or
+    /// registered no workers -- there's nothing to verify.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Worker`] naming every task type that either
+    /// exited before its first poll (its spawned task ended, e.g. via an early panic) or simply
+    /// hadn't completed one within `timeout`.
+    pub async fn verify_workers_started(&self, timeout: Duration) -> Result<()> {
+        if self.runners.is_empty() {
+            return Ok(());
+        }
+
+        let deadline = Instant::now() + timeout;
+        let poll_interval = Duration::from_millis(50);
+
+        loop {
+            let not_ready: Vec<String> = self
+                .runners
+                .iter()
+                .zip(&self.handles)
+                .filter_map(|(runner, handle)| {
+                    if handle.is_finished() {
+                        Some(format!(
+                            "{} (task exited before its first poll)",
+                            runner.task_type()
+                        ))
+                    } else if runner.poll_attempt_count() == 0 {
+                        Some(runner.task_type().to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if not_ready.is_empty() {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(ConductorError::worker(format!(
+                    "Worker startup verification failed: worker(s) never completed a first \
+                     poll within {timeout:?}: [{}]. This usually means a worker panicked during \
+                     setup, or the async runtime is starved. Check logs and retry start().",
+                    not_ready.join(", "),
+                )));
+            }
+            tokio::time::sleep(poll_interval).await;
+        }
+    }
+
+    /// Stop all workers gracefully.
     ///
     /// This method:
     /// 1. Signals all runners to stop polling
     /// 2. Waits for in-flight tasks to complete (up to 30 seconds)
     /// 3. Stops the metrics server
+    ///
+    /// # Errors
+    ///
+    /// Currently always returns `Ok(())`; the `Result` is reserved for future shutdown failures (e.g. a worker task panic is logged, not propagated).
     pub async fn stop(&mut self) -> Result<()> {
         info!("Stopping task handler");
 
@@ -241,7 +336,11 @@ impl TaskHandler {
         Ok(())
     }
 
-    /// Wait for all workers to complete
+    /// Wait for all workers to complete.
+    ///
+    /// # Errors
+    ///
+    /// Currently always returns `Ok(())`; a worker task panic is logged, not propagated.
     pub async fn join(&mut self) -> Result<()> {
         for handle in self.handles.drain(..) {
             if let Err(e) = handle.await {
@@ -251,17 +350,19 @@ impl TaskHandler {
         Ok(())
     }
 
-    /// Get the number of registered workers
+    /// Get the number of registered workers.
+    #[must_use]
     pub fn worker_count(&self) -> usize {
         self.workers.len()
     }
 
-    /// Check if all workers are running
+    /// Check if all workers are running.
+    #[must_use]
     pub fn is_running(&self) -> bool {
         !self.runners.is_empty() && self.runners.iter().all(|r| r.is_running())
     }
 
-    /// Pause a specific worker by task type
+    /// Pause a specific worker by task type.
     pub fn pause_worker(&self, task_type: &str) {
         for runner in &self.runners {
             if runner.task_type() == task_type {
@@ -270,7 +371,7 @@ impl TaskHandler {
         }
     }
 
-    /// Resume a specific worker by task type
+    /// Resume a specific worker by task type.
     pub fn resume_worker(&self, task_type: &str) {
         for runner in &self.runners {
             if runner.task_type() == task_type {
@@ -279,26 +380,26 @@ impl TaskHandler {
         }
     }
 
-    /// Pause all workers
+    /// Pause all workers.
     pub fn pause_all(&self) {
         for runner in &self.runners {
             runner.pause();
         }
     }
 
-    /// Resume all workers
+    /// Resume all workers.
     pub fn resume_all(&self) {
         for runner in &self.runners {
             runner.resume();
         }
     }
 
-    /// Resolve worker configuration from environment variables
+    /// Resolve worker configuration from environment variables.
     fn resolve_worker_config(&self, worker: &dyn Worker) -> WorkerConfig {
         let defaults = WorkerConfig {
-            task_definition_name: worker.task_definition_name().to_string(),
+            task_definition_name: worker.task_definition_name().to_owned(),
             poll_interval: std::time::Duration::from_millis(worker.poll_interval_millis()),
-            domain: worker.domain().map(|s| s.to_string()),
+            domain: worker.domain().map(std::borrow::ToOwned::to_owned),
             worker_id: worker.identity(),
             thread_count: worker.thread_count(),
             ..Default::default()
@@ -307,7 +408,7 @@ impl TaskHandler {
         resolve_worker_config(worker.task_definition_name(), defaults)
     }
 
-    /// Register a task definition for a worker
+    /// Register a task definition for a worker.
     async fn register_task_definition(
         &self,
         metadata_client: &MetadataClient,
@@ -328,8 +429,9 @@ impl TaskHandler {
         }
 
         // Create task definition from worker
-        let task_def =
-            TaskDef::new(task_name).with_description("Task registered by Rust SDK worker");
+        let task_def = TaskDef::new(task_name)
+            .with_description("Task registered by Rust SDK worker")
+            .with_runtime_metadata(worker.declared_credentials());
 
         if exists {
             info!(
@@ -351,13 +453,13 @@ impl TaskHandler {
         Ok(())
     }
 
-    /// Register input and output schemas for a worker
+    /// Register input and output schemas for a worker.
     async fn register_worker_schemas(&self, worker: &dyn Worker, task_name: &str) -> Result<()> {
         let schema_client = self.schema_client();
 
         // Register input schema if provided
         if let Some(input_schema) = worker.input_schema() {
-            let schema_def = SchemaDef::new(format!("{}_input", task_name), 1, input_schema);
+            let schema_def = SchemaDef::new(format!("{task_name}_input"), 1, input_schema);
 
             match schema_client.register_schema(&schema_def).await {
                 Ok(()) => {
@@ -379,7 +481,7 @@ impl TaskHandler {
 
         // Register output schema if provided
         if let Some(output_schema) = worker.output_schema() {
-            let schema_def = SchemaDef::new(format!("{}_output", task_name), 1, output_schema);
+            let schema_def = SchemaDef::new(format!("{task_name}_output"), 1, output_schema);
 
             match schema_client.register_schema(&schema_def).await {
                 Ok(()) => {
@@ -416,7 +518,7 @@ fn debug_log_worker(worker: &dyn Worker, config: &WorkerConfig) {
     );
 }
 
-/// Builder for TaskHandler
+/// Builder for `TaskHandler`.
 pub struct TaskHandlerBuilder {
     config: Configuration,
     workers: Vec<Arc<dyn Worker>>,
@@ -425,7 +527,8 @@ pub struct TaskHandlerBuilder {
 }
 
 impl TaskHandlerBuilder {
-    /// Create a new builder
+    /// Create a new builder.
+    #[must_use]
     pub fn new(config: Configuration) -> Self {
         Self {
             config,
@@ -435,31 +538,39 @@ impl TaskHandlerBuilder {
         }
     }
 
-    /// Add a worker
+    /// Add a worker.
+    #[must_use]
     pub fn worker(mut self, worker: impl Worker + 'static) -> Self {
         self.workers.push(Arc::new(worker));
         self
     }
 
-    /// Add multiple workers
+    /// Add multiple workers.
+    #[must_use]
     pub fn workers(mut self, workers: impl IntoIterator<Item = Arc<dyn Worker>>) -> Self {
         self.workers.extend(workers);
         self
     }
 
-    /// Add an event listener
+    /// Add an event listener.
+    #[must_use]
     pub fn event_listener(mut self, listener: impl TaskRunnerEventsListener + 'static) -> Self {
         self.event_listeners.push(Arc::new(listener));
         self
     }
 
-    /// Enable metrics with the given settings
+    /// Enable metrics with the given settings.
+    #[must_use]
     pub fn metrics(mut self, settings: MetricsSettings) -> Self {
         self.metrics_settings = Some(settings);
         self
     }
 
-    /// Build the task handler
+    /// Build the task handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the underlying `reqwest` client fails to build (see [`TaskHandler::new`]).
     pub fn build(self) -> Result<TaskHandler> {
         let mut handler = TaskHandler::new(self.config)?;
 
@@ -504,15 +615,91 @@ mod tests {
 
         let handler = TaskHandlerBuilder::new(config)
             .worker(TestWorker {
-                name: "task1".to_string(),
+                name: "task1".to_owned(),
             })
             .worker(TestWorker {
-                name: "task2".to_string(),
+                name: "task2".to_owned(),
             })
             .build();
 
         assert!(handler.is_ok());
         let handler = handler.unwrap();
         assert_eq!(handler.worker_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_verify_workers_started_is_a_no_op_before_start() {
+        let config = Configuration::new("http://localhost:8080/api");
+        let mut handler = TaskHandler::new(config).unwrap();
+        handler.add_worker(TestWorker {
+            name: "never_started".to_owned(),
+        });
+
+        // start() was never called, so there are no runners/handles yet -- nothing to verify.
+        handler
+            .verify_workers_started(Duration::ZERO)
+            .await
+            .expect("no-op before start() must not error");
+    }
+
+    #[tokio::test]
+    async fn test_verify_workers_started_succeeds_after_a_real_poll() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .and(wiremock::matchers::path(
+                "/api/tasks/poll/batch/verify_started_ok",
+            ))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&mock_server)
+            .await;
+
+        let config = Configuration::new(format!("{}/api", mock_server.uri()));
+        let mut handler = TaskHandler::new(config).unwrap();
+        handler.add_worker(TestWorker {
+            name: "verify_started_ok".to_owned(),
+        });
+        handler.start().await.unwrap();
+
+        handler
+            .verify_workers_started(Duration::from_secs(2))
+            .await
+            .expect("worker should complete a real poll well within 2s");
+
+        // Not calling handler.stop() -- see test_resume_registers_workers_... in
+        // agents::runtime for why: the #[tokio::test] runtime aborts the spawned poller when
+        // this function returns, which is faster and just as clean here.
+    }
+
+    #[tokio::test]
+    async fn test_verify_workers_started_times_out_when_poll_never_completes() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        // A response slower than the timeout below simulates a worker whose task is legitimately
+        // still running but hasn't reached (completed) its first real poll yet.
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .and(wiremock::matchers::path(
+                "/api/tasks/poll/batch/verify_started_stuck",
+            ))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!([]))
+                    .set_delay(Duration::from_secs(5)),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let config = Configuration::new(format!("{}/api", mock_server.uri()));
+        let mut handler = TaskHandler::new(config).unwrap();
+        handler.add_worker(TestWorker {
+            name: "verify_started_stuck".to_owned(),
+        });
+        handler.start().await.unwrap();
+
+        let err = handler
+            .verify_workers_started(Duration::from_millis(200))
+            .await
+            .expect_err("poll response is delayed well past the 200ms timeout");
+        assert!(err.to_string().contains("verify_started_stuck"));
     }
 }

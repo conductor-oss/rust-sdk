@@ -72,7 +72,7 @@ async fn test_list_grantable_secrets_uses_get() {
         .await
         .expect("list_secrets_that_user_can_grant_access_to should succeed");
 
-    assert_eq!(names, vec!["ALPHA".to_string()]);
+    assert_eq!(names, vec!["ALPHA".to_owned()]);
 }
 
 #[tokio::test]

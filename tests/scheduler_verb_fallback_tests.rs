@@ -72,7 +72,7 @@ async fn test_pause_schedule_tries_put_first() {
         "expected no Content-Type on a bodyless PUT, got {:?}",
         put.headers
             .keys()
-            .map(|k| k.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
     );
 }

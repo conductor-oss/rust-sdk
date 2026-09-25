@@ -30,6 +30,8 @@ The following properties can be configured via environment variables:
 | `STRICT_SCHEMA` | bool | Enforce strict schema validation (additionalProperties=false) | `true` | Yes |
 | `POLL_TIMEOUT` | int | Poll request timeout in milliseconds | `100` | Yes |
 | `PAUSED` | bool | Pause worker from polling/executing tasks | `true` | **Env-only** |
+| `LEASE_EXTEND_ENABLED` | bool | Automatically extend a long-running task's lease with periodic heartbeats | `true` | Yes |
+| `LEASE_EXTEND_THRESHOLD` | float | Fraction of `responseTimeoutSeconds` after which a heartbeat is sent | `0.8` | Yes |
 
 **Notes**:
 - The `PAUSED` property is intentionally **not available** in code. It can only be controlled via environment variables, allowing operators to pause/resume workers at runtime without code changes.
@@ -214,6 +216,19 @@ let worker = FnWorker::new("long_running_task", |task| async move {
     }
 });
 ```
+
+### Automatic Lease Extension (Heartbeat)
+
+As an alternative to manually chunking work with `TaskInProgress`, a worker can automatically
+extend its task's lease in the background while `execute()` is still running:
+
+```rust
+let worker = FnWorker::new("slow_report", |task| async move {
+    Ok(WorkerOutput::completed_with_result(generate_report(&task).await))
+})
+.with_lease_extend_enabled(true);
+```
+
 
 ## Understanding `overwrite_task_def`
 
@@ -670,6 +685,8 @@ The hierarchical worker configuration system provides flexibility to:
 | `CONDUCTOR_WORKER_ALL_REGISTER_TASK_DEF` | Auto-register task definitions |
 | `CONDUCTOR_WORKER_ALL_OVERWRITE_TASK_DEF` | Overwrite existing task definitions |
 | `CONDUCTOR_WORKER_ALL_STRICT_SCHEMA` | Strict JSON Schema validation |
+| `CONDUCTOR_WORKER_ALL_LEASE_EXTEND_ENABLED` | Automatic lease-extension heartbeat |
+| `CONDUCTOR_WORKER_ALL_LEASE_EXTEND_THRESHOLD` | Heartbeat interval as a fraction of the timeout |
 
 ---
 

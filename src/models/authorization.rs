@@ -4,56 +4,56 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Conductor user
+/// Conductor user.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConductorUser {
-    /// User ID
+    /// User ID.
     pub id: String,
 
-    /// User name
+    /// User name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 
-    /// User email
+    /// User email.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
 
-    /// Roles assigned to the user
+    /// Roles assigned to the user.
     #[serde(default)]
     pub roles: Vec<Role>,
 
-    /// Groups the user belongs to
+    /// Groups the user belongs to.
     #[serde(default)]
     pub groups: Vec<Group>,
 
-    /// Is application user
+    /// Is application user.
     #[serde(default)]
     pub application_user: bool,
 }
 
-/// Upsert user request
+/// Upsert user request.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpsertUserRequest {
-    /// User name
+    /// User name.
     pub name: String,
 
-    /// User email (optional for app users)
+    /// User email (optional for app users).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
 
-    /// Roles to assign
+    /// Roles to assign.
     #[serde(default)]
     pub roles: Vec<String>,
 
-    /// Groups to add user to
+    /// Groups to add user to.
     #[serde(default)]
     pub groups: Vec<String>,
 }
 
 impl UpsertUserRequest {
-    /// Create a new upsert user request
+    /// Create a new upsert user request.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -61,71 +61,74 @@ impl UpsertUserRequest {
         }
     }
 
-    /// Set email
+    /// Set email.
+    #[must_use]
     pub fn with_email(mut self, email: impl Into<String>) -> Self {
         self.email = Some(email.into());
         self
     }
 
-    /// Add roles
+    /// Add roles.
+    #[must_use]
     pub fn with_roles(mut self, roles: Vec<String>) -> Self {
         self.roles = roles;
         self
     }
 
-    /// Add groups
+    /// Add groups.
+    #[must_use]
     pub fn with_groups(mut self, groups: Vec<String>) -> Self {
         self.groups = groups;
         self
     }
 }
 
-/// User group
+/// User group.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
-    /// Group ID
+    /// Group ID.
     pub id: String,
 
-    /// Group name
+    /// Group name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 
-    /// Group description
+    /// Group description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Roles assigned to the group
+    /// Roles assigned to the group.
     #[serde(default)]
     pub roles: Vec<Role>,
 
-    /// Default access for group
+    /// Default access for group.
     #[serde(default)]
     pub default_access: HashMap<String, Vec<String>>,
 }
 
-/// Upsert group request
+/// Upsert group request.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpsertGroupRequest {
-    /// Group name
+    /// Group name.
     pub name: String,
 
-    /// Group description
+    /// Group description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Roles to assign
+    /// Roles to assign.
     #[serde(default)]
     pub roles: Vec<String>,
 
-    /// Default access permissions
+    /// Default access permissions.
     #[serde(default)]
     pub default_access: HashMap<String, Vec<String>>,
 }
 
 impl UpsertGroupRequest {
-    /// Create a new upsert group request
+    /// Create a new upsert group request.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -133,96 +136,98 @@ impl UpsertGroupRequest {
         }
     }
 
-    /// Set description
+    /// Set description.
+    #[must_use]
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    /// Add roles
+    /// Add roles.
+    #[must_use]
     pub fn with_roles(mut self, roles: Vec<String>) -> Self {
         self.roles = roles;
         self
     }
 }
 
-/// Role definition
+/// Role definition.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Role {
-    /// Role name
+    /// Role name.
     pub name: String,
 
-    /// Role permissions
+    /// Role permissions.
     #[serde(default)]
     pub permissions: Vec<Permission>,
 }
 
-/// Permission
+/// Permission.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Permission {
-    /// Permission name
+    /// Permission name.
     pub name: String,
 }
 
-/// Conductor application
+/// Conductor application.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConductorApplication {
-    /// Application ID
+    /// Application ID.
     pub id: String,
 
-    /// Application name
+    /// Application name.
     pub name: String,
 
-    /// Create time
+    /// Create time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_time: Option<i64>,
 
-    /// Created by
+    /// Created by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
 
-    /// Update time
+    /// Update time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub update_time: Option<i64>,
 
-    /// Updated by
+    /// Updated by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
 }
 
-/// Create or update application request
+/// Create or update application request.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrUpdateApplicationRequest {
-    /// Application name
+    /// Application name.
     pub name: String,
 }
 
 impl CreateOrUpdateApplicationRequest {
-    /// Create a new request
+    /// Create a new request.
     pub fn new(name: impl Into<String>) -> Self {
         Self { name: name.into() }
     }
 }
 
-/// Access key for application
+/// Access key for application.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccessKey {
-    /// Key ID
+    /// Key ID.
     pub id: String,
 
-    /// Key status
+    /// Key status.
     pub status: String,
 
-    /// Create time
+    /// Create time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub create_time: Option<i64>,
 
-    /// Created by
+    /// Created by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
 }
@@ -237,27 +242,27 @@ pub struct AccessKey {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatedAccessKey {
-    /// Key ID
+    /// Key ID.
     pub id: String,
 
-    /// Key secret (only available on creation)
+    /// Key secret (only available on creation).
     pub secret: String,
 }
 
-/// Subject reference (user or group)
+/// Subject reference (user or group).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectRef {
-    /// Subject type (USER or GROUP)
+    /// Subject type (USER or GROUP).
     #[serde(rename = "type")]
     pub subject_type: SubjectType,
 
-    /// Subject ID
+    /// Subject ID.
     pub id: String,
 }
 
 impl SubjectRef {
-    /// Create a user subject reference
+    /// Create a user subject reference.
     pub fn user(id: impl Into<String>) -> Self {
         Self {
             subject_type: SubjectType::User,
@@ -265,7 +270,7 @@ impl SubjectRef {
         }
     }
 
-    /// Create a group subject reference
+    /// Create a group subject reference.
     pub fn group(id: impl Into<String>) -> Self {
         Self {
             subject_type: SubjectType::Group,
@@ -274,7 +279,7 @@ impl SubjectRef {
     }
 }
 
-/// Subject type
+/// Subject type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SubjectType {
@@ -282,20 +287,20 @@ pub enum SubjectType {
     Group,
 }
 
-/// Target reference (resource being accessed)
+/// Target reference (resource being accessed).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetRef {
-    /// Target type
+    /// Target type.
     #[serde(rename = "type")]
     pub target_type: TargetType,
 
-    /// Target ID
+    /// Target ID.
     pub id: String,
 }
 
 impl TargetRef {
-    /// Create a workflow definition target
+    /// Create a workflow definition target.
     pub fn workflow(name: impl Into<String>) -> Self {
         Self {
             target_type: TargetType::WorkflowDef,
@@ -303,7 +308,7 @@ impl TargetRef {
         }
     }
 
-    /// Create a task definition target
+    /// Create a task definition target.
     pub fn task(name: impl Into<String>) -> Self {
         Self {
             target_type: TargetType::TaskDef,
@@ -311,7 +316,7 @@ impl TargetRef {
         }
     }
 
-    /// Create a secret target
+    /// Create a secret target.
     pub fn secret(name: impl Into<String>) -> Self {
         Self {
             target_type: TargetType::Secret,
@@ -319,7 +324,7 @@ impl TargetRef {
         }
     }
 
-    /// Create a domain target
+    /// Create a domain target.
     pub fn domain(name: impl Into<String>) -> Self {
         Self {
             target_type: TargetType::Domain,
@@ -328,7 +333,7 @@ impl TargetRef {
     }
 }
 
-/// Target type
+/// Target type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TargetType {
@@ -340,7 +345,7 @@ pub enum TargetType {
     Integration,
 }
 
-/// Access type
+/// Access type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AccessType {
@@ -351,14 +356,14 @@ pub enum AccessType {
     Execute,
 }
 
-/// Granted permission
+/// Granted permission.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GrantedPermission {
-    /// Target
+    /// Target.
     pub target: Option<TargetRef>,
 
-    /// Access types granted
+    /// Access types granted.
     #[serde(default)]
     pub access: Vec<AccessType>,
 

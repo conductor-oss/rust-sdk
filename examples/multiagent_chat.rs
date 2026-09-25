@@ -15,21 +15,24 @@ const LLM_PROVIDER: &str = "openai";
 const LLM_MODEL: &str = "gpt-4o-mini";
 
 // Agent personas
-const EXPERT_PERSONA: &str = r#"You are a technical expert who provides detailed, accurate information.
+const EXPERT_PERSONA: &str =
+    "You are a technical expert who provides detailed, accurate information.
 Your role is to explain concepts thoroughly and back up claims with reasoning.
 Keep responses focused and under 150 words.
-Respond directly to the topic or previous message."#;
+Respond directly to the topic or previous message.";
 
-const CRITIC_PERSONA: &str = r#"You are a critical thinker who challenges assumptions and asks probing questions.
+const CRITIC_PERSONA: &str =
+    "You are a critical thinker who challenges assumptions and asks probing questions.
 Your role is to identify potential issues, edge cases, and areas needing clarification.
 Be constructive but thorough in your critique.
 Keep responses focused and under 150 words.
-Respond to the previous expert's statement."#;
+Respond to the previous expert's statement.";
 
-const SYNTHESIZER_PERSONA: &str = r#"You are a synthesizer who combines different perspectives into clear conclusions.
+const SYNTHESIZER_PERSONA: &str =
+    "You are a synthesizer who combines different perspectives into clear conclusions.
 Your role is to summarize the discussion and provide actionable insights.
 Highlight key agreements, disagreements, and recommendations.
-Keep responses focused and under 200 words."#;
+Keep responses focused and under 200 words.";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -96,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
         .with_messages(vec![
             ChatMessage::system(SYNTHESIZER_PERSONA),
             ChatMessage::user(
-                r#"Topic: ${workflow.input.topic}
+                "Topic: ${workflow.input.topic}
 
 Full Discussion:
 
@@ -112,14 +115,14 @@ ${expert_round2_ref.output.result}
 CRITIC (Round 2):
 ${critic_round2_ref.output.result}
 
-Synthesize this discussion into key takeaways and recommendations."#,
+Synthesize this discussion into key takeaways and recommendations.",
             ),
         ])
         .with_temperature(0.5)
         .with_max_tokens(400);
 
     // Format the final output
-    let format_script = r#"
+    let format_script = "
     (function(){
         return {
             topic: $.topic,
@@ -133,7 +136,7 @@ Synthesize this discussion into key takeaways and recommendations."#,
             total_rounds: 2
         };
     })();
-    "#;
+    ";
 
     let format_task = WorkflowTask::inline("format_output_ref", format_script)
         .with_input_param("topic", "${workflow.input.topic}")
@@ -153,7 +156,7 @@ Synthesize this discussion into key takeaways and recommendations."#,
         .with_task(critic_round2)
         .with_task(synthesizer)
         .with_task(format_task)
-        .with_input_parameters(vec!["topic".to_string()])
+        .with_input_parameters(vec!["topic".to_owned()])
         .with_output_param("topic", "${format_output_ref.output.result.topic}")
         .with_output_param(
             "discussion",
@@ -171,7 +174,7 @@ Synthesize this discussion into key takeaways and recommendations."#,
     println!("  3. Synthesizer - Combines insights into conclusions");
     println!();
     println!("Flow:");
-    println!("  Expert (R1) → Critic (R1) → Expert (R2) → Critic (R2) → Synthesizer");
+    println!("  Expert (R1) \u{2192} Critic (R1) \u{2192} Expert (R2) \u{2192} Critic (R2) \u{2192} Synthesizer");
     println!();
 
     // Register the workflow
@@ -179,7 +182,7 @@ Synthesize this discussion into key takeaways and recommendations."#,
     metadata_client
         .register_or_update_workflow_def(&workflow, true)
         .await?;
-    println!("  Workflow registered: {}", workflow_name);
+    println!("  Workflow registered: {workflow_name}");
 
     // ==========================================================================
     // Run Example Discussion
@@ -190,7 +193,7 @@ Synthesize this discussion into key takeaways and recommendations."#,
     println!();
 
     let discussion_topic = "Should companies adopt Rust for their backend services?";
-    println!("Topic: {}\n", discussion_topic);
+    println!("Topic: {discussion_topic}\n");
 
     let request = StartWorkflowRequest::new(workflow_name)
         .with_version(1)
@@ -198,7 +201,7 @@ Synthesize this discussion into key takeaways and recommendations."#,
 
     match workflow_client.start_workflow(&request).await {
         Ok(workflow_id) => {
-            println!("Discussion started: {}", workflow_id);
+            println!("Discussion started: {workflow_id}");
             println!();
 
             // Poll for completion
@@ -217,7 +220,7 @@ Synthesize this discussion into key takeaways and recommendations."#,
                 match workflow_client.get_workflow(&workflow_id, true).await {
                     Ok(wf) => {
                         let status = wf.status;
-                        print!("\r  Status: {:?}          ", status);
+                        print!("\r  Status: {status:?}          ");
 
                         if status == WorkflowStatus::Completed {
                             println!();
@@ -268,22 +271,22 @@ Synthesize this discussion into key takeaways and recommendations."#,
                                 | WorkflowStatus::TimedOut
                         ) {
                             println!();
-                            println!("  Discussion failed: {:?}", status);
+                            println!("  Discussion failed: {status:?}");
                             if let Some(reason) = wf.reason_for_incompletion {
-                                println!("  Reason: {}", reason);
+                                println!("  Reason: {reason}");
                             }
                             break;
                         }
                     }
                     Err(e) => {
-                        println!("  Error checking status: {}", e);
+                        println!("  Error checking status: {e}");
                         break;
                     }
                 }
             }
         }
         Err(e) => {
-            println!("Could not start discussion: {}", e);
+            println!("Could not start discussion: {e}");
             println!();
             println!("This is expected if LLM integration is not configured.");
         }
@@ -325,8 +328,8 @@ Synthesize this discussion into key takeaways and recommendations."#,
     println!();
 
     match metadata_client.delete_workflow_def(workflow_name, 1).await {
-        Ok(_) => println!("  Deleted workflow: {}", workflow_name),
-        Err(e) => println!("  Could not delete workflow: {}", e),
+        Ok(()) => println!("  Deleted workflow: {workflow_name}"),
+        Err(e) => println!("  Could not delete workflow: {e}"),
     }
 
     println!();

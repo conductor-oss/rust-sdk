@@ -278,9 +278,7 @@ async fn test_secret_list_all() {
             .expect("list_all_secret_names should succeed against OSS");
         assert!(
             secrets.contains(OSS_SEEDED_SECRET_NAME),
-            "expected seeded secret {:?} in {:?}",
-            OSS_SEEDED_SECRET_NAME,
-            secrets
+            "expected seeded secret {OSS_SEEDED_SECRET_NAME:?} in {secrets:?}"
         );
         return;
     }

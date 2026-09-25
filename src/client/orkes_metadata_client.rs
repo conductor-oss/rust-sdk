@@ -10,7 +10,7 @@ use crate::models::MetadataTag;
 
 use super::MetadataClient;
 
-/// Extended metadata client with Orkes-specific features (tagging APIs)
+/// Extended metadata client with Orkes-specific features (tagging APIs).
 ///
 /// This client provides all the functionality of `MetadataClient` plus
 /// tagging capabilities for workflows and tasks. Use `Deref` to access
@@ -43,7 +43,8 @@ impl Deref for OrkesMetadataClient {
 }
 
 impl OrkesMetadataClient {
-    /// Create a new Orkes metadata client
+    /// Create a new Orkes metadata client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self {
             inner: MetadataClient::new(api.clone()),
@@ -53,7 +54,11 @@ impl OrkesMetadataClient {
 
     // ==================== Workflow Tags ====================
 
-    /// Add a tag to a workflow definition
+    /// Add a tag to a workflow definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn add_workflow_tag(&self, workflow_name: &str, tag: &MetadataTag) -> Result<()> {
         debug!(
             workflow_name = %workflow_name,
@@ -61,7 +66,7 @@ impl OrkesMetadataClient {
             "Adding workflow tag"
         );
 
-        let path = format!("/metadata/workflow/{}/tags", workflow_name);
+        let path = format!("/metadata/workflow/{workflow_name}/tags");
         self.api
             .post_no_response(
                 ApiPath::templated(&path, "/metadata/workflow/{workflowName}/tags"),
@@ -78,9 +83,13 @@ impl OrkesMetadataClient {
         Ok(())
     }
 
-    /// Get all tags for a workflow definition
+    /// Get all tags for a workflow definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_workflow_tags(&self, workflow_name: &str) -> Result<Vec<MetadataTag>> {
-        let path = format!("/metadata/workflow/{}/tags", workflow_name);
+        let path = format!("/metadata/workflow/{workflow_name}/tags");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -89,7 +98,11 @@ impl OrkesMetadataClient {
             .await
     }
 
-    /// Set tags for a workflow definition (replaces existing tags)
+    /// Set tags for a workflow definition (replaces existing tags).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn set_workflow_tags(&self, workflow_name: &str, tags: &[MetadataTag]) -> Result<()> {
         debug!(
             workflow_name = %workflow_name,
@@ -97,7 +110,7 @@ impl OrkesMetadataClient {
             "Setting workflow tags"
         );
 
-        let path = format!("/metadata/workflow/{}/tags", workflow_name);
+        let path = format!("/metadata/workflow/{workflow_name}/tags");
         self.api
             .put_no_response(
                 ApiPath::templated(&path, "/metadata/workflow/{workflowName}/tags"),
@@ -114,7 +127,11 @@ impl OrkesMetadataClient {
         Ok(())
     }
 
-    /// Delete a tag from a workflow definition
+    /// Delete a tag from a workflow definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn delete_workflow_tag(&self, workflow_name: &str, tag: &MetadataTag) -> Result<()> {
         debug!(
             workflow_name = %workflow_name,
@@ -122,7 +139,7 @@ impl OrkesMetadataClient {
             "Deleting workflow tag"
         );
 
-        let path = format!("/metadata/workflow/{}/tags", workflow_name);
+        let path = format!("/metadata/workflow/{workflow_name}/tags");
         self.api
             .delete_with_body(
                 ApiPath::templated(&path, "/metadata/workflow/{workflowName}/tags"),
@@ -141,7 +158,11 @@ impl OrkesMetadataClient {
 
     // ==================== Task Tags ====================
 
-    /// Add a tag to a task definition
+    /// Add a tag to a task definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn add_task_tag(&self, task_name: &str, tag: &MetadataTag) -> Result<()> {
         debug!(
             task_name = %task_name,
@@ -149,7 +170,7 @@ impl OrkesMetadataClient {
             "Adding task tag"
         );
 
-        let path = format!("/metadata/taskdefs/{}/tags", task_name);
+        let path = format!("/metadata/taskdefs/{task_name}/tags");
         self.api
             .post_no_response(
                 ApiPath::templated(&path, "/metadata/taskdefs/{taskName}/tags"),
@@ -166,9 +187,13 @@ impl OrkesMetadataClient {
         Ok(())
     }
 
-    /// Get all tags for a task definition
+    /// Get all tags for a task definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_task_tags(&self, task_name: &str) -> Result<Vec<MetadataTag>> {
-        let path = format!("/metadata/taskdefs/{}/tags", task_name);
+        let path = format!("/metadata/taskdefs/{task_name}/tags");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -177,7 +202,11 @@ impl OrkesMetadataClient {
             .await
     }
 
-    /// Set tags for a task definition (replaces existing tags)
+    /// Set tags for a task definition (replaces existing tags).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn set_task_tags(&self, task_name: &str, tags: &[MetadataTag]) -> Result<()> {
         debug!(
             task_name = %task_name,
@@ -185,7 +214,7 @@ impl OrkesMetadataClient {
             "Setting task tags"
         );
 
-        let path = format!("/metadata/taskdefs/{}/tags", task_name);
+        let path = format!("/metadata/taskdefs/{task_name}/tags");
         self.api
             .put_no_response(
                 ApiPath::templated(&path, "/metadata/taskdefs/{taskName}/tags"),
@@ -202,7 +231,11 @@ impl OrkesMetadataClient {
         Ok(())
     }
 
-    /// Delete a tag from a task definition
+    /// Delete a tag from a task definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn delete_task_tag(&self, task_name: &str, tag: &MetadataTag) -> Result<()> {
         debug!(
             task_name = %task_name,
@@ -210,7 +243,7 @@ impl OrkesMetadataClient {
             "Deleting task tag"
         );
 
-        let path = format!("/metadata/taskdefs/{}/tags", task_name);
+        let path = format!("/metadata/taskdefs/{task_name}/tags");
         self.api
             .delete_with_body(
                 ApiPath::templated(&path, "/metadata/taskdefs/{taskName}/tags"),

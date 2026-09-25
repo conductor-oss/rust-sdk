@@ -53,7 +53,7 @@ async fn test_update_task() {
     if let Some(task) = workflow.tasks.first() {
         // Create task result
         let mut output = HashMap::new();
-        output.insert("result".to_string(), serde_json::json!("completed"));
+        output.insert("result".to_owned(), serde_json::json!("completed"));
 
         let result = TaskResult::completed(&task.task_id, &workflow_id).with_output(output);
 
@@ -109,7 +109,7 @@ async fn test_update_task_by_ref_name() {
 
     // Update by reference name
     let mut output = HashMap::new();
-    output.insert("result".to_string(), serde_json::json!("done"));
+    output.insert("result".to_owned(), serde_json::json!("done"));
 
     task_client
         .update_task_by_ref_name(
@@ -209,7 +209,7 @@ async fn test_get_queue_size_for_task() {
     let size = task_client.get_queue_size_for_task("some_task_name").await;
 
     // Should return a number (possibly 0)
-    assert!(size.is_ok());
+    size.unwrap();
 }
 
 #[tokio::test]
@@ -229,7 +229,7 @@ async fn test_get_poll_data() {
         Err(e) => {
             // Server may return 500 for tasks that don't have poll data yet
             // This is not a SDK issue but a server behavior
-            eprintln!("Warning: get_poll_data returned error (may be expected for non-existent tasks): {:?}", e);
+            eprintln!("Warning: get_poll_data returned error (may be expected for non-existent tasks): {e:?}");
         }
     }
 }
@@ -248,7 +248,7 @@ async fn test_get_all_poll_data() {
         Ok(_) => {}
         Err(e) => {
             // Log the error but don't fail - the API may have issues
-            eprintln!("Warning: get_all_poll_data returned error: {:?}", e);
+            eprintln!("Warning: get_all_poll_data returned error: {e:?}");
         }
     }
 }
@@ -284,10 +284,7 @@ async fn test_search_v2_tasks() {
         Ok(r) => assert!(r.total_hits >= 0),
         Err(e) => {
             // Server returns 500 when search result is null in some versions
-            eprintln!(
-                "Warning: search_v2 returned error (may not be available): {:?}",
-                e
-            );
+            eprintln!("Warning: search_v2 returned error (may not be available): {e:?}");
         }
     }
 }
@@ -403,7 +400,7 @@ async fn test_requeue_pending_tasks() {
     let result = task_client.requeue_pending_tasks(&task_name).await;
 
     // Should not error
-    assert!(result.is_ok());
+    result.unwrap();
 
     // Cleanup
     cleanup_task_def(&client, &task_name).await;
@@ -414,7 +411,7 @@ async fn test_requeue_pending_tasks() {
 // =============================================================================
 
 #[tokio::test]
-#[ignore] // Requires specific workflow setup with state updates
+#[ignore = "Requires specific workflow setup with state updates"]
 async fn test_update_task_sync() {
     let config = test_config();
     let client = ConductorClient::new(config).unwrap();

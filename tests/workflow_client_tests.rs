@@ -44,7 +44,7 @@ async fn test_start_workflow() {
         .await
         .unwrap();
     assert_eq!(workflow.workflow_name, workflow_name);
-    assert!(workflow.workflow_id == workflow_id);
+    assert_eq!(workflow.workflow_id, workflow_id);
 
     // Cleanup
     cleanup_workflow(&client, &workflow_id).await;
@@ -365,10 +365,10 @@ async fn test_retry_last_failed_task() {
 
     // Create worker that fails first time
     let attempt_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let count = attempt_count.clone();
+    let count = std::sync::Arc::clone(&attempt_count);
 
     let worker = FnWorker::new(task_name.clone(), move |_task| {
-        let c = count.clone();
+        let c = std::sync::Arc::clone(&count);
         async move {
             let attempt = c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if attempt == 0 {
@@ -462,11 +462,13 @@ async fn test_search_workflows() {
     );
 
     // Structured query syntax requires Enterprise (not supported by the OSS in-memory indexer)
-    if !is_oss {
+    if is_oss {
+        println!("[test_search_workflows] OSS detected \u{2014} skipping structured query search");
+    } else {
         println!(
-            "[test_search_workflows] Enterprise detected — also testing structured query search"
+            "[test_search_workflows] Enterprise detected \u{2014} also testing structured query search"
         );
-        let query = format!("correlationId='{}'", correlation_id);
+        let query = format!("correlationId='{correlation_id}'");
         let result = workflow_client
             .search_workflows(Some(&query), None, 0, 10)
             .await
@@ -475,8 +477,6 @@ async fn test_search_workflows() {
             result.total_hits > 0,
             "Structured query search should find at least one workflow on Enterprise"
         );
-    } else {
-        println!("[test_search_workflows] OSS detected — skipping structured query search");
     }
 
     // Cleanup
@@ -523,16 +523,13 @@ async fn test_search_v2_workflows() {
             "freeText search_v2 should find at least one workflow"
         ),
         Err(e) => {
-            eprintln!(
-                "Warning: search_v2 returned error (may be deprecated): {:?}",
-                e
-            );
+            eprintln!("Warning: search_v2 returned error (may be deprecated): {e:?}");
         }
     }
 
     // Structured query syntax requires Enterprise (not supported by the OSS in-memory indexer)
     if !is_oss {
-        let query = format!("correlationId='{}'", correlation_id);
+        let query = format!("correlationId='{correlation_id}'");
         let result = workflow_client
             .search_workflows_v2(Some(&query), None, 0, 10)
             .await;
@@ -543,10 +540,7 @@ async fn test_search_v2_workflows() {
                 "Structured query search_v2 should find at least one workflow on Enterprise"
             ),
             Err(e) => {
-                eprintln!(
-                    "Warning: search_v2 structured query returned error: {:?}",
-                    e
-                );
+                eprintln!("Warning: search_v2 structured query returned error: {e:?}");
             }
         }
     }

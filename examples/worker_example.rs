@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     let fetch_user_worker = FnWorker::new("fetch_user_data", |task: Task| async move {
         let user_id = task
             .get_input_string("user_id")
-            .unwrap_or_else(|| "unknown".to_string());
+            .unwrap_or_else(|| "unknown".to_owned());
 
         info!("Fetching user data for user_id={}", user_id);
 
@@ -51,16 +51,16 @@ async fn main() -> Result<()> {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         let mut output = HashMap::new();
-        output.insert("user_id".to_string(), serde_json::json!(user_id));
+        output.insert("user_id".to_owned(), serde_json::json!(user_id));
         output.insert(
-            "name".to_string(),
+            "name".to_owned(),
             serde_json::json!(format!("User {}", user_id)),
         );
         output.insert(
-            "email".to_string(),
+            "email".to_owned(),
             serde_json::json!(format!("user{}@example.com", user_id)),
         );
-        output.insert("status".to_string(), serde_json::json!("active"));
+        output.insert("status".to_owned(), serde_json::json!("active"));
 
         info!("Successfully fetched user data for user_id={}", user_id);
 
@@ -72,10 +72,10 @@ async fn main() -> Result<()> {
     let send_notification_worker = FnWorker::new("send_notification", |task: Task| async move {
         let user_id = task
             .get_input_string("user_id")
-            .unwrap_or_else(|| "unknown".to_string());
+            .unwrap_or_else(|| "unknown".to_owned());
         let message = task
             .get_input_string("message")
-            .unwrap_or_else(|| "No message".to_string());
+            .unwrap_or_else(|| "No message".to_owned());
 
         info!("Sending notification to user_id={}: {}", user_id, message);
 
@@ -83,8 +83,8 @@ async fn main() -> Result<()> {
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         let mut output = HashMap::new();
-        output.insert("user_id".to_string(), serde_json::json!(user_id));
-        output.insert("status".to_string(), serde_json::json!("sent"));
+        output.insert("user_id".to_owned(), serde_json::json!(user_id));
+        output.insert("status".to_owned(), serde_json::json!("sent"));
 
         info!("Notification sent to user_id={}", user_id);
 
@@ -100,7 +100,7 @@ async fn main() -> Result<()> {
     let process_image_worker = FnWorker::new("process_image", |task: Task| async move {
         let image_url = task
             .get_input_string("image_url")
-            .unwrap_or_else(|| "unknown.jpg".to_string());
+            .unwrap_or_else(|| "unknown.jpg".to_owned());
         let filters: serde_json::Value = task
             .get_input("filters")
             .unwrap_or_else(|| serde_json::json!([]));
@@ -114,13 +114,13 @@ async fn main() -> Result<()> {
         // In a real app, you might use tokio::task::spawn_blocking for CPU work
         tokio::time::sleep(Duration::from_secs(2)).await;
 
-        let output_url = format!("{}_processed", image_url);
+        let output_url = format!("{image_url}_processed");
         info!("Image processing complete: {}", output_url);
 
         let mut output = HashMap::new();
-        output.insert("input_url".to_string(), serde_json::json!(image_url));
-        output.insert("output_url".to_string(), serde_json::json!(output_url));
-        output.insert("filters_applied".to_string(), filters);
+        output.insert("input_url".to_owned(), serde_json::json!(image_url));
+        output.insert("output_url".to_owned(), serde_json::json!(output_url));
+        output.insert("filters_applied".to_owned(), filters);
 
         Ok(WorkerOutput::Completed(output))
     })
@@ -134,7 +134,7 @@ async fn main() -> Result<()> {
     let long_running_worker = FnWorker::new("long_running_task", |task: Task| async move {
         let job_id = task
             .get_input_string("job_id")
-            .unwrap_or_else(|| "job_unknown".to_string());
+            .unwrap_or_else(|| "job_unknown".to_owned());
 
         // Get poll count from task input (track progress across polls)
         let poll_count: i32 = task.get_input("poll_count").unwrap_or(0);
@@ -147,11 +147,11 @@ async fn main() -> Result<()> {
         if poll_count < 4 {
             // Still processing - return InProgress to poll again
             let mut output = HashMap::new();
-            output.insert("job_id".to_string(), serde_json::json!(job_id));
-            output.insert("status".to_string(), serde_json::json!("processing"));
-            output.insert("poll_count".to_string(), serde_json::json!(poll_count + 1));
+            output.insert("job_id".to_owned(), serde_json::json!(job_id));
+            output.insert("status".to_owned(), serde_json::json!("processing"));
+            output.insert("poll_count".to_owned(), serde_json::json!(poll_count + 1));
             output.insert(
-                "progress_percent".to_string(),
+                "progress_percent".to_owned(),
                 serde_json::json!((poll_count + 1) * 20),
             );
 
@@ -162,10 +162,10 @@ async fn main() -> Result<()> {
             info!("Job {} completed", job_id);
 
             let mut output = HashMap::new();
-            output.insert("job_id".to_string(), serde_json::json!(job_id));
-            output.insert("status".to_string(), serde_json::json!("completed"));
-            output.insert("result".to_string(), serde_json::json!("success"));
-            output.insert("total_polls".to_string(), serde_json::json!(poll_count + 1));
+            output.insert("job_id".to_owned(), serde_json::json!(job_id));
+            output.insert("status".to_owned(), serde_json::json!("completed"));
+            output.insert("result".to_owned(), serde_json::json!("success"));
+            output.insert("total_polls".to_owned(), serde_json::json!(poll_count + 1));
 
             Ok(WorkerOutput::Completed(output))
         }
@@ -187,9 +187,9 @@ async fn main() -> Result<()> {
             Ok(WorkerOutput::failed("Task deliberately failed for testing"))
         } else {
             let mut output = HashMap::new();
-            output.insert("status".to_string(), serde_json::json!("success"));
+            output.insert("status".to_owned(), serde_json::json!("success"));
             output.insert(
-                "message".to_string(),
+                "message".to_owned(),
                 serde_json::json!("Task completed successfully"),
             );
 

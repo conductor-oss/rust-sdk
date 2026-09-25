@@ -137,16 +137,15 @@ async fn test_workflow_execution() {
 
     // Create worker
     let execution_count = Arc::new(AtomicUsize::new(0));
-    let exec_count_clone = execution_count.clone();
+    let exec_count_clone = Arc::clone(&execution_count);
 
     let worker = FnWorker::new(task_name.clone(), move |task: Task| {
-        let count = exec_count_clone.clone();
+        let count = Arc::clone(&exec_count_clone);
         async move {
             count.fetch_add(1, Ordering::SeqCst);
             let input = task.get_input_string("input").unwrap_or_default();
             Ok(WorkerOutput::completed_with_result(format!(
-                "processed: {}",
-                input
+                "processed: {input}"
             )))
         }
     });
@@ -266,9 +265,9 @@ async fn test_multiple_workers() {
 
     // Create unique names
     let id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-    let task1_name = format!("test_multi_task1_{}", id);
-    let task2_name = format!("test_multi_task2_{}", id);
-    let workflow_name = format!("test_multi_wf_{}", id);
+    let task1_name = format!("test_multi_task1_{id}");
+    let task2_name = format!("test_multi_task2_{id}");
+    let workflow_name = format!("test_multi_wf_{id}");
 
     // Register tasks
     metadata
@@ -295,24 +294,23 @@ async fn test_multiple_workers() {
     let task1_count = Arc::new(AtomicUsize::new(0));
     let task2_count = Arc::new(AtomicUsize::new(0));
 
-    let count1 = task1_count.clone();
+    let count1 = Arc::clone(&task1_count);
     let worker1 = FnWorker::new(task1_name.clone(), move |_: Task| {
-        let c = count1.clone();
+        let c = Arc::clone(&count1);
         async move {
             c.fetch_add(1, Ordering::SeqCst);
             Ok(WorkerOutput::completed_with_result("result_from_task1"))
         }
     });
 
-    let count2 = task2_count.clone();
+    let count2 = Arc::clone(&task2_count);
     let worker2 = FnWorker::new(task2_name.clone(), move |task: Task| {
-        let c = count2.clone();
+        let c = Arc::clone(&count2);
         async move {
             c.fetch_add(1, Ordering::SeqCst);
             let prev = task.get_input_string("prev_result").unwrap_or_default();
             Ok(WorkerOutput::completed_with_result(format!(
-                "task2_got: {}",
-                prev
+                "task2_got: {prev}"
             )))
         }
     });
@@ -448,7 +446,7 @@ async fn test_fork_join_workflow() {
     let fork = WorkflowTask::fork("fork_ref", vec![vec![branch1], vec![branch2]]);
     let join = WorkflowTask::join(
         "join_ref",
-        vec!["branch1_ref".to_string(), "branch2_ref".to_string()],
+        vec!["branch1_ref".to_owned(), "branch2_ref".to_owned()],
     );
 
     let workflow_def = WorkflowDef::new(&workflow_name)
@@ -590,8 +588,8 @@ async fn test_workflow_retry() {
     let workflow_client = client.workflow_client();
 
     let id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-    let task_name = format!("test_retry_task_{}", id);
-    let workflow_name = format!("test_retry_wf_{}", id);
+    let task_name = format!("test_retry_task_{id}");
+    let workflow_name = format!("test_retry_wf_{id}");
 
     // Register task that will fail initially
     let task_def = TaskDef::new(&task_name).with_retry(0, RetryLogic::Fixed, 0);
@@ -605,10 +603,10 @@ async fn test_workflow_retry() {
 
     // Create worker that fails first, then succeeds
     let attempt_count = Arc::new(AtomicUsize::new(0));
-    let count = attempt_count.clone();
+    let count = Arc::clone(&attempt_count);
 
     let worker = FnWorker::new(task_name.clone(), move |_: Task| {
-        let c = count.clone();
+        let c = Arc::clone(&count);
         async move {
             let attempts = c.fetch_add(1, Ordering::SeqCst);
             if attempts == 0 {
@@ -776,21 +774,21 @@ async fn test_task_tagging() {
     let tag = conductor::models::MetadataTag::with_value("environment", "test");
 
     match orkes_metadata.add_task_tag(&task_name, &tag).await {
-        Ok(_) => {
+        Ok(()) => {
             // Get tags
             match orkes_metadata.get_task_tags(&task_name).await {
                 Ok(tags) => {
                     assert!(!tags.is_empty(), "Should have at least one tag");
                     assert!(tags.iter().any(|t| t.key == "environment"));
                 }
-                Err(e) => eprintln!("Warning: get_task_tags failed: {:?}", e),
+                Err(e) => eprintln!("Warning: get_task_tags failed: {e:?}"),
             }
 
             // Delete tag
             orkes_metadata.delete_task_tag(&task_name, &tag).await.ok();
         }
         Err(e) => {
-            eprintln!("Warning: add_task_tag failed (may require Orkes): {:?}", e);
+            eprintln!("Warning: add_task_tag failed (may require Orkes): {e:?}");
         }
     }
 
@@ -818,14 +816,14 @@ async fn test_workflow_tagging() {
     let tag = conductor::models::MetadataTag::with_value("team", "platform");
 
     match orkes_metadata.add_workflow_tag(&workflow_name, &tag).await {
-        Ok(_) => {
+        Ok(()) => {
             // Get tags
             match orkes_metadata.get_workflow_tags(&workflow_name).await {
                 Ok(tags) => {
                     assert!(!tags.is_empty(), "Should have at least one tag");
                     assert!(tags.iter().any(|t| t.key == "team"));
                 }
-                Err(e) => eprintln!("Warning: get_workflow_tags failed: {:?}", e),
+                Err(e) => eprintln!("Warning: get_workflow_tags failed: {e:?}"),
             }
 
             // Delete tag
@@ -835,10 +833,7 @@ async fn test_workflow_tagging() {
                 .ok();
         }
         Err(e) => {
-            eprintln!(
-                "Warning: add_workflow_tag failed (may require Orkes): {:?}",
-                e
-            );
+            eprintln!("Warning: add_workflow_tag failed (may require Orkes): {e:?}");
         }
     }
 

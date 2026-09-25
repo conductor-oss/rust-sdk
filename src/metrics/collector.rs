@@ -4,8 +4,8 @@
 //! Prometheus implementation of the canonical Conductor SDK metric catalog.
 //!
 //! Metric names, label names, label values, and types here are intentionally
-//! identical to the Java, Go, and Python SDKs. See `sdk-metrics-harmonization.md`
-//! at <https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md>
+//! identical across every Conductor SDK. See `sdk-metrics-harmonization.md`
+//! at <https://github.com/orkes-io/certification-cloud-util/blob/main/sdk-metrics-harmonization.md>.
 
 use parking_lot::RwLock;
 use prometheus::{CounterVec, GaugeVec, HistogramOpts, HistogramVec, Opts, Registry};
@@ -23,7 +23,7 @@ use crate::http::HttpMetricsObserver;
 
 use super::MetricsSettings;
 
-/// Canonical time histogram buckets — identical to Java/Go/Python SDKs.
+/// Canonical time histogram buckets, shared across every Conductor SDK.
 ///
 /// These buckets are finer-grained at the millisecond range than Prometheus'
 /// defaults, reflecting Conductor's sub-second worker poll/update latencies.
@@ -31,7 +31,7 @@ const SECONDS_BUCKETS: &[f64] = &[
     0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
 ];
 
-/// Canonical size histogram buckets — identical to Java/Go/Python SDKs.
+/// Canonical size histogram buckets, shared across every Conductor SDK.
 const SIZE_BUCKETS: &[f64] = &[
     100.0,
     1_000.0,
@@ -161,7 +161,8 @@ fn make_gauge(
 }
 
 impl MetricsCollector {
-    /// Create a new metrics collector
+    /// Create a new metrics collector.
+    #[must_use]
     pub fn new(settings: MetricsSettings) -> Self {
         let registry = Registry::new();
         let ns = &settings.namespace;
@@ -335,14 +336,15 @@ impl MetricsCollector {
         }
     }
 
-    /// Get the Prometheus registry
+    /// Get the Prometheus registry.
+    #[must_use]
     pub fn registry(&self) -> &Registry {
         &self.registry
     }
 
-    /// Get metrics in Prometheus text format
+    /// Get metrics in Prometheus text format.
     pub fn gather(&self) -> String {
-        use prometheus::Encoder;
+        use prometheus::Encoder as _;
         let encoder = prometheus::TextEncoder::new();
         let metric_families = self.registry.gather();
         let mut buffer = Vec::new();
@@ -365,9 +367,9 @@ impl MetricsCollector {
 
     /// Surface-only: increment `task_ack_error_total`. The current rust-sdk
     /// does not perform a separate ack RPC (poll returns tasks directly), so
-    /// this counter is registered to keep the metric surface identical to
-    /// Java/Go/Python but is never incremented by the SDK itself. Kept
-    /// available for user code that performs its own acknowledgement flow.
+    /// this counter is registered to keep the metric surface complete but is
+    /// never incremented by the SDK itself. Kept available for user code
+    /// that performs its own acknowledgement flow.
     pub fn increment_task_ack_error(&self, task_type: &str, exception: &str) {
         self.task_ack_error_total
             .with_label_values(&[task_type, exception])
@@ -401,7 +403,11 @@ impl MetricsCollector {
             .inc();
     }
 
-    /// Start HTTP metrics server (if configured)
+    /// Start HTTP metrics server (if configured).
+    // `async` itself has no `.await` (the server loop is spawned onto its own task), but
+    // dropping it means rewriting this to return `impl Future` and wrapping the body in
+    // `std::future::ready` -- not worth the churn for a rarely-called setup method.
+    #[expect(clippy::unused_async, clippy::unused_async_trait_impl)]
     pub async fn start_http_server(&self) -> Option<tokio::task::JoinHandle<()>> {
         if let Some(port) = self.settings.http_port {
             let metrics_path = self.settings.metrics_path.clone();
@@ -429,7 +435,7 @@ impl MetricsCollector {
 
                             async move {
                                 let response = if req.uri().path() == metrics_path {
-                                    use prometheus::Encoder;
+                                    use prometheus::Encoder as _;
                                     let encoder = prometheus::TextEncoder::new();
                                     let metric_families = registry.gather();
                                     let mut buffer = Vec::new();

@@ -7,21 +7,26 @@ use crate::error::Result;
 use crate::http::{ApiClient, ApiPath};
 use crate::models::{TaskDef, WorkflowDef};
 
-/// Client for metadata operations (workflow and task definitions)
+/// Client for metadata operations (workflow and task definitions).
 #[derive(Clone)]
 pub struct MetadataClient {
     api: ApiClient,
 }
 
 impl MetadataClient {
-    /// Create a new metadata client
+    /// Create a new metadata client.
+    #[must_use]
     pub fn new(api: ApiClient) -> Self {
         Self { api }
     }
 
     // ==================== Workflow Definitions ====================
 
-    /// Register a new workflow definition
+    /// Register a new workflow definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn register_workflow_def(&self, workflow: &WorkflowDef) -> Result<()> {
         debug!(
             workflow_name = %workflow.name,
@@ -40,7 +45,11 @@ impl MetadataClient {
         Ok(())
     }
 
-    /// Update an existing workflow definition
+    /// Update an existing workflow definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn update_workflow_def(&self, workflow: &WorkflowDef) -> Result<()> {
         debug!(
             workflow_name = %workflow.name,
@@ -59,7 +68,11 @@ impl MetadataClient {
         Ok(())
     }
 
-    /// Register or update a workflow definition
+    /// Register or update a workflow definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn register_or_update_workflow_def(
         &self,
         workflow: &WorkflowDef,
@@ -74,12 +87,16 @@ impl MetadataClient {
         }
     }
 
-    /// Get a workflow definition by name and version
+    /// Get a workflow definition by name and version.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_workflow_def(&self, name: &str, version: Option<i32>) -> Result<WorkflowDef> {
         let path = if let Some(v) = version {
-            format!("/metadata/workflow/{}?version={}", name, v)
+            format!("/metadata/workflow/{name}?version={v}")
         } else {
-            format!("/metadata/workflow/{}", name)
+            format!("/metadata/workflow/{name}")
         };
 
         self.api
@@ -87,9 +104,13 @@ impl MetadataClient {
             .await
     }
 
-    /// Get all versions of a workflow definition
+    /// Get all versions of a workflow definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_all_workflow_def_versions(&self, name: &str) -> Result<Vec<WorkflowDef>> {
-        let path = format!("/metadata/workflow/{}/versions", name);
+        let path = format!("/metadata/workflow/{name}/versions");
         self.api
             .get(ApiPath::templated(
                 &path,
@@ -98,19 +119,31 @@ impl MetadataClient {
             .await
     }
 
-    /// Get all workflow definitions
+    /// Get all workflow definitions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_all_workflow_defs(&self) -> Result<Vec<WorkflowDef>> {
         self.api.get("/metadata/workflow").await
     }
 
-    /// Get all workflow definitions with latest versions (alias for get_all_workflow_defs)
+    /// Get all workflow definitions with latest versions (alias for `get_all_workflow_defs`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn get_all_workflow_defs_latest_versions(&self) -> Result<Vec<WorkflowDef>> {
         self.get_all_workflow_defs().await
     }
 
-    /// Delete a workflow definition
+    /// Delete a workflow definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_workflow_def(&self, name: &str, version: i32) -> Result<()> {
-        let path = format!("/metadata/workflow/{}/{}", name, version);
+        let path = format!("/metadata/workflow/{name}/{version}");
         self.api
             .delete_no_content(ApiPath::templated(
                 &path,
@@ -121,7 +154,11 @@ impl MetadataClient {
 
     // ==================== Task Definitions ====================
 
-    /// Register a new task definition
+    /// Register a new task definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn register_task_def(&self, task: &TaskDef) -> Result<()> {
         debug!(task_name = %task.name, "Registering task definition");
 
@@ -132,7 +169,11 @@ impl MetadataClient {
         Ok(())
     }
 
-    /// Register multiple task definitions
+    /// Register multiple task definitions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn register_task_defs(&self, tasks: &[TaskDef]) -> Result<()> {
         debug!(count = tasks.len(), "Registering task definitions");
 
@@ -143,7 +184,11 @@ impl MetadataClient {
         Ok(())
     }
 
-    /// Update a task definition
+    /// Update a task definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn update_task_def(&self, task: &TaskDef) -> Result<()> {
         debug!(task_name = %task.name, "Updating task definition");
 
@@ -154,28 +199,44 @@ impl MetadataClient {
         Ok(())
     }
 
-    /// Get a task definition by name
+    /// Get a task definition by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn get_task_def(&self, name: &str) -> Result<TaskDef> {
-        let path = format!("/metadata/taskdefs/{}", name);
+        let path = format!("/metadata/taskdefs/{name}");
         self.api
             .get(ApiPath::templated(&path, "/metadata/taskdefs/{name}"))
             .await
     }
 
-    /// Get all task definitions
+    /// Get all task definitions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn get_all_task_defs(&self) -> Result<Vec<TaskDef>> {
         self.api.get("/metadata/taskdefs").await
     }
 
-    /// Delete a task definition
+    /// Delete a task definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, or an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status.
     pub async fn delete_task_def(&self, name: &str) -> Result<()> {
-        let path = format!("/metadata/taskdefs/{}", name);
+        let path = format!("/metadata/taskdefs/{name}");
         self.api
             .delete_no_content(ApiPath::templated(&path, "/metadata/taskdefs/{name}"))
             .await
     }
 
-    /// Check if a task definition exists
+    /// Check if a task definition exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn task_def_exists(&self, name: &str) -> Result<bool> {
         match self.get_task_def(name).await {
             Ok(_) => Ok(true),
@@ -185,7 +246,11 @@ impl MetadataClient {
         }
     }
 
-    /// Check if a workflow definition exists
+    /// Check if a workflow definition exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::ConductorError::Http`] if the request fails at the transport level, an [`crate::error::ConductorError::Auth`]/[`crate::error::ConductorError::Api`]/[`crate::error::ConductorError::Server`] variant if the server responds with a non-2xx status, or [`crate::error::ConductorError::Json`] if the response body can't be deserialized.
     pub async fn workflow_def_exists(&self, name: &str, version: Option<i32>) -> Result<bool> {
         match self.get_workflow_def(name, version).await {
             Ok(_) => Ok(true),

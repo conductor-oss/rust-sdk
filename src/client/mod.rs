@@ -1,6 +1,8 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+#[cfg(feature = "agents")]
+mod agent_client;
 mod authorization_client;
 mod conductor_client;
 mod event_client;
@@ -14,6 +16,8 @@ mod secret_client;
 mod task_client;
 mod workflow_client;
 
+#[cfg(feature = "agents")]
+pub use agent_client::AgentClient;
 pub use authorization_client::AuthorizationClient;
 pub use conductor_client::{ConductorClient, ConductorClientBuilder};
 pub use event_client::{EventClient, QueueConfiguration};
@@ -26,9 +30,9 @@ pub use schema_client::SchemaClient;
 pub use secret_client::SecretClient;
 pub use task_client::TaskClient;
 pub use workflow_client::{
-    CorrelationIdsSearchRequest, SearchResult, SignalResponse, TestWorkflowRequest, WorkflowClient,
-    WorkflowRun, WorkflowStateUpdate,
+    CorrelationIdsSearchRequest, SearchResult, SignalResponse, TaskMock, TestWorkflowRequest,
+    WorkflowClient, WorkflowRun, WorkflowStateUpdate,
 };
 
-/// Alias for ConductorClient, matching the Python SDK's OrkesClients
+/// Alias for `ConductorClient`.
 pub type OrkesClients = ConductorClient;

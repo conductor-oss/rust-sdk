@@ -170,7 +170,7 @@ async fn test_workflow_schedule_reads_workflow_name_from_start_request() {
             "paused": false,
             "runCatchupScheduleInstances": false,
             "zoneId": "UTC",
-            "updatedTime": 1_700_000_000_000i64,
+            "updatedTime": 1_700_000_000_000_i64,
             "startWorkflowRequest": {"name": "order_flow", "version": 3}
         })))
         .expect(1)

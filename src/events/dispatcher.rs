@@ -11,7 +11,7 @@ use super::{
     TaskUpdateFailure, ThreadUncaughtException, WorkflowStartFailure, WorkflowStarted,
 };
 
-/// Async event dispatcher for task runner events
+/// Async event dispatcher for task runner events.
 ///
 /// Thread-safe event dispatcher that allows concurrent event publishing
 /// and listener registration. Listeners are cloned before iteration to
@@ -35,35 +35,37 @@ impl Clone for EventDispatcher {
 }
 
 impl EventDispatcher {
-    /// Create a new event dispatcher
+    /// Create a new event dispatcher.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             listeners: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
-    /// Register a listener
+    /// Register a listener.
     pub fn register(&self, listener: Arc<dyn TaskRunnerEventsListener>) {
         self.listeners.write().push(listener);
     }
 
-    /// Unregister all listeners
+    /// Unregister all listeners.
     pub fn clear(&self) {
         self.listeners.write().clear();
     }
 
-    /// Get the number of registered listeners
+    /// Get the number of registered listeners.
+    #[must_use]
     pub fn listener_count(&self) -> usize {
         self.listeners.read().len()
     }
 
-    /// Get a snapshot of current listeners (releases lock immediately)
+    /// Get a snapshot of current listeners (releases lock immediately).
     #[inline]
     fn get_listeners(&self) -> Vec<Arc<dyn TaskRunnerEventsListener>> {
         self.listeners.read().clone()
     }
 
-    /// Publish a poll started event
+    /// Publish a poll started event.
     pub fn publish_poll_started(&self, event: &PollStarted) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -75,7 +77,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a poll completed event
+    /// Publish a poll completed event.
     pub fn publish_poll_completed(&self, event: &PollCompleted) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -87,7 +89,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a poll failure event
+    /// Publish a poll failure event.
     pub fn publish_poll_failure(&self, event: &PollFailure) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -99,7 +101,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a poll-skipped-due-to-pause event
+    /// Publish a poll-skipped-due-to-pause event.
     pub fn publish_poll_skipped_paused(&self, event: &PollSkippedPaused) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -111,7 +113,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a task execution started event
+    /// Publish a task execution started event.
     pub fn publish_task_execution_started(&self, event: &TaskExecutionStarted) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -123,7 +125,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a task execution completed event
+    /// Publish a task execution completed event.
     pub fn publish_task_execution_completed(&self, event: &TaskExecutionCompleted) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -135,7 +137,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a task execution failure event
+    /// Publish a task execution failure event.
     pub fn publish_task_execution_failure(&self, event: &TaskExecutionFailure) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -147,7 +149,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a task update completed event
+    /// Publish a task update completed event.
     pub fn publish_task_update_completed(&self, event: &TaskUpdateCompleted) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -159,7 +161,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a task update failure event
+    /// Publish a task update failure event.
     pub fn publish_task_update_failure(&self, event: &TaskUpdateFailure) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -171,7 +173,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish an uncaught-panic event
+    /// Publish an uncaught-panic event.
     pub fn publish_thread_uncaught_exception(&self, event: &ThreadUncaughtException) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -183,7 +185,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a workflow started event
+    /// Publish a workflow started event.
     pub fn publish_workflow_started(&self, event: &WorkflowStarted) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -195,7 +197,7 @@ impl EventDispatcher {
         }
     }
 
-    /// Publish a workflow start failure event
+    /// Publish a workflow start failure event.
     pub fn publish_workflow_start_failure(&self, event: &WorkflowStartFailure) {
         let listeners = self.get_listeners();
         for listener in listeners {
@@ -208,7 +210,7 @@ impl EventDispatcher {
     }
 }
 
-/// Synchronous event dispatcher (for use in non-async contexts)
+/// Synchronous event dispatcher (for use in non-async contexts).
 pub type SyncEventDispatcher = EventDispatcher;
 
 #[cfg(test)]
@@ -261,7 +263,7 @@ mod tests {
     fn test_event_publishing() {
         let dispatcher = EventDispatcher::new();
         let listener = Arc::new(CountingListener::new());
-        dispatcher.register(listener.clone());
+        dispatcher.register(Arc::clone(&listener) as Arc<dyn TaskRunnerEventsListener>);
 
         let event = PollStarted::new("test_task", "worker-1", 10);
         dispatcher.publish_poll_started(&event);
@@ -285,8 +287,8 @@ mod tests {
         let listener1 = Arc::new(CountingListener::new());
         let listener2 = Arc::new(CountingListener::new());
 
-        dispatcher.register(listener1.clone());
-        dispatcher.register(listener2.clone());
+        dispatcher.register(Arc::clone(&listener1) as Arc<dyn TaskRunnerEventsListener>);
+        dispatcher.register(Arc::clone(&listener2) as Arc<dyn TaskRunnerEventsListener>);
 
         let event = PollStarted::new("test_task", "worker-1", 10);
         dispatcher.publish_poll_started(&event);

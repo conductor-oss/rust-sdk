@@ -287,6 +287,124 @@ jobs:
         # it should have asserted is the failure mode that matters most.
         run: cargo test --tests --all-features -- --test-threads=1 --nocapture
 
+  # Runs every sdk_playback_* example against a Conductor server in mock-LLM
+  # playback mode, replaying the shared LLM recordings from
+  # conductor-oss/conductor's llm-recordings/. Server startup, the HTTP/MCP
+  # fixtures, and outcome validation all come from that repo's shared actions
+  # (start-playback-services, start-playback, check-playback), so nothing about
+  # the playback contract is duplicated here. check-playback reads persisted
+  # workflow state: completed workflows pass, genuine guardrail rejections pass,
+  # anything else fails the job. Rust compile errors and example process
+  # failures (transport errors, panics) fail the job on their own steps.
+  #
+  # Use Conductor main for the shared actions and recordings.
+  agents-playback:
+    name: Agents Playback
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CONDUCTOR_SERVER_URL: http://localhost:18080/api
+      CONDUCTOR_AGENT_LLM_MODEL: mock/mockLLM
+      GITHUB_REPOS_URL: http://localhost:3002/users/Conductor/repos?per_page=5&sort=updated
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: conductor-oss/conductor
+          ref: main
+          path: tmp/conductor
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      # Compile before the (slow) Conductor build so a Rust compile error fails fast.
+      - name: Build agent examples
+        run: |
+          for file in examples/sdk_playback_*.rs; do
+            example=$(basename "$file" .rs)
+            cargo build --all-features --example "$example"
+          done
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Conductor
+        working-directory: tmp/conductor
+        run: ./gradlew --no-daemon :conductor-server:bootJar -x test
+
+      - name: Start HTTP and MCP fixtures
+        uses: ./tmp/conductor/.github/actions/start-playback-services
+
+      - name: Start Conductor
+        id: server
+        uses: ./tmp/conductor/.github/actions/start-playback
+
+      # Each example deploys its agent, starts and polls its own tool workers,
+      # answers its own approval prompts (09, 09c), and blocks until the
+      # execution reaches a terminal state, so the run below is complete once
+      # the process exits. A non-zero exit (transport error, panic, missing
+      # server) fails this step; the workflow outcome itself is judged by
+      # check-playback from persisted task data, never by anything here.
+      - name: Run agent examples
+        run: |
+          mkdir -p tmp/agent-playback
+          status=0
+          for file in examples/sdk_playback_*.rs; do
+            example=$(basename "$file" .rs)
+            echo "::group::$example"
+            if ! cargo run --all-features --example "$example" 2>&1 | tee "tmp/agent-playback/$example.log"; then
+              echo "::error::$example exited with a failure"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Validate playback
+        if: always() && steps.server.outcome == 'success'
+        uses: ./tmp/conductor/.github/actions/check-playback
+        with:
+          server-url: http://localhost:18080/api
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agents-playback-logs
+          path: tmp/agent-playback/*.log
+
+      - name: Stop services
+        if: always()
+        run: |
+          for file in tmp/agent-playback/*.pid; do
+            [ -f "$file" ] && kill "$(cat "$file")" 2>/dev/null || true
+          done
+
   docs:
     name: Documentation Check
     runs-on: ubuntu-latest

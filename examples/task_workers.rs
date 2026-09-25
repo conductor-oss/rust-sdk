@@ -41,14 +41,14 @@ async fn main() -> Result<()> {
     let echo_worker = FnWorker::new("echo_task", |task: Task| async move {
         let message = task
             .get_input_string("message")
-            .unwrap_or_else(|| "No message".to_string());
+            .unwrap_or_else(|| "No message".to_owned());
 
         info!("[Echo Worker] Received: {}", message);
 
         let mut output = HashMap::new();
-        output.insert("echo".to_string(), serde_json::json!(message));
+        output.insert("echo".to_owned(), serde_json::json!(message));
         output.insert(
-            "timestamp".to_string(),
+            "timestamp".to_owned(),
             serde_json::json!(chrono::Utc::now().to_rfc3339()),
         );
 
@@ -68,9 +68,9 @@ async fn main() -> Result<()> {
         // Simulate transformation
         let transformed = match data {
             serde_json::Value::Object(mut map) => {
-                map.insert("transformed".to_string(), serde_json::json!(true));
+                map.insert("transformed".to_owned(), serde_json::json!(true));
                 map.insert(
-                    "processed_at".to_string(),
+                    "processed_at".to_owned(),
                     serde_json::json!(chrono::Utc::now().to_rfc3339()),
                 );
                 serde_json::Value::Object(map)
@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
         };
 
         let mut output = HashMap::new();
-        output.insert("result".to_string(), transformed);
+        output.insert("result".to_owned(), transformed);
 
         Ok(WorkerOutput::Completed(output))
     })
@@ -102,8 +102,8 @@ async fn main() -> Result<()> {
         match required_field {
             Some(value) if !value.is_empty() => {
                 let mut output = HashMap::new();
-                output.insert("valid".to_string(), serde_json::json!(true));
-                output.insert("validated_value".to_string(), serde_json::json!(value));
+                output.insert("valid".to_owned(), serde_json::json!(true));
+                output.insert("validated_value".to_owned(), serde_json::json!(value));
                 Ok(WorkerOutput::Completed(output))
             }
             _ => Ok(WorkerOutput::failed(
@@ -125,7 +125,7 @@ async fn main() -> Result<()> {
 
         let mut output = HashMap::new();
         output.insert(
-            "message".to_string(),
+            "message".to_owned(),
             serde_json::json!(format!("Completed after {} ms", duration_ms)),
         );
 
@@ -152,8 +152,8 @@ async fn main() -> Result<()> {
             .collect();
 
         let mut output = HashMap::new();
-        output.insert("processed_items".to_string(), serde_json::json!(processed));
-        output.insert("count".to_string(), serde_json::json!(processed.len()));
+        output.insert("processed_items".to_owned(), serde_json::json!(processed));
+        output.insert("count".to_owned(), serde_json::json!(processed.len()));
 
         Ok(WorkerOutput::Completed(output))
     })
