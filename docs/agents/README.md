@@ -6,11 +6,11 @@ Conductor agents run as workflows. Tool calls are tasks, and runs survive proces
 
 ```toml
 [dependencies]
-conductor = { package = "conductor-sdk", version = "0.1.2", features = ["agents"] }
+conductor = { package = "conductor-sdk", version = "0.1.1", features = ["agents"] }
 tokio = { version = "1", features = ["full"] }
 ```
 
-The agent APIs are planned for 0.1.2. Configure a model on a reachable Conductor server and
+The agent APIs are planned for 0.1.1. Configure a model on a reachable Conductor server and
 pass its `provider/model` name as the first argument to each example.
 
 ## Start here

@@ -67,10 +67,10 @@ conductor-macros = "0.1"
 tokio = { version = "1", features = ["full"] }
 ```
 
-For agents in the planned 0.1.2 release, enable `agents`:
+For agents in the planned 0.1.1 release, enable `agents`:
 
 ```toml
-conductor = { version = "0.1.2", package = "conductor-sdk", features = ["agents"] }
+conductor = { version = "0.1.1", package = "conductor-sdk", features = ["agents"] }
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -78,7 +78,7 @@ The [`agents` feature](Cargo.toml) includes worker macros.
 
 ## Agent quickstart
 
-Once 0.1.2 is published, configure a provider and model on your Conductor server. Create a project and add the `agents` dependencies above to its `Cargo.toml`:
+Once 0.1.1 is published, configure a provider and model on your Conductor server. Create a project and add the `agents` dependencies above to its `Cargo.toml`:
 
 ```shell
 cargo new conductor-agent-demo
