@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Durable agents (`agents` feature): tools, multi-agent runs, approval, guardrails, scheduling, and streaming
 - Standalone agent examples with explicit `provider/model` selection; CI uses `mock/mockLLM`
-- Agent quickstart and local validation script
+- Agent quickstart
 
 ### Changed
 

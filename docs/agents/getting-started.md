@@ -17,10 +17,7 @@ Configure provider credentials on the server, then pass its `provider/model` nam
 cargo run --example agent_quickstart --features agents -- openai/gpt-4o-mini
 ```
 
-For an unauthenticated local server on port 8080, run
-[`scripts/validate-local-agent.sh`](../../scripts/validate-local-agent.sh) from the repo root.
-It checks server health, model availability, and the agent result. The example prints
-`status`, `output`, and `execution_id`.
+The example prints `status`, `output`, and `execution_id`.
 
 ## 3. Create the same agent
 

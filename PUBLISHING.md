@@ -21,12 +21,6 @@ Publish `conductor-macros` before `conductor-sdk`. The SDK needs the published m
    cargo doc --no-deps --all-features
    ```
 
-5. Validate the quickstart against a local server with a configured model:
-
-   ```shell
-   scripts/validate-local-agent.sh openai/gpt-4o-mini
-   ```
-
 ## Publish
 
 Requires crates.io ownership of both crates and a Cargo registry token.

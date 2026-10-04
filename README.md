@@ -133,11 +133,7 @@ Run with a model configured on your server:
 cargo run -- openai/gpt-4o-mini
 ```
 
-The [checked-in example](examples/agent_quickstart.rs) uses the same code. To check it against an unauthenticated local server on port 8080:
-
-```shell
-scripts/validate-local-agent.sh openai/gpt-4o-mini
-```
+The [checked-in example](examples/agent_quickstart.rs) uses the same code.
 
 See the [agent guide](docs/agents/README.md) and [examples](docs/agents/examples.md) for more.
 
