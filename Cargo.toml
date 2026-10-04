@@ -1,6 +1,6 @@
 [package]
 name = "conductor-sdk"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 rust-version = "1.85"
 description = "Rust SDK for Netflix Conductor workflow orchestration"
@@ -292,7 +292,7 @@ dotenvy = "0.15"
 schemars = "0.8"
 
 # Procedural macros (optional feature)
-conductor-macros = { version = "0.1.1", path = "conductor-macros", optional = true }
+conductor-macros = { version = "0.1.2", path = "conductor-macros", optional = true }
 
 # Guardrail pattern matching (agents feature)
 regex = { version = "1", optional = true }

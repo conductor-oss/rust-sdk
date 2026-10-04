@@ -1,45 +1,37 @@
 # Agent examples
 
-Every example in this list is a standalone Rust program that imports public `conductor` SDK
-types. They accept a configured `provider/model` as their first command-line argument. Nothing
-in an example silently selects a model.
+Pass a server-configured `provider/model` as the first argument to each example.
 
-Start with the [simple tools example](../../examples/agent_demo_02a_simple_tools.rs). It uses
-Rust function tools, so it needs no HTTP service, MCP server, or credential variables. With a
-Conductor server on port 8080 and `openai/gpt-4o-mini` configured on that server, run:
+Run the [simple tools example](../../examples/agent_demo_02a_simple_tools.rs) against a local
+server with `openai/gpt-4o-mini` configured:
 
 ```shell
 export CONDUCTOR_SERVER_URL=http://localhost:8080/api
 cargo run --example agent_demo_02a_simple_tools --features agents -- openai/gpt-4o-mini
 ```
 
-It prints `status: COMPLETED` and an answer using the local `get_weather` tool. Replace the
-model argument with any `provider/model` configured on your server. The
-[`agent_quickstart` example](../../examples/agent_quickstart.rs) is an even smaller agent
-without tools.
+Use another configured model if needed. For an agent without tools, see
+[`agent_quickstart`](../../examples/agent_quickstart.rs).
 
-Once 0.1.1 is published, you can copy the simple tools source into a new Cargo application's
-`src/main.rs` with these dependencies:
+After 0.1.2 is published, you can use the simple tools source in a new project with:
 
 ```toml
 [dependencies]
-conductor = { package = "conductor-sdk", version = "0.1.1", features = ["agents"] }
+conductor = { package = "conductor-sdk", version = "0.1.2", features = ["agents"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```
 
-Run that application with `cargo run -- openai/gpt-4o-mini`. The Rust closures return sample
-application data; replace their bodies with your own service calls while keeping the SDK calls
-shown. Other examples may need additional dependencies listed in their imports.
+Run it with `cargo run -- openai/gpt-4o-mini`. Replace the sample tool data with your own.
 
 | Example | What it demonstrates | Extra setup |
 |---|---|---|
-| [Quickstart](../../examples/agent_quickstart.rs) | Define and run a basic agent | Server-side model integration |
-| [Agent configuration](../../examples/agent_config_example.rs) | Serialize a coordinator and tool to JSON | No server connection; run with `cargo run --example agent_config_example --features agents -- provider/model` |
+| [Quickstart](../../examples/agent_quickstart.rs) | Basic agent | None |
+| [Agent configuration](../../examples/agent_config_example.rs) | Serialize an agent and tool | No server |
 | [Simple tools](../../examples/agent_demo_02a_simple_tools.rs) | Local Rust function tools | None |
 | [Data tools](../../examples/agent_demo_02c_data_tools.rs) | Multiple local data tools | None |
-| [HTTP and MCP tools](../../examples/agent_demo_04_http_and_mcp_tools.rs) | Server-side HTTP/MCP tools plus a local formatter | Endpoints and server-side credentials below |
+| [HTTP and MCP tools](../../examples/agent_demo_04_http_and_mcp_tools.rs) | HTTP, MCP, and local tools | Endpoints and credentials below |
 | [Handoffs](../../examples/agent_demo_05_handoffs.rs) | Route between specialist agents | None |
 | [Sequential pipeline](../../examples/agent_demo_06_sequential_pipeline.rs) | Run agents in sequence | None |
 | [Parallel agents](../../examples/agent_demo_07_parallel_agents.rs) | Run agents in parallel | None |
@@ -47,7 +39,7 @@ shown. Other examples may need additional dependencies listed in their imports.
 | [Approval workflow](../../examples/agent_demo_09c_approval_workflow.rs) | Approve a service operation from the terminal | Answer the approval prompt |
 | [Guardrails](../../examples/agent_demo_10_guardrails.rs) | Function guardrail on tool output | None |
 | [Hierarchical agents](../../examples/agent_demo_13_hierarchical_agents.rs) | Delegate through nested agents | None |
-| [Credential-backed HTTP tool](../../examples/agent_demo_16e_credentials_http_tool.rs) | Resolve a server-side credential for GitHub API | Configure `GITHUB_TOKEN` on the server |
+| [Credential-backed HTTP tool](../../examples/agent_demo_16e_credentials_http_tool.rs) | GitHub API credential | Configure `GITHUB_TOKEN` on the server |
 | [Swarm orchestration](../../examples/agent_demo_17_swarm_orchestration.rs) | Transfer between agents | None |
 | [Regex guardrails](../../examples/agent_demo_21_regex_guardrails.rs) | Filter sensitive output | None |
 | [LLM guardrails](../../examples/agent_demo_22_llm_guardrails.rs) | Review output with a model | None |
@@ -58,9 +50,8 @@ shown. Other examples may need additional dependencies listed in their imports.
 
 ## HTTP and MCP example
 
-The HTTP/MCP example has no bundled endpoint. Point it at services you control and configure
-`HTTP_TEST_API_KEY` and `MCP_TEST_API_KEY` (or your chosen names) in the Conductor server's
-credential store. Pass the credential names, never the secret values, to the example:
+Set service endpoints and store `HTTP_TEST_API_KEY` and `MCP_TEST_API_KEY` on the Conductor
+server. Pass credential names to the example:
 
 ```shell
 export CONDUCTOR_EXAMPLE_HTTP_REVERSE_URL=https://your-service.example/api/string/reverse
@@ -70,12 +61,8 @@ export CONDUCTOR_EXAMPLE_MCP_CREDENTIAL=MCP_TEST_API_KEY
 cargo run --example agent_demo_04_http_and_mcp_tools --features agents -- openai/gpt-4o-mini
 ```
 
-The HTTP endpoint must accept a `POST` that reverses the supplied `text`. The MCP endpoint
-must provide the math tool used by the example. CI supplies local fixture endpoints and
-credential names explicitly.
+The HTTP endpoint must reverse `text` on `POST`; the MCP endpoint must provide the math tool.
 
 ## Human approval examples
 
-The approval examples prompt in the terminal when an agent requests a protected tool call.
-CI passes `--approve` after the model to reproduce its recorded approval; a person running the
-example can review the prompt and answer `y` or `n`.
+Answer `y` or `n` at the terminal prompt. CI passes `--approve` after the model.

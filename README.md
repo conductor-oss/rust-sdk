@@ -5,32 +5,18 @@
 [![Rust Versions](https://img.shields.io/badge/rust-1.85%2B-blue.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/crates/l/conductor-sdk.svg)](LICENSE)
 
-The Rust SDK for [Conductor](https://www.conductor-oss.org/) lets you build durable Conductor agents, workflows, and workers. Conductor coordinates retries, state, and observability while your Rust code runs wherever you deploy it.
+Build agents, workflows, and workers in Rust with [Conductor](https://www.conductor-oss.org/).
 
-**Get involved:** [⭐ Conductor OSS](https://github.com/conductor-oss/conductor) · [Choose a Conductor OSS contribution](https://github.com/conductor-oss/conductor/contribute) · [Contribution guide](https://github.com/conductor-oss/conductor/blob/main/CONTRIBUTING.md)
-
-**Using an AI coding agent?** Load [Conductor Skills](https://github.com/conductor-oss/conductor-skills) so it can create, run, and operate Conductor workflows and Conductor agents:
-
-```shell
-npm install -g @conductor-oss/conductor-skills && conductor-skills --all
-```
-
-## Choose your path
-
-| I want to… | Start here |
-|---|---|
-| Build a durable Conductor agent with tools and human approval | [Run an agent example](#agent-quickstart) |
-| Define a workflow and run Rust workers | [Run the workflow and worker quickstart](#60-second-quickstart) |
-| Browse examples | [Agent examples](docs/agents/examples.md) · [SDK examples](#examples) |
-| Find API and concept guides | [Documentation hub](docs/README.md) |
+See the [agent quickstart](#agent-quickstart) or [workflow quickstart](#60-second-quickstart).
+[Conductor Skills](https://github.com/conductor-oss/conductor-skills) helps coding agents work with Conductor.
 
 ## Choose your Conductor server
 
-Connect to a server before following either quickstart. Use the hosted Developer Edition by default, or run Conductor locally when you need a self-managed development environment.
+Use a hosted or local Conductor server for the examples below.
 
 ### Recommended: Orkes Developer Edition
 
-[Orkes Developer Edition](https://developer.orkescloud.com/) is the default hosted option. Create an application and access key in the Developer Edition UI, then set the SDK's API endpoint and credentials. Keep the key and secret out of source control.
+In [Orkes Developer Edition](https://developer.orkescloud.com/), create an application and access key, then set:
 
 ```shell
 export CONDUCTOR_SERVER_URL=https://developer.orkescloud.com/api
@@ -38,9 +24,9 @@ export CONDUCTOR_AUTH_KEY=<your-key-id>
 export CONDUCTOR_AUTH_SECRET=<your-key-secret>
 ```
 
-For another hosted or self-managed remote cluster, use its `/api` URL and application credentials.
+For another remote cluster, use its `/api` URL and credentials.
 
-### Local alternative: Conductor CLI
+### Local: Conductor CLI
 
 ```shell
 npm install -g @conductor-oss/conductor-cli
@@ -49,7 +35,7 @@ conductor server status
 export CONDUCTOR_SERVER_URL=http://localhost:8080/api
 ```
 
-### Docker Compose fallback
+### Local: Docker Compose
 
 ```shell
 docker compose -f scripts/docker-compose-oss.yaml up -d
@@ -58,20 +44,7 @@ export CONDUCTOR_SERVER_URL=http://localhost:8080/api
 
 The Compose server UI is at [http://localhost:8080](http://localhost:8080).
 
-## Why Conductor?
-
-- **Survive process failures:** Conductor keeps execution state so agents and workflows can resume from completed work.
-- **Run distributed tools and workers:** Scale Rust workers independently while Conductor handles task delivery and retries.
-- **Coordinate long-running work:** Combine workflows, schedules, events, and human approval without keeping an application process alive.
-- **Inspect every execution:** See task inputs, outputs, retries, and status in one place.
-
-## Requirements and compatibility
-
-- Rust 1.85 or newer (the minimum version declared in `Cargo.toml`)
-- A reachable OSS or Orkes Conductor server selected above
-- Docker Compose only for the Compose local-server option; Node.js/npm only for the optional CLI
-
-CI is the source of truth for server versions exercised by this SDK; see the [CI workflow](.github/workflows/ci.yml).
+Requires Rust 1.85 or newer and a reachable Conductor server. See [CI](.github/workflows/ci.yml) for tested server versions.
 
 ## Install the SDK
 
@@ -94,18 +67,18 @@ conductor-macros = "0.1"
 tokio = { version = "1", features = ["full"] }
 ```
 
-For durable agents in the planned 0.1.1 release, enable the `agents` feature:
+For agents in the planned 0.1.2 release, enable `agents`:
 
 ```toml
-conductor = { version = "0.1.1", package = "conductor-sdk", features = ["agents"] }
+conductor = { version = "0.1.2", package = "conductor-sdk", features = ["agents"] }
 tokio = { version = "1", features = ["full"] }
 ```
 
-The [`agents` feature](Cargo.toml) includes the worker macros. The macro example above also imports `conductor-macros` directly.
+The [`agents` feature](Cargo.toml) includes worker macros.
 
 ## Agent quickstart
 
-This is the application you can write with the 0.1.1 SDK once that version is published. Select a server above and configure an LLM provider integration on it. Create a Cargo project and add the two dependencies shown above under `[dependencies]` in its `Cargo.toml`:
+Once 0.1.2 is published, configure a model on your server. Create a project and add the `agents` dependencies above to its `Cargo.toml`:
 
 ```shell
 cargo new conductor-agent-demo
@@ -154,19 +127,19 @@ async fn main() -> Result<()> {
 }
 ```
 
-With `CONDUCTOR_SERVER_URL` set as above, run your application with the model configured on your server:
+Run with a model configured on your server:
 
 ```shell
 cargo run -- openai/gpt-4o-mini
 ```
 
-The repository's [agent quickstart](examples/agent_quickstart.rs) uses those same SDK calls. CI passes `mock/mockLLM` as its model argument; your application passes the model configured on your server. For an already-running, unauthenticated local Conductor on port 8080, run the [local validation script](scripts/validate-local-agent.sh). It checks server health and model availability, then requires a `COMPLETED` agent run with output:
+The [checked-in example](examples/agent_quickstart.rs) uses the same code. To check it against an unauthenticated local server on port 8080:
 
 ```shell
 scripts/validate-local-agent.sh openai/gpt-4o-mini
 ```
 
-The example also prints its execution ID so you can inspect the run in the Conductor UI. Continue with the [agent getting-started guide](docs/agents/getting-started.md), [tools guide](docs/agents/concepts/tools.md), and [agent examples](docs/agents/examples.md).
+See the [agent guide](docs/agents/README.md) and [examples](docs/agents/examples.md) for more.
 
 ## 60-Second Quickstart
 
