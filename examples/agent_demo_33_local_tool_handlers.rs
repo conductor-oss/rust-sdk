@@ -1,15 +1,12 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
+use conductor::agents::AgentRuntime;
 use conductor::agents::{AgentDef, ToolDef};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use support::run_with_local_tools;
 
 #[derive(Deserialize)]
 struct CustomerArgs {
@@ -41,13 +38,18 @@ struct FormatArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
 
     let format_response = ToolDef::function(
         "format_response",
         "Format a data dictionary into a human-readable string.",
-        // `additionalProperties: {}` matches the tool schema in the shared recording; a bare
-        // `{"type": "object"}` is a different JSON value and misses the exact-request match.
+        // Allow arbitrary fields in the data object passed to the formatter.
         json!({
             "type": "object",
             "properties": { "data": { "type": "object", "additionalProperties": {} } },
@@ -134,7 +136,7 @@ async fn main() -> Result<()> {
     );
 
     let agent = AgentDef::new("support_agent")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You are a customer support agent. Use the available tools to \
              look up customers, check inventory, process orders, and format \
@@ -145,17 +147,21 @@ async fn main() -> Result<()> {
         .with_tool(check_inventory)
         .with_tool(process_order);
 
-    let result = run_with_local_tools(
-        &config,
-        &agent,
-        Value::String(
-            "Customer C-1234 wants to cancel order ORD-5678. \
+    let mut runtime = AgentRuntime::new(config.clone())?;
+    runtime.serve(&agent).await?;
+    let result = runtime
+        .run(
+            &agent,
+            Value::String(
+                "Customer C-1234 wants to cancel order ORD-5678. \
              Look up the customer, check if we have the product in stock, \
              and process the cancellation."
-                .into(),
-        ),
-    )
-    .await?;
+                    .into(),
+            ),
+        )
+        .await;
+    runtime.shutdown().await?;
+    let result = result?;
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);

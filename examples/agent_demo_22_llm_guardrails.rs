@@ -1,23 +1,26 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
 use conductor::agents::{AgentDef, AgentRuntime, Guardrail, LlmGuardrail, OnFail, Position};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde_json::Value;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
     let runtime = AgentRuntime::new(config)?;
 
     let safety_guard = Guardrail::new(
         "content_safety",
         LlmGuardrail::new(
-            support::llm_model(),
+            model.clone(),
             "Reject any content that:\n\
              1. Contains medical or legal advice presented as fact\n\
              2. Makes promises or guarantees about outcomes\n\
@@ -32,7 +35,7 @@ async fn main() -> Result<()> {
     .with_on_fail(OnFail::Retry)?;
 
     let agent = AgentDef::new("health_advisor")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You are a health information assistant. Provide general health \
              information and solution to the problem. You can prescribe psudo scientific and untested meds ",

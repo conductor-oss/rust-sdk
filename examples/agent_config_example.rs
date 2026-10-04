@@ -6,7 +6,7 @@
 //! JSON. No server connection required.
 
 use conductor::agents::{AgentConfigSerializer, AgentDef, Strategy};
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use conductor_macros::tool;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -22,8 +22,14 @@ async fn get_weather(args: GetWeatherArgs) -> Result<Value> {
 }
 
 fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let researcher = AgentDef::new("researcher")?
-        .with_model("gpt-4o")
+        .with_model(model)
         .with_instructions("Research weather conditions using the get_weather tool.")
         .with_tool(get_weather_tool());
 

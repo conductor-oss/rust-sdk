@@ -9,40 +9,30 @@ that server.
 export CONDUCTOR_SERVER_URL=http://localhost:8080/api
 ```
 
-For authenticated servers, also set `CONDUCTOR_AUTH_KEY` and `CONDUCTOR_AUTH_SECRET`. Do not
-put provider secrets in application source; configure the provider integration on the server.
+For authenticated servers, also set `CONDUCTOR_AUTH_KEY` and `CONDUCTOR_AUTH_SECRET`. Pass a
+`provider/model` configured on the server as the example's command-line argument. CI explicitly
+passes `mock/mockLLM` for recording/playback tests. Configure provider credentials on the server.
 
 ## 2. Run an example
 
 ```shell
-cargo run --example sdk_playback_01_basic_agent --features agents
+cargo run --example agent_quickstart --features agents -- openai/gpt-4o-mini
 ```
 
-Expected result: a printed `status` (`COMPLETED`) and the model's `output`. If the request
+For an already-running local Conductor on port 8080 without SDK authentication, use
+[`scripts/validate-local-agent.sh`](../../scripts/validate-local-agent.sh) from the repository
+root. It checks server health and model availability and fails unless the agent completes with
+output. Expected result: a printed `status` (`COMPLETED`), the model's `output`, and an
+`execution_id` for inspection in the UI. If the request
 can't reach the server, check `CONDUCTOR_SERVER_URL`. If the agent can't call a model, check
 the server-side provider integration.
 
 ## 3. Create the same agent
 
-```rust
-use conductor::agents::{AgentDef, AgentRuntime};
-use conductor::configuration::Configuration;
-use conductor::error::Result;
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let config = Configuration::from_env();
-    let runtime = AgentRuntime::new(config)?;
-
-    let agent = AgentDef::new("greeter")?
-        .with_model("openai/gpt-4o-mini")
-        .with_instructions("You are a friendly assistant. Keep responses brief.");
-
-    let result = runtime.run(&agent, "Say hello.".into()).await?;
-    println!("{}", result.output);
-    Ok(())
-}
-```
+The [README quickstart](../../README.md#agent-quickstart) gives the complete `Cargo.toml`
+dependencies, `src/main.rs`, and `cargo run -- provider/model` command for an application using
+the 0.1.1 SDK once published. The checked-in [agent quickstart source](../../examples/agent_quickstart.rs)
+is the same application code and is what CI runs with `mock/mockLLM`.
 
 `AgentDef::new` validates `name` against `^[a-zA-Z_][a-zA-Z0-9_-]*$` up front, since it doubles
 as the compiled workflow's name. `model` is a `"provider/model"` string resolved against a

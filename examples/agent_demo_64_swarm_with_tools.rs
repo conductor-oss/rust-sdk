@@ -1,15 +1,12 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
+use conductor::agents::AgentRuntime;
 use conductor::agents::{AgentDef, Strategy, SwarmTransition, ToolDef};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use support::run_with_local_tools;
 
 #[derive(Deserialize)]
 struct AccountArgs {
@@ -21,7 +18,7 @@ struct OrderArgs {
     order_id: String,
 }
 
-fn build_support_agent() -> Result<AgentDef> {
+fn build_support_agent(model: &str) -> Result<AgentDef> {
     let check_balance = ToolDef::function(
         "check_balance",
         "Check the balance of a bank account.",
@@ -49,7 +46,7 @@ fn build_support_agent() -> Result<AgentDef> {
     );
 
     let billing_specialist = AgentDef::new("billing_specialist")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You are a billing specialist. Use the check_balance tool to look up \
              account balances. Include the balance amount in your response.",
@@ -57,7 +54,7 @@ fn build_support_agent() -> Result<AgentDef> {
         .with_tool(check_balance);
 
     let order_specialist = AgentDef::new("order_specialist")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You are an order specialist. Use the lookup_order tool to check \
              order status. Include the shipping status and ETA in your response.",
@@ -65,7 +62,7 @@ fn build_support_agent() -> Result<AgentDef> {
         .with_tool(lookup_order);
 
     AgentDef::new("support")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You are front-line customer support. Triage customer requests. \
              Transfer to billing_specialist for account/payment questions, \
@@ -87,27 +84,41 @@ fn build_support_agent() -> Result<AgentDef> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
 
     println!("=== Scenario 1: Billing question (swarm -> billing + tool) ===");
-    let support1 = build_support_agent()?;
-    let result = run_with_local_tools(
-        &config,
-        &support1,
-        Value::String("What's the balance on account ACC-456?".into()),
-    )
-    .await?;
+    let support1 = build_support_agent(&model)?;
+    let mut runtime = AgentRuntime::new(config.clone())?;
+    runtime.serve(&support1).await?;
+    let result = runtime
+        .run(
+            &support1,
+            Value::String("What's the balance on account ACC-456?".into()),
+        )
+        .await;
+    runtime.shutdown().await?;
+    let result = result?;
     println!("status: {}", result.status);
     println!("output: {}", result.output);
 
     println!("\n=== Scenario 2: Order question (swarm -> order + tool) ===");
-    let support2 = build_support_agent()?;
-    let result2 = run_with_local_tools(
-        &config,
-        &support2,
-        Value::String("Where is my order ORD-789?".into()),
-    )
-    .await?;
+    let support2 = build_support_agent(&model)?;
+    let mut runtime2 = AgentRuntime::new(config.clone())?;
+    runtime2.serve(&support2).await?;
+    let result2 = runtime2
+        .run(
+            &support2,
+            Value::String("Where is my order ORD-789?".into()),
+        )
+        .await;
+    runtime2.shutdown().await?;
+    let result2 = result2?;
     println!("status: {}", result2.status);
     println!("output: {}", result2.output);
 

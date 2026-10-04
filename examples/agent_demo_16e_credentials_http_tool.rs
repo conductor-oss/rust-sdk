@@ -1,22 +1,24 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
 use conductor::agents::{AgentDef, AgentRuntime, ToolDef};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde_json::Value;
 use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
     let runtime = AgentRuntime::new(config)?;
 
-    // In CI the shared playback fixture (conductor-oss/conductor's start-playback-services
-    // action) stands in for GitHub at `GITHUB_REPOS_URL`; the real API is the default.
+    // Override GITHUB_REPOS_URL to point at a compatible endpoint, such as a local fixture.
     let repos_url = std::env::var("GITHUB_REPOS_URL").unwrap_or_else(|_| {
         "https://api.github.com/users/Conductor/repos?per_page=5&sort=updated".to_owned()
     });
@@ -42,7 +44,7 @@ async fn main() -> Result<()> {
     )?;
 
     let agent = AgentDef::new("github_http_agent")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You list GitHub repos using the list_github_repos tool. Summarize the results.",
         )

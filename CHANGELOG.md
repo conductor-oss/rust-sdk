@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Durable agents behind the `agents` feature, including local function tools, HTTP and MCP tools, multi-agent composition, human approval, guardrails, scheduling, and streaming
+- Standalone agent examples that require an explicit `provider/model` argument; CI runs the same examples with `mock/mockLLM`
+- A README agent quickstart and a local validation script for an already-running Conductor server
+
 ### Changed
 
 - Integration tests: `orkes_client_tests.rs`'s secret read tests (`get`/`list`/`exists`) now assert for real against OSS Conductor, using a dummy env-backed secret seeded in `scripts/docker-compose-oss.yaml`; secret writes (`put`/`delete`) are asserted to fail with a real `501` on OSS (read-only backend) instead of being skipped

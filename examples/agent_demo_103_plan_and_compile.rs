@@ -1,15 +1,12 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
+use conductor::agents::AgentRuntime;
 use conductor::agents::{plan_execute, PlanExecuteOptions, ToolDef};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use support::run_with_local_tools;
 
 #[derive(Deserialize)]
 struct FactorialArgs {
@@ -27,9 +24,7 @@ struct CheckSummaryArgs {
     min_chars: i64,
 }
 
-// The planner instructions must match the shared recording byte for byte, including the
-// 3-space indent under items 2 and 3, so that whitespace is written as an explicit `\n   `
-// rather than relying on source indentation (which `\`-newline continuation would strip).
+// Preserve the line breaks and indentation the planner sees in this prompt.
 const PLANNER_INSTRUCTIONS: &str = "You are a math-explainer planner. Plan a workflow that:\n\n1. Computes factorials of 1, 2, 3, 4, 5 in PARALLEL using ``factorial`` (static args).\n2. Writes a short prose summary about factorial growth using ``write_summary``\n   (use a ``generate`` block \u{2014} the LLM produces the ``text`` arg at run time).\n3. Validates the summary is at least 30 characters via ``check_summary``,\n   with ``success_condition: \"$.passed === true\"``.\n";
 
 fn factorial(n: i64) -> String {
@@ -41,10 +36,15 @@ fn factorial(n: i64) -> String {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
 
-    // Tool descriptions below match the shared recording verbatim, "Args:" sections included,
-    // because the server embeds the full description in the planner prompt.
+    // The server includes these tool descriptions in the planner prompt.
     let factorial_tool = ToolDef::function(
         "factorial",
         "Compute n! and return it as a string.\n\nArgs:\n    n: Non-negative integer. Capped at 20 to keep things sane.",
@@ -95,14 +95,19 @@ async fn main() -> Result<()> {
             fallback_instructions: Some(
                 "The plan failed. Use the available tools to recover.".to_owned(),
             ),
-            model: Some(support::llm_model()),
+            model: Some(model),
             fallback_max_turns: Some(4),
             planner_context: Vec::new(),
         },
     )?;
 
-    let result =
-        run_with_local_tools(&config, &harness, Value::String("Topic: factorials".into())).await?;
+    let mut runtime = AgentRuntime::new(config.clone())?;
+    runtime.serve(&harness).await?;
+    let result = runtime
+        .run(&harness, Value::String("Topic: factorials".into()))
+        .await;
+    runtime.shutdown().await?;
+    let result = result?;
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);

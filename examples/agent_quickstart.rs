@@ -1,20 +1,23 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
 use conductor::agents::{AgentDef, AgentRuntime};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass a configured provider/model as the first argument")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
     let runtime = AgentRuntime::new(config)?;
 
     let agent = AgentDef::new("greeter")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions("You are a friendly assistant. Keep responses brief.");
 
     let result = runtime
@@ -26,5 +29,12 @@ async fn main() -> Result<()> {
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);
+    println!("execution_id: {}", result.execution_id);
+    if !result.is_success() {
+        return Err(ConductorError::agent(format!(
+            "Agent execution ended with status {}",
+            result.status
+        )));
+    }
     Ok(())
 }

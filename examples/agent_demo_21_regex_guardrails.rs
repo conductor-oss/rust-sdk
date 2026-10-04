@@ -1,15 +1,12 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
+use conductor::agents::AgentRuntime;
 use conductor::agents::{AgentDef, Guardrail, OnFail, Position, RegexGuardrail, ToolDef};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use support::run_with_local_tools;
 
 #[derive(Deserialize)]
 struct UserArgs {
@@ -39,6 +36,12 @@ fn build_guardrails() -> Result<Vec<Guardrail>> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
 
     let get_user_profile = ToolDef::function(
@@ -61,7 +64,7 @@ async fn main() -> Result<()> {
     );
 
     let mut agent = AgentDef::new("hr_assistant")?
-        .with_model(support::llm_model())
+        .with_model(model.clone())
         .with_instructions(
             "You are an HR assistant. When asked about employees, look up their \
              profile and share ALL the details you find.",
@@ -72,29 +75,37 @@ async fn main() -> Result<()> {
     }
 
     println!("=== Scenario 1: Request PII \u{2014} guardrails trigger ===");
-    let result = run_with_local_tools(
-        &config,
-        &agent,
-        Value::String("Tell me everything about user U-001.".into()),
-    )
-    .await?;
+    let mut runtime = AgentRuntime::new(config.clone())?;
+    runtime.serve(&agent).await?;
+    let result = runtime
+        .run(
+            &agent,
+            Value::String("Tell me everything about user U-001.".into()),
+        )
+        .await;
+    runtime.shutdown().await?;
+    let result = result?;
     println!("status: {}", result.status);
     println!("output: {}", result.output);
 
     println!("\n=== Scenario 2: Non-PII question \u{2014} guardrails pass ===");
     let mut clean_agent = AgentDef::new("dept_assistant")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions("You are an HR assistant. Answer questions about departments.");
     for g in build_guardrails()? {
         clean_agent = clean_agent.with_guardrail(g);
     }
 
-    let result2 = run_with_local_tools(
-        &config,
-        &clean_agent,
-        Value::String("What departments exist at the company?".into()),
-    )
-    .await?;
+    let mut runtime2 = AgentRuntime::new(config.clone())?;
+    runtime2.serve(&clean_agent).await?;
+    let result2 = runtime2
+        .run(
+            &clean_agent,
+            Value::String("What departments exist at the company?".into()),
+        )
+        .await;
+    runtime2.shutdown().await?;
+    let result2 = result2?;
     println!("status: {}", result2.status);
     println!("output: {}", result2.output);
 

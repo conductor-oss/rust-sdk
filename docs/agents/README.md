@@ -8,15 +8,18 @@ full run.
 
 ```toml
 [dependencies]
-conductor-sdk = { version = "...", features = ["agents"] }
+conductor = { package = "conductor-sdk", version = "0.1.1", features = ["agents"] }
+tokio = { version = "1", features = ["full"] }
 ```
 
-Requirements: a reachable Conductor server with an LLM provider integration configured
-server-side. Replace example model strings with a model enabled on that server.
+The agent APIs are planned for the 0.1.1 release. Requirements: a reachable Conductor server
+with an LLM provider integration configured server-side. Pass a model enabled on that server
+to each example as its first command-line argument.
 
 ## Start here
 
 - [Getting started](getting-started.md) — configure a server and run a basic agent.
+- [Agent examples](examples.md) — runnable SDK programs and their prerequisites.
 - [Deploy · Serve · Run](concepts/deploy-serve-run.md) — choose a runtime mode.
 - [Scheduling](concepts/scheduling.md) — attach cron schedules to a deployed agent.
 
