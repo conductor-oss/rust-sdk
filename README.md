@@ -78,7 +78,7 @@ The [`agents` feature](Cargo.toml) includes worker macros.
 
 ## Agent quickstart
 
-Once 0.1.2 is published, configure a model on your server. Create a project and add the `agents` dependencies above to its `Cargo.toml`:
+Once 0.1.2 is published, configure a provider and model on your Conductor server. Create a project and add the `agents` dependencies above to its `Cargo.toml`:
 
 ```shell
 cargo new conductor-agent-demo
@@ -107,12 +107,7 @@ async fn main() -> Result<()> {
         .with_model(model)
         .with_instructions("You are a friendly assistant. Keep responses brief.");
 
-    let result = runtime
-        .run(
-            &agent,
-            "Say hello and tell me a fun fact about Python.".into(),
-        )
-        .await?;
+    let result = runtime.run(&agent, "Say hello.".into()).await?;
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);
@@ -134,6 +129,7 @@ cargo run -- openai/gpt-4o-mini
 ```
 
 The [checked-in example](examples/agent_quickstart.rs) uses the same code.
+Expect `status: COMPLETED`, model output, and an execution ID.
 
 See the [agent guide](docs/agents/README.md) and [examples](docs/agents/examples.md) for more.
 
@@ -276,7 +272,7 @@ Workers are Rust functions that execute Conductor tasks. Use the `#[worker]` mac
 - register it as a worker (auto-discovered by `TaskHandler`)
 - use it as a workflow task (call it with `task_ref_name=...`)
 
-Note: Workers can also be used by LLMs for tool calling (see [AI & LLM Workflows](#ai--llm-workflows)).
+Workers can also serve as agent tools. See [Conductor agents](#conductor-agents).
 
 ```rust
 use conductor_macros::worker;
@@ -426,42 +422,28 @@ workflow_client.restart_workflow(&workflow_id, false).await?;
 - **Worker stops polling**: `TaskHandler` monitors workers. Use `task_handler.is_healthy()` for health checks.
 - **Connection issues**: Verify `CONDUCTOR_SERVER_URL` is correct and server is running.
 - **Authentication failures**: For Orkes Conductor, ensure `CONDUCTOR_AUTH_KEY` and `CONDUCTOR_AUTH_SECRET` are valid.
+- **Agent cannot call a model**: Check the provider and model configured on the Conductor server.
 
 ---
 
-## AI & LLM Workflows
+## Conductor agents
 
-Conductor supports AI-native workflows including agentic tool calling, RAG pipelines, and multi-agent orchestration.
+The `agents` feature supports local tools, human approval, guardrails, and multi-agent runs.
+Configure a model on your Conductor server, then try:
 
-**Agentic Workflows**
-
-Build AI agents where LLMs dynamically select and call Rust workers as tools. See [examples/](examples/) for all examples.
-
-| Example | Description |
-|---------|-------------|
-| [llm_chat_example.rs](examples/llm_chat_example.rs) | Automated multi-turn science Q&A between two LLMs |
-| [llm_chat_human_in_loop.rs](examples/llm_chat_human_in_loop.rs) | Interactive chat with WAIT task pauses for user input |
-| [multiagent_chat.rs](examples/multiagent_chat.rs) | Multi-agent discussion with expert, critic, and synthesizer |
-| [function_calling_example.rs](examples/function_calling_example.rs) | LLM picks which function to call based on user queries |
-| [agentic_workflow.rs](examples/agentic_workflow.rs) | AI agent with tool calling and switch-based routing |
-
-**LLM and RAG Workflows**
-
-| Example | Description |
-|---------|-------------|
-| [rag_workflow.rs](examples/rag_workflow.rs) | End-to-end RAG: text indexing, semantic search, answer generation |
-| [vector_db_example.rs](examples/vector_db_example.rs) | Vector database operations with embedding generation |
+| Example | Shows |
+|---|---|
+| [Simple tools](examples/agent_demo_02a_simple_tools.rs) | Rust function tools |
+| [Human approval](examples/agent_demo_09_human_in_the_loop.rs) | Terminal approval for a tool call |
+| [Parallel agents](examples/agent_demo_07_parallel_agents.rs) | Multi-agent execution |
 
 ```shell
-# Automated multi-turn chat
-cargo run --example llm_chat_example
-
-# Multi-agent discussion
-cargo run --example multiagent_chat
-
-# RAG pipeline
-cargo run --example rag_workflow
+cargo run --example agent_demo_02a_simple_tools --features agents -- openai/gpt-4o-mini
 ```
+
+See the [agent guide](docs/agents/README.md) and [full example list](docs/agents/examples.md).
+For LLM and RAG workflows built with the core SDK, see [llm_chat_example.rs](examples/llm_chat_example.rs)
+and [rag_workflow.rs](examples/rag_workflow.rs).
 
 ## Examples
 
