@@ -4,17 +4,34 @@ Every example in this list is a standalone Rust program that imports public `con
 types. They accept a configured `provider/model` as their first command-line argument. Nothing
 in an example silently selects a model.
 
-Run an example from the repository after setting `CONDUCTOR_SERVER_URL` to your server's `/api`
-endpoint:
+Start with the [simple tools example](../../examples/agent_demo_02a_simple_tools.rs). It uses
+Rust function tools, so it needs no HTTP service, MCP server, or credential variables. With a
+Conductor server on port 8080 and `openai/gpt-4o-mini` configured on that server, run:
 
 ```shell
-cargo run --example agent_quickstart --features agents -- openai/gpt-4o-mini
+export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+cargo run --example agent_demo_02a_simple_tools --features agents -- openai/gpt-4o-mini
 ```
 
-Once the 0.1.1 crate is published, copy an example's source into `src/main.rs` of a Cargo
-application with the [agent dependencies](../../README.md#install-the-sdk), then use
-`cargo run -- provider/model`. The Rust closures in the tool examples return sample application
-data; replace their bodies with your own service calls while keeping the SDK calls shown.
+It prints `status: COMPLETED` and an answer using the local `get_weather` tool. Replace the
+model argument with any `provider/model` configured on your server. The
+[`agent_quickstart` example](../../examples/agent_quickstart.rs) is an even smaller agent
+without tools.
+
+Once 0.1.1 is published, you can copy the simple tools source into a new Cargo application's
+`src/main.rs` with these dependencies:
+
+```toml
+[dependencies]
+conductor = { package = "conductor-sdk", version = "0.1.1", features = ["agents"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+```
+
+Run that application with `cargo run -- openai/gpt-4o-mini`. The Rust closures return sample
+application data; replace their bodies with your own service calls while keeping the SDK calls
+shown. Other examples may need additional dependencies listed in their imports.
 
 | Example | What it demonstrates | Extra setup |
 |---|---|---|
