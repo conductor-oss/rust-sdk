@@ -107,7 +107,12 @@ async fn main() -> Result<()> {
         .with_model(model)
         .with_instructions("You are a friendly assistant. Keep responses brief.");
 
-    let result = runtime.run(&agent, "Say hello.".into()).await?;
+    let result = runtime
+        .run(
+            &agent,
+            "Say hello and tell me a fun fact about Python.".into(),
+        )
+        .await?;
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);

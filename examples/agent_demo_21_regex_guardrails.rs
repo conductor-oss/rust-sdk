@@ -96,15 +96,13 @@ async fn main() -> Result<()> {
         clean_agent = clean_agent.with_guardrail(g);
     }
 
-    let mut runtime2 = AgentRuntime::new(config.clone())?;
-    runtime2.serve(&clean_agent).await?;
+    let runtime2 = AgentRuntime::new(config.clone())?;
     let result2 = runtime2
         .run(
             &clean_agent,
             Value::String("What departments exist at the company?".into()),
         )
         .await;
-    runtime2.shutdown().await?;
     let result2 = result2?;
     println!("status: {}", result2.status);
     println!("output: {}", result2.output);

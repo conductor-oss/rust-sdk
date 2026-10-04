@@ -56,30 +56,26 @@ async fn main() -> Result<()> {
 
     println!("=== Scenario 1: Deep analysis (handoff -> parallel group) ===");
     let coordinator1 = build_coordinator(&model)?;
-    let mut runtime = AgentRuntime::new(config.clone())?;
-    runtime.serve(&coordinator1).await?;
+    let runtime = AgentRuntime::new(config.clone())?;
     let result = runtime
         .run(
             &coordinator1,
             Value::String("Provide a deep analysis of entering the AI healthcare market.".into()),
         )
         .await;
-    runtime.shutdown().await?;
     let result = result?;
     println!("status: {}", result.status);
     println!("output: {}", result.output);
 
     println!("\n=== Scenario 2: Quick check (handoff -> single agent) ===");
     let coordinator2 = build_coordinator(&model)?;
-    let mut runtime2 = AgentRuntime::new(config.clone())?;
-    runtime2.serve(&coordinator2).await?;
+    let runtime2 = AgentRuntime::new(config.clone())?;
     let result2 = runtime2
         .run(
             &coordinator2,
             Value::String("Is the mobile app market still growing?".into()),
         )
         .await;
-    runtime2.shutdown().await?;
     let result2 = result2?;
     println!("status: {}", result2.status);
     println!("output: {}", result2.output);

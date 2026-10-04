@@ -375,6 +375,7 @@ jobs:
       # check-playback from persisted task data, never by anything here.
       - name: Run agent examples
         run: |
+          set -o pipefail
           mkdir -p tmp/agent-playback
           status=0
           for file in examples/agent_quickstart.rs examples/agent_demo_*.rs; do
