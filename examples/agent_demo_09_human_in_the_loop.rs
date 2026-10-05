@@ -1,12 +1,9 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
 use conductor::agents::{AgentDef, AgentResult, AgentRuntime, ToolDef};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -28,6 +25,13 @@ struct TransferArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
+    let auto_approve = std::env::args().nth(2).as_deref() == Some("--approve");
     let config = Configuration::from_env();
 
     let check_balance = ToolDef::function(
@@ -67,7 +71,7 @@ async fn main() -> Result<()> {
     .with_approval_required(true);
 
     let agent = AgentDef::new("banker")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You are a banking assistant. Use check_balance for balance inquiries. \
              When asked to transfer money, first check the balance, then call \
@@ -77,13 +81,8 @@ async fn main() -> Result<()> {
         .with_tool(check_balance)
         .with_tool(transfer_funds);
 
-    let mut server_runtime = AgentRuntime::new(config.clone())?;
-    let serve_agent = agent.clone();
-    let server = tokio::spawn(async move {
-        let _ = server_runtime.serve(&serve_agent).await;
-    });
-
-    let runtime = AgentRuntime::new(config.clone())?;
+    let mut runtime = AgentRuntime::new(config.clone())?;
+    runtime.serve(&agent).await?;
     let handle = runtime
         .start(
             &agent,
@@ -91,24 +90,33 @@ async fn main() -> Result<()> {
         )
         .await?;
 
+    let mut responded = false;
     let result = loop {
         let status = handle.status().await?;
         if status.is_terminal() {
             break AgentResult::from_status(status);
         }
-        if status.is_waiting {
-            println!("[human-in-the-loop] approving pending tool call");
-            // The shared recording's reviewer answered "y" for the approval schema's `reason`
-            // field. `handle.approve()` alone sends `{"approved": true}` with no `reason`, which
-            // wouldn't reproduce the recorded "Human reviewer feedback" message, so `respond` is
-            // used directly.
+        if status.is_waiting && !responded {
+            let approved = if auto_approve {
+                true
+            } else {
+                println!("Approve the pending transfer? [y/N]");
+                let mut answer = String::new();
+                std::io::stdin().read_line(&mut answer).map_err(|error| {
+                    ConductorError::agent(format!("Could not read approval: {error}"))
+                })?;
+                answer.trim().eq_ignore_ascii_case("y")
+            };
             handle
-                .respond(&json!({ "approved": true, "reason": "y" }))
+                .respond(
+                    &json!({ "approved": approved, "reason": if approved { "y" } else { "n" } }),
+                )
                 .await?;
+            responded = true;
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
     };
-    server.abort();
+    runtime.shutdown().await?;
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);

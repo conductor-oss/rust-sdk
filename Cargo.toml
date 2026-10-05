@@ -1,6 +1,6 @@
 [package]
 name = "conductor-sdk"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Rust SDK for Netflix Conductor workflow orchestration"
@@ -56,6 +56,9 @@ std_instead_of_core = "allow"
 std_instead_of_alloc = "allow"
 # Contradicts the `foo/mod.rs` layout already used throughout (src/agents/mod.rs, etc.).
 mod_module_files = "allow"
+# Public module entry points and schema helpers live in `mod.rs` by design;
+# moving each item to a separate file would fragment the established layout.
+definition_in_module_root = "allow"
 # Fires on every `#[cfg(test)] mod tests { ... }` block -- this crate's universal
 # test-organization convention.
 inline_modules = "allow"
@@ -70,6 +73,9 @@ shadow_reuse = "allow"
 shadow_unrelated = "allow"
 # Very opinionated about deref patterns in `match`; low signal-to-noise here.
 pattern_type_mismatch = "allow"
+# Matching an error variant while ignoring its unrelated fields keeps control-flow
+# checks readable and resilient to new fields on those variants.
+rest_pattern_accessible_field = "allow"
 # Flags idiomatic short names (`i`, `e`, `k`, `v` in loops/closures/comprehensions).
 min_ident_chars = "allow"
 # A catch-all `_ =>` arm is sometimes deliberate (forward-compatibility with new variants),
@@ -103,6 +109,9 @@ use_debug = "allow"
 # workflow if it exists, don't fail the test either way") is a deliberate, common pattern, not
 # an oversight.
 unused_result_ok = "allow"
+# `assert!(collection.is_empty())` states the test condition directly; the
+# replacement can require noisy type annotations and may expose credentials.
+assert_is_empty = "allow"
 # Every `tests/*.rs` integration-test file is its own crate by Cargo convention, with top-level
 # `#[test]` fns -- there is no nested `#[cfg(test)] mod tests` to put them in (that convention
 # is for unit tests colocated in `src/`, and those already follow it).
@@ -283,7 +292,7 @@ dotenvy = "0.15"
 schemars = "0.8"
 
 # Procedural macros (optional feature)
-conductor-macros = { version = "0.1.0", path = "conductor-macros", optional = true }
+conductor-macros = { version = "0.2.0", path = "conductor-macros", optional = true }
 
 # Guardrail pattern matching (agents feature)
 regex = { version = "1", optional = true }

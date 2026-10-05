@@ -5,22 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-05
 
-### Changed
+### Added
 
-- Integration tests: `orkes_client_tests.rs`'s secret read tests (`get`/`list`/`exists`) now assert for real against OSS Conductor, using a dummy env-backed secret seeded in `scripts/docker-compose-oss.yaml`; secret writes (`put`/`delete`) are asserted to fail with a real `501` on OSS (read-only backend) instead of being skipped
-- **Breaking.** Response shapes corrected against both server families. `conductor-sdk 0.1.0` is published, and Cargo treats the minor version as the compatibility axis below 1.0 (`0.1` resolves to `>=0.1.0, <0.2.0`), so these must ship as `0.2.0` -- released as `0.1.1` they would break existing dependents on `cargo update`:
-  - `EventClient::get_all_queue_configurations` returns `HashMap<String, String>` instead of `Vec<QueueConfiguration>`, matching Orkes' `Map<String, String> getQueueNames()`
-  - `CreatedAccessKey` no longer has a `status` field -- the server's `CreateAccessKeyResponse` is `{id, secret}`; `status` exists only on the `AccessKeyResponse` returned by the list/toggle endpoints
-  - `AuthorizationClient::get_granted_permissions_for_{user,group}` unwrap the server's `{"grantedAccess": [...]}` envelope, and `GrantedPermission` gained the `tag` field the server sends
-  - `WorkflowSchedule` dropped its top-level `workflow_name` and `workflow_version`; neither server family has such a field, both nest the values under `startWorkflowRequest`. Its `update_time` is renamed `updated_time` (the server sends `updatedTime`), and `paused_reason`/`description` were added
+- Conductor agents (`agents` feature): tools, handoffs, approval, guardrails, scheduling, and streaming.
+- Runnable agent examples and a quickstart with explicit `provider/model` selection.
+
+### Breaking changes
+
+- `EventClient::get_all_queue_configurations` now returns `HashMap<String, String>` instead of `Vec<QueueConfiguration>`.
+- `CreatedAccessKey` no longer has a `status` field. Use `AccessKey` from list or toggle responses when status is needed.
+- `AuthorizationClient::get_granted_permissions_for_user` and `get_granted_permissions_for_group` now return the `grantedAccess` entries directly. `GrantedPermission` also has an optional `tag` field.
+- `WorkflowSchedule` stores workflow name and version in `start_workflow_request` instead of top-level fields. Its `update_time` field is now `updated_time`, and it includes `paused_reason` and `description`.
+- `TestWorkflowRequest` replaces `workflow_input` with `input` and changes `task_ref_to_mock_output` values from one output map to a sequence of `TaskMock` attempts. `with_mock_output` now appends a completed attempt; use `with_mock_outputs` to replace a sequence.
+- `WorkerConfig` adds `lease_extend_enabled` and `lease_extend_threshold`; struct literals must set both fields. `WorkerConfig::new` and `Default` provide defaults.
+- With the `agents` feature enabled, `ConductorError` adds `Agent`, `CredentialNotFound`, and `TerminalTool`. Exhaustive matches on the enum must handle them.
 
 ### Fixed
 
-- `SecretClient::get_secret` reads the response as raw text rather than parsing it as JSON. `GET /secrets/{key}` is declared `produces = MediaType.TEXT_PLAIN_VALUE` on both OSS (`SecretController`) and Orkes (`SecretResource`)
-- `SecretClient::list_all_secret_names` sends `POST /secrets`, not `GET`. The two verbs are different operations on both server families: `POST` lists every secret name, `GET` lists only the names the caller has access to. They agree on OSS, which has no RBAC, so the wrong verb went unnoticed there while silently returning an access-filtered subset against Orkes. `list_secrets_that_user_can_grant_access_to` keeps `GET` and drops the `grantable=true` parameter, which no server reads
-- `SchedulerClient::pause_schedule`/`resume_schedule` send `PUT` first and fall back to `GET` on a `405`. OSS Conductor maps these as `@PutMapping` only; Orkes Conductor accepts both verbs as of the dual `@RequestMapping(method = {GET, PUT})` added in 2026-07, and is `GET`-only in deployments older than that. `pause_all_schedules`, `resume_all_schedules` and `requeue_all_execution_records` remain `GET`, which is how both families map those admin endpoints -- `tests/scheduler_verb_fallback_tests.rs` pins the whole contract
+- Secret reads now parse the server's plain-text response. Secret name listing uses `POST /secrets`; grantable secret listing uses `GET` without `grantable=true`.
+- Schedule pause and resume use `PUT`, with a `GET` fallback on `405` for older Orkes servers.
 
 ## [0.1.0] - 2026-06-29
 

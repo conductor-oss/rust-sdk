@@ -147,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "conductor-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "conductor-sdk"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -540,7 +540,7 @@ dependencies = [
 
 [[package]]
 name = "harness"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "conductor-sdk",

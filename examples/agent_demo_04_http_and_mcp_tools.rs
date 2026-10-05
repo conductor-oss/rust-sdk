@@ -1,16 +1,13 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
+use conductor::agents::AgentRuntime;
 use conductor::agents::{AgentDef, ToolDef};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use support::run_with_local_tools;
 
 #[derive(Deserialize)]
 struct ReportArgs {
@@ -20,7 +17,25 @@ struct ReportArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
+    let http_url = std::env::var("CONDUCTOR_EXAMPLE_HTTP_REVERSE_URL").map_err(|error| {
+        ConductorError::agent(format!("Set CONDUCTOR_EXAMPLE_HTTP_REVERSE_URL: {error}"))
+    })?;
+    let mcp_url = std::env::var("CONDUCTOR_EXAMPLE_MCP_URL").map_err(|error| {
+        ConductorError::agent(format!("Set CONDUCTOR_EXAMPLE_MCP_URL: {error}"))
+    })?;
+    let http_credential = std::env::var("CONDUCTOR_EXAMPLE_HTTP_CREDENTIAL").map_err(|error| {
+        ConductorError::agent(format!("Set CONDUCTOR_EXAMPLE_HTTP_CREDENTIAL: {error}"))
+    })?;
+    let mcp_credential = std::env::var("CONDUCTOR_EXAMPLE_MCP_CREDENTIAL").map_err(|error| {
+        ConductorError::agent(format!("Set CONDUCTOR_EXAMPLE_MCP_CREDENTIAL: {error}"))
+    })?;
 
     let format_report = ToolDef::function(
         "format_report",
@@ -44,13 +59,13 @@ async fn main() -> Result<()> {
     let mut reverse_api = ToolDef::http(
         "reverse_string",
         "Reverse a string using the HTTP API",
-        "http://localhost:3001/api/string/reverse",
+        http_url,
         "POST",
         HashMap::from([(
             "Authorization".to_owned(),
-            "Bearer ${HTTP_TEST_API_KEY}".to_owned(),
+            format!("Bearer ${{{http_credential}}}"),
         )]),
-        vec!["HTTP_TEST_API_KEY".to_owned()],
+        vec![http_credential],
     )?;
     reverse_api.input_schema = json!({
         "type": "object",
@@ -61,20 +76,20 @@ async fn main() -> Result<()> {
     });
 
     let mcp_test_tools = ToolDef::mcp(
-        "http://localhost:3001/mcp",
+        mcp_url,
         "mcp_test_tools",
         "Deterministic test tools via MCP \u{2014} math, string, collection, encoding, hash, datetime, validation, and conversion operations.",
         HashMap::from([(
             "Authorization".to_owned(),
-            "Bearer ${MCP_TEST_API_KEY}".to_owned(),
+            format!("Bearer ${{{mcp_credential}}}"),
         )]),
         None,
         64,
-        vec!["MCP_TEST_API_KEY".to_owned()],
+        vec![mcp_credential],
     )?;
 
     let agent = AgentDef::new("http_tools_demo")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You can reverse strings and format reports. \
              When asked to reverse a string, use reverse_string first, then format_report with the result.",
@@ -83,14 +98,13 @@ async fn main() -> Result<()> {
         .with_tool(reverse_api)
         .with_tool(mcp_test_tools);
 
-    let result = run_with_local_tools(
-        &config,
-        &agent,
-        Value::String(
+    let mut runtime = AgentRuntime::new(config.clone())?;
+    runtime.serve(&agent).await?;
+    let result = runtime.run(&agent, Value::String(
             "Reverse the string 'hello world' and add 33 and 21 append the result to that string, then write a report with the result.".into(),
-        ),
-    )
-    .await?;
+        )).await;
+    runtime.shutdown().await?;
+    let result = result?;
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);

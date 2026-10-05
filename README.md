@@ -2,59 +2,49 @@
 
 [![CI](https://github.com/conductor-oss/rust-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/conductor-oss/rust-sdk/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/conductor-sdk.svg)](https://crates.io/crates/conductor-sdk)
-[![Rust Versions](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org/)
+[![Rust Versions](https://img.shields.io/badge/rust-1.85%2B-blue.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/crates/l/conductor-sdk.svg)](LICENSE)
 
-Rust SDK for [Conductor](https://www.conductor-oss.org/) (OSS and Orkes Conductor) — an orchestration platform for building distributed applications, AI agents, and workflow-driven microservices. Define workflows as code, run workers anywhere, and let Conductor handle retries, state management, and observability.
+Build agents, workflows, and workers in Rust with [Conductor](https://www.conductor-oss.org/).
 
-If you find [Conductor](https://github.com/conductor-oss/conductor) useful, please consider giving it a star on GitHub -- it helps the project grow.
+See the [agent quickstart](#agent-quickstart) or [workflow quickstart](#60-second-quickstart).
+[Conductor Skills](https://github.com/conductor-oss/conductor-skills) helps coding agents work with Conductor.
 
-[![GitHub stars](https://img.shields.io/github/stars/conductor-oss/conductor.svg?style=social&label=Star&maxAge=)](https://GitHub.com/conductor-oss/conductor/)
+## Choose your Conductor server
 
-<!-- TOC -->
-* [Rust SDK for Conductor](#rust-sdk-for-conductor)
-  * [Start Conductor server](#start-conductor-server)
-  * [Install the SDK](#install-the-sdk)
-  * [60-Second Quickstart](#60-second-quickstart)
-  * [Comprehensive worker example](#comprehensive-worker-example)
-  * [Workers](#workers)
-  * [Monitoring Workers](#monitoring-workers)
-  * [Workflows](#workflows)
-  * [Troubleshooting](#troubleshooting)
-  * [AI & LLM Workflows](#ai--llm-workflows)
-  * [Examples](#examples)
-  * [API Journey Examples](#api-journey-examples)
-  * [Documentation](#documentation)
-  * [Support](#support)
-  * [Frequently Asked Questions](#frequently-asked-questions)
-  * [License](#license)
-<!-- TOC -->
+Use a hosted or local Conductor server for the examples below.
 
-## Start Conductor server
+### Recommended: Orkes Developer Edition
 
-If you don't already have a Conductor server running, pick one:
+In [Orkes Developer Edition](https://developer.orkescloud.com/), create an application and access key, then set:
 
-**Docker Compose (recommended, includes UI):**
+```shell
+export CONDUCTOR_SERVER_URL=https://developer.orkescloud.com/api
+export CONDUCTOR_AUTH_KEY=<your-key-id>
+export CONDUCTOR_AUTH_SECRET=<your-key-secret>
+```
+
+For another remote cluster, use its `/api` URL and credentials.
+
+### Local: Conductor CLI
+
+```shell
+npm install -g @conductor-oss/conductor-cli
+conductor server start
+conductor server status
+export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+```
+
+### Local: Docker Compose
 
 ```shell
 docker compose -f scripts/docker-compose-oss.yaml up -d
-```
-The UI will be available at `http://localhost:8080` and the API at `http://localhost:8080/api`
-
-**MacOS / Linux (one-liner):** (If you don't want to use docker, you can install and run the binary directly)
-```shell
-curl -sSL https://raw.githubusercontent.com/conductor-oss/conductor/main/conductor_server.sh | sh
+export CONDUCTOR_SERVER_URL=http://localhost:8080/api
 ```
 
-**Conductor CLI**
-```shell
-# Installs conductor cli
-npm install -g @conductor-oss/conductor-cli
+The Compose server UI is at [http://localhost:8080](http://localhost:8080).
 
-# Start the open source conductor server
-conductor server start
-# see conductor server --help for all the available commands
-```
+Requires Rust 1.85 or newer and a reachable Conductor server. See [CI](.github/workflows/ci.yml) for tested server versions.
 
 ## Install the SDK
 
@@ -64,7 +54,7 @@ Add the following to your `Cargo.toml`:
 [dependencies]
 # The crate is published as `conductor-sdk`; rename it to `conductor` so
 # `use conductor::...` works in your code.
-conductor = { version = "0.1", package = "conductor-sdk" }
+conductor = { version = "0.2.0", package = "conductor-sdk" }
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -72,10 +62,81 @@ For the `#[worker]` macro (similar to Python's `@worker_task` decorator):
 
 ```toml
 [dependencies]
-conductor = { version = "0.1", package = "conductor-sdk", features = ["macros"] }
-conductor-macros = "0.1"
+conductor = { version = "0.2.0", package = "conductor-sdk", features = ["macros"] }
+conductor-macros = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 ```
+
+For agents, enable `agents`:
+
+```toml
+conductor = { version = "0.2.0", package = "conductor-sdk", features = ["agents"] }
+tokio = { version = "1", features = ["full"] }
+```
+
+The [`agents` feature](Cargo.toml) includes worker macros.
+
+## Agent quickstart
+
+Configure a provider and model on your Conductor server. Create a project and add the `agents` dependencies above to its `Cargo.toml`:
+
+```shell
+cargo new conductor-agent-demo
+cd conductor-agent-demo
+```
+
+Put this in `src/main.rs`:
+
+```rust
+use conductor::agents::{AgentDef, AgentRuntime};
+use conductor::configuration::Configuration;
+use conductor::error::{ConductorError, Result};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass a configured provider/model as the first argument")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
+    let config = Configuration::from_env();
+    let runtime = AgentRuntime::new(config)?;
+
+    let agent = AgentDef::new("greeter")?
+        .with_model(model)
+        .with_instructions("You are a friendly assistant. Keep responses brief.");
+
+    let result = runtime
+        .run(
+            &agent,
+            "Say hello and tell me a fun fact about Python.".into(),
+        )
+        .await?;
+
+    println!("status: {}", result.status);
+    println!("output: {}", result.output);
+    println!("execution_id: {}", result.execution_id);
+    if !result.is_success() {
+        return Err(ConductorError::agent(format!(
+            "Agent execution ended with status {}",
+            result.status
+        )));
+    }
+    Ok(())
+}
+```
+
+Run with a model configured on your server:
+
+```shell
+cargo run -- openai/gpt-4o-mini
+```
+
+The [checked-in example](examples/agent_quickstart.rs) uses the same code.
+Expect `status: COMPLETED`, model output, and an execution ID.
+
+See the [agent guide](docs/agents/README.md) and [examples](docs/agents/examples.md) for more.
 
 ## 60-Second Quickstart
 
@@ -113,7 +174,12 @@ async fn greet(name: String) -> String {
 
 **Step 3: Run your first workflow app**
 
-Create a `main.rs` with the following:
+Create a Cargo project, add the macro dependencies above to its `Cargo.toml`, then put the following in `src/main.rs`:
+
+```shell
+cargo new greetings
+cd greetings
+```
 
 ```rust
 use conductor::{
@@ -191,7 +257,7 @@ cargo run
 > export CONDUCTOR_AUTH_KEY="your-key"
 > export CONDUCTOR_AUTH_SECRET="your-secret"
 > ```
-> See [Configuration](#configuration) for details.
+> See [Choose your Conductor server](#choose-your-conductor-server) for setup details.
 
 That's it -- you just defined a worker, built a workflow, and executed it. Open the Conductor UI (default:
 [http://localhost:8080](http://localhost:8080)) to see the execution.
@@ -211,7 +277,7 @@ Workers are Rust functions that execute Conductor tasks. Use the `#[worker]` mac
 - register it as a worker (auto-discovered by `TaskHandler`)
 - use it as a workflow task (call it with `task_ref_name=...`)
 
-Note: Workers can also be used by LLMs for tool calling (see [AI & LLM Workflows](#ai--llm-workflows)).
+Workers can also serve as agent tools. See [Conductor agents](#conductor-agents).
 
 ```rust
 use conductor_macros::worker;
@@ -353,7 +419,7 @@ workflow_client.restart_workflow(&workflow_id, false).await?;
 
 **Learn more:**
 - [Workflow Management](docs/WORKFLOW.md) — Start, pause, resume, terminate, retry, search
-- [Workflow Testing](docs/WORKFLOW_TESTING.md) — Unit testing with mock task outputs
+- [Workflow Testing](examples/test_workflows.rs) — Example using mock task outputs
 - [Metadata Management](docs/METADATA.md) — Task & workflow definitions
 
 ## Troubleshooting
@@ -361,42 +427,28 @@ workflow_client.restart_workflow(&workflow_id, false).await?;
 - **Worker stops polling**: `TaskHandler` monitors workers. Use `task_handler.is_healthy()` for health checks.
 - **Connection issues**: Verify `CONDUCTOR_SERVER_URL` is correct and server is running.
 - **Authentication failures**: For Orkes Conductor, ensure `CONDUCTOR_AUTH_KEY` and `CONDUCTOR_AUTH_SECRET` are valid.
+- **Agent cannot call a model**: Check the provider and model configured on the Conductor server.
 
 ---
 
-## AI & LLM Workflows
+## Conductor agents
 
-Conductor supports AI-native workflows including agentic tool calling, RAG pipelines, and multi-agent orchestration.
+The `agents` feature supports local tools, human approval, guardrails, and multi-agent runs.
+Configure a model on your Conductor server, then try:
 
-**Agentic Workflows**
-
-Build AI agents where LLMs dynamically select and call Rust workers as tools. See [examples/](examples/) for all examples.
-
-| Example | Description |
-|---------|-------------|
-| [llm_chat_example.rs](examples/llm_chat_example.rs) | Automated multi-turn science Q&A between two LLMs |
-| [llm_chat_human_in_loop.rs](examples/llm_chat_human_in_loop.rs) | Interactive chat with WAIT task pauses for user input |
-| [multiagent_chat.rs](examples/multiagent_chat.rs) | Multi-agent discussion with expert, critic, and synthesizer |
-| [function_calling_example.rs](examples/function_calling_example.rs) | LLM picks which function to call based on user queries |
-| [agentic_workflow.rs](examples/agentic_workflow.rs) | AI agent with tool calling and switch-based routing |
-
-**LLM and RAG Workflows**
-
-| Example | Description |
-|---------|-------------|
-| [rag_workflow.rs](examples/rag_workflow.rs) | End-to-end RAG: text indexing, semantic search, answer generation |
-| [vector_db_example.rs](examples/vector_db_example.rs) | Vector database operations with embedding generation |
+| Example | Shows |
+|---|---|
+| [Simple tools](examples/agent_demo_02a_simple_tools.rs) | Rust function tools |
+| [Human approval](examples/agent_demo_09_human_in_the_loop.rs) | Terminal approval for a tool call |
+| [Parallel agents](examples/agent_demo_07_parallel_agents.rs) | Multi-agent execution |
 
 ```shell
-# Automated multi-turn chat
-cargo run --example llm_chat_example
-
-# Multi-agent discussion
-cargo run --example multiagent_chat
-
-# RAG pipeline
-cargo run --example rag_workflow
+cargo run --example agent_demo_02a_simple_tools --features agents -- openai/gpt-4o-mini
 ```
+
+See the [agent guide](docs/agents/README.md) and [full example list](docs/agents/examples.md).
+For LLM and RAG workflows built with the core SDK, see [llm_chat_example.rs](examples/llm_chat_example.rs)
+and [rag_workflow.rs](examples/rag_workflow.rs).
 
 ## Examples
 
@@ -430,9 +482,10 @@ End-to-end examples covering all APIs for each domain:
 | Document | Description |
 |----------|-------------|
 | [Worker Guide](docs/WORKER.md) | All worker patterns (function, closure, macro, async) |
+| [Agent Guide](docs/agents/README.md) | Durable agents, tools, and runtime modes |
 | [Worker Configuration](WORKER_CONFIGURATION.md) | Hierarchical environment variable configuration |
 | [Workflow Management](docs/WORKFLOW.md) | Start, pause, resume, terminate, retry, search |
-| [Workflow Testing](docs/WORKFLOW_TESTING.md) | Unit testing with mock outputs |
+| [Workflow Testing](examples/test_workflows.rs) | Example using mock task outputs |
 | [Task Management](docs/TASK_MANAGEMENT.md) | Task operations |
 | [Metadata](docs/METADATA.md) | Task & workflow definitions |
 | [Authorization](docs/AUTHORIZATION.md) | Users, groups, applications, permissions |
@@ -448,6 +501,8 @@ End-to-end examples covering all APIs for each domain:
 - [Open an issue (Conductor server)](https://github.com/conductor-oss/conductor/issues) for Conductor OSS server issues
 - [Join the Conductor Slack](https://join.slack.com/t/orkes-conductor/shared_invite/zt-2vdbx239s-Eacdyqya9giNLHfrCavfaA) for community discussion and help
 - [Orkes Community Forum](https://community.orkes.io/) for Q&A
+- [Conductor OSS contribution guide](https://github.com/conductor-oss/conductor/blob/main/CONTRIBUTING.md) for contributing upstream
+- [Conductor Code of Conduct](https://github.com/conductor-oss/conductor/blob/main/CODE_OF_CONDUCT.md) and [security policy](https://github.com/conductor-oss/conductor/security/policy) for community and private vulnerability reporting
 
 ## Frequently Asked Questions
 
@@ -481,7 +536,7 @@ Yes. A single workflow can have workers written in Rust, Python, Java, Go, or an
 
 **What Rust versions are supported?**
 
-Rust 1.75 and above (2021 edition).
+Rust 1.85 and above (2021 edition), as declared in `Cargo.toml`.
 
 **Should I use `async fn` or regular `fn` for my workers?**
 
@@ -491,9 +546,9 @@ Use `async fn` for I/O-bound tasks (API calls, database queries) — the SDK use
 
 Workers are standard Rust applications. Deploy them as you would any Rust application -- in containers, VMs, or bare metal. Workers poll the Conductor server for tasks, so no inbound ports need to be opened.
 
-**How do I test workflows without running a full Conductor server?**
+**How do I test workflows with mock task outputs?**
 
-The SDK provides a test framework that uses Conductor's `POST /api/workflow/test` endpoint to evaluate workflows with mock task outputs. See [Workflow Testing](docs/WORKFLOW_TESTING.md) for details.
+Conductor's `POST /api/workflow/test` endpoint evaluates workflows with mock task outputs. See the [workflow testing example](examples/test_workflows.rs). This endpoint still requires a running Conductor server.
 
 ## License
 

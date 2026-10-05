@@ -59,9 +59,9 @@ Both crates need proper metadata. The current configuration already includes:
 ```toml
 [package]
 name = "conductor-sdk"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.85"
 description = "Rust SDK for Netflix Conductor workflow orchestration"
 license = "Apache-2.0"
 repository = "https://github.com/conductor-oss/rust-sdk"
@@ -74,7 +74,7 @@ readme = "README.md"
 ```toml
 [package]
 name = "conductor-macros"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.75"
 description = "Procedural macros for Conductor Rust SDK"
@@ -166,7 +166,7 @@ Update version in **both** `Cargo.toml` files:
 Also update the dependency version in the main crate:
 ```toml
 # In root Cargo.toml
-conductor-macros = { path = "conductor-macros", version = "0.1.0", optional = true }
+conductor-macros = { path = "conductor-macros", version = "0.2.0", optional = true }
 ```
 
 ### 7. Update CHANGELOG (if exists)
@@ -177,8 +177,8 @@ Document changes for the new version.
 
 ```shell
 git add -A
-git commit -m "Release v0.1.0"
-git tag v0.1.0
+git commit -m "Release v0.2.0"
+git tag v0.2.0
 git push origin main --tags
 ```
 
@@ -209,7 +209,7 @@ Before publishing the main crate, update the dependency to use the published ver
 conductor-macros = { path = "conductor-macros", optional = true }
 
 # To:
-conductor-macros = { version = "0.1.0", optional = true }
+conductor-macros = { version = "0.2.0", optional = true }
 ```
 
 ### Step 3: Publish conductor-sdk
@@ -223,7 +223,7 @@ cargo publish
 After publishing, revert the dependency for local development:
 
 ```toml
-conductor-macros = { path = "conductor-macros", version = "0.1.0", optional = true }
+conductor-macros = { path = "conductor-macros", version = "0.2.0", optional = true }
 ```
 
 ---

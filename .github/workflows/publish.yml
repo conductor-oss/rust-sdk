@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 0.1.0)'
+        description: 'Version to release (e.g., 0.2.0)'
         required: true
         type: string
 
@@ -30,7 +30,7 @@ jobs:
             VERSION="${{ inputs.version }}"
             VERSION="${VERSION#v}"  # Strip leading 'v' if provided
           else
-            # Extract version from tag (e.g., v0.1.0 -> 0.1.0)
+            # Extract version from tag (e.g., v0.2.0 -> 0.2.0)
             VERSION=${GITHUB_REF#refs/tags/v}
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT

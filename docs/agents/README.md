@@ -1,22 +1,22 @@
 # Conductor Agents — Rust SDK
 
-Build durable, LLM-backed agents on Conductor. Agents run as real Conductor workflows: tool
-calls are ordinary tasks, execution survives process restarts, and the Conductor UI shows the
-full run.
+Conductor agents run as workflows. Tool calls are tasks, and runs survive process restarts.
 
 ## Install
 
 ```toml
 [dependencies]
-conductor-sdk = { version = "...", features = ["agents"] }
+conductor = { package = "conductor-sdk", version = "0.2.0", features = ["agents"] }
+tokio = { version = "1", features = ["full"] }
 ```
 
-Requirements: a reachable Conductor server with an LLM provider integration configured
-server-side. Replace example model strings with a model enabled on that server.
+Configure a model on a reachable Conductor server and
+pass its `provider/model` name as the first argument to each example.
 
 ## Start here
 
 - [Getting started](getting-started.md) — configure a server and run a basic agent.
+- [Agent examples](examples.md) — runnable SDK programs and their prerequisites.
 - [Deploy · Serve · Run](concepts/deploy-serve-run.md) — choose a runtime mode.
 - [Scheduling](concepts/scheduling.md) — attach cron schedules to a deployed agent.
 
@@ -31,12 +31,3 @@ server-side. Replace example model strings with a model enabled on that server.
 
 - [Runtime reference](reference/runtime.md) and [control-plane reference](reference/client.md)
 - [Agent-definition fields](reference/agent-definition.md)
-
-## What Conductor adds
-
-| Capability | Conductor agent runtime |
-|---|---|
-| Process recovery | Durable workflow state resumes after a restart via `AgentRuntime::resume`. |
-| Local tools | Tools run as ordinary Conductor worker tasks, independently scalable. |
-| Long-running work | Human approval and schedules don't occupy application threads. |
-| Observability | Inputs, outputs, tool calls, and status share one execution record in the UI. |

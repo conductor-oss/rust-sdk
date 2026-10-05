@@ -1,17 +1,14 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
+use conductor::agents::AgentRuntime;
 use conductor::agents::{
     AgentDef, FunctionGuardrail, Guardrail, GuardrailResult, OnFail, Position, ToolDef,
 };
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use support::run_with_local_tools;
 
 #[derive(Deserialize)]
 struct OrderArgs {
@@ -38,6 +35,12 @@ fn no_pii(content: &str) -> GuardrailResult {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
 
     let get_order_status = ToolDef::function(
@@ -82,7 +85,7 @@ async fn main() -> Result<()> {
         .with_on_fail(OnFail::Retry)?;
 
     let agent = AgentDef::new("support_agent")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "You are a customer support assistant. Use the available tools to \
              answer questions about orders and customers. Always include all \
@@ -92,16 +95,20 @@ async fn main() -> Result<()> {
         .with_tool(get_customer_info)
         .with_guardrail(no_pii_guardrail);
 
-    let result = run_with_local_tools(
-        &config,
-        &agent,
-        Value::String(
-            "I need a full summary: What's the status of order ORD-42, \
+    let mut runtime = AgentRuntime::new(config.clone())?;
+    runtime.serve(&agent).await?;
+    let result = runtime
+        .run(
+            &agent,
+            Value::String(
+                "I need a full summary: What's the status of order ORD-42, \
              and what's the profile for customer CUST-7?"
-                .into(),
-        ),
-    )
-    .await?;
+                    .into(),
+            ),
+        )
+        .await;
+    runtime.shutdown().await?;
+    let result = result?;
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);

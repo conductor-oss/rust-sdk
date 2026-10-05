@@ -1,15 +1,12 @@
 // Copyright {{.Year}} Conductor OSS
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-#[path = "support/mod.rs"]
-mod support;
-
+use conductor::agents::AgentRuntime;
 use conductor::agents::{AgentDef, Strategy, ToolDef};
 use conductor::configuration::Configuration;
-use conductor::error::Result;
+use conductor::error::{ConductorError, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use support::run_with_local_tools;
 
 #[derive(Deserialize)]
 struct AccountArgs {
@@ -28,6 +25,12 @@ struct ProductArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let model = std::env::args().nth(1).ok_or_else(|| {
+        ConductorError::agent("Pass provider/model as the first argument after --")
+    })?;
+    if model.trim().is_empty() {
+        return Err(ConductorError::agent("Model argument cannot be empty"));
+    }
     let config = Configuration::from_env();
 
     let check_balance = ToolDef::function(
@@ -70,22 +73,22 @@ async fn main() -> Result<()> {
     );
 
     let billing_agent = AgentDef::new("billing")?
-        .with_model(support::llm_model())
+        .with_model(model.clone())
         .with_instructions("You handle billing questions: balances, payments, invoices.")
         .with_tool(check_balance);
 
     let technical_agent = AgentDef::new("technical")?
-        .with_model(support::llm_model())
+        .with_model(model.clone())
         .with_instructions("You handle technical questions: order status, shipping, returns.")
         .with_tool(lookup_order);
 
     let sales_agent = AgentDef::new("sales")?
-        .with_model(support::llm_model())
+        .with_model(model.clone())
         .with_instructions("You handle sales questions: pricing, products, promotions.")
         .with_tool(get_pricing);
 
     let support = AgentDef::new("support")?
-        .with_model(support::llm_model())
+        .with_model(model)
         .with_instructions(
             "Route customer requests to the right specialist: billing, technical, or sales.",
         )
@@ -94,12 +97,16 @@ async fn main() -> Result<()> {
         .with_sub_agent(sales_agent)?
         .with_strategy(Strategy::Handoff)?;
 
-    let result = run_with_local_tools(
-        &config,
-        &support,
-        Value::String("What's the balance on account ACC-123?".into()),
-    )
-    .await?;
+    let mut runtime = AgentRuntime::new(config.clone())?;
+    runtime.serve(&support).await?;
+    let result = runtime
+        .run(
+            &support,
+            Value::String("What's the balance on account ACC-123?".into()),
+        )
+        .await;
+    runtime.shutdown().await?;
+    let result = result?;
 
     println!("status: {}", result.status);
     println!("output: {}", result.output);
