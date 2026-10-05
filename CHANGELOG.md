@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CreatedAccessKey` no longer has a `status` field. Use `AccessKey` from list or toggle responses when status is needed.
 - `AuthorizationClient::get_granted_permissions_for_user` and `get_granted_permissions_for_group` now return the `grantedAccess` entries directly. `GrantedPermission` also has an optional `tag` field.
 - `WorkflowSchedule` stores workflow name and version in `start_workflow_request` instead of top-level fields. Its `update_time` field is now `updated_time`, and it includes `paused_reason` and `description`.
+- `TestWorkflowRequest` replaces `workflow_input` with `input` and changes `task_ref_to_mock_output` values from one output map to a sequence of `TaskMock` attempts. `with_mock_output` now appends a completed attempt; use `with_mock_outputs` to replace a sequence.
+- `WorkerConfig` adds `lease_extend_enabled` and `lease_extend_threshold`; struct literals must set both fields. `WorkerConfig::new` and `Default` provide defaults.
+- With the `agents` feature enabled, `ConductorError` adds `Agent`, `CredentialNotFound`, and `TerminalTool`. Exhaustive matches on the enum must handle them.
 
 ### Fixed
 
