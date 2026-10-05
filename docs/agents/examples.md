@@ -13,11 +13,11 @@ cargo run --example agent_demo_02a_simple_tools --features agents -- openai/gpt-
 Use another configured model if needed. For an agent without tools, see
 [`agent_quickstart`](../../examples/agent_quickstart.rs).
 
-After 0.1.1 is published, you can use the simple tools source in a new project with:
+You can use the simple tools source in a new project with:
 
 ```toml
 [dependencies]
-conductor = { package = "conductor-sdk", version = "0.1.1", features = ["agents"] }
+conductor = { package = "conductor-sdk", version = "0.2.0", features = ["agents"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

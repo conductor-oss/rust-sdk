@@ -74,7 +74,7 @@ Add the SDK to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-conductor = "0.1"
+conductor = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 ```
 

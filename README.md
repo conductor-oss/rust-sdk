@@ -54,7 +54,7 @@ Add the following to your `Cargo.toml`:
 [dependencies]
 # The crate is published as `conductor-sdk`; rename it to `conductor` so
 # `use conductor::...` works in your code.
-conductor = { version = "0.1", package = "conductor-sdk" }
+conductor = { version = "0.2.0", package = "conductor-sdk" }
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -62,15 +62,15 @@ For the `#[worker]` macro (similar to Python's `@worker_task` decorator):
 
 ```toml
 [dependencies]
-conductor = { version = "0.1", package = "conductor-sdk", features = ["macros"] }
-conductor-macros = "0.1"
+conductor = { version = "0.2.0", package = "conductor-sdk", features = ["macros"] }
+conductor-macros = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
-For agents in the planned 0.1.1 release, enable `agents`:
+For agents, enable `agents`:
 
 ```toml
-conductor = { version = "0.1.1", package = "conductor-sdk", features = ["agents"] }
+conductor = { version = "0.2.0", package = "conductor-sdk", features = ["agents"] }
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -78,7 +78,7 @@ The [`agents` feature](Cargo.toml) includes worker macros.
 
 ## Agent quickstart
 
-Once 0.1.1 is published, configure a provider and model on your Conductor server. Create a project and add the `agents` dependencies above to its `Cargo.toml`:
+Configure a provider and model on your Conductor server. Create a project and add the `agents` dependencies above to its `Cargo.toml`:
 
 ```shell
 cargo new conductor-agent-demo

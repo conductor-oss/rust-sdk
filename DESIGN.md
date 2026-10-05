@@ -384,7 +384,7 @@ For a more declarative style similar to Python's `@worker_task` decorator, enabl
 
 ```toml
 [dependencies]
-conductor = { version = "0.1", package = "conductor-sdk", features = ["macros"] }
+conductor = { version = "0.2.0", package = "conductor-sdk", features = ["macros"] }
 ```
 
 Then use the `#[worker]` attribute macro:
