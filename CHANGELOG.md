@@ -5,12 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - 2026-10-05
+## [0.2.0] - 2026-10-05
 
 ### Added
 
 - Conductor agents (`agents` feature): tools, handoffs, approval, guardrails, scheduling, and streaming.
 - Runnable agent examples and a quickstart with explicit `provider/model` selection.
+
+### Breaking changes
+
+- `EventClient::get_all_queue_configurations` now returns `HashMap<String, String>` instead of `Vec<QueueConfiguration>`.
+- `CreatedAccessKey` no longer has a `status` field. Use `AccessKey` from list or toggle responses when status is needed.
+- `AuthorizationClient::get_granted_permissions_for_user` and `get_granted_permissions_for_group` now return the `grantedAccess` entries directly. `GrantedPermission` also has an optional `tag` field.
+- `WorkflowSchedule` stores workflow name and version in `start_workflow_request` instead of top-level fields. Its `update_time` field is now `updated_time`, and it includes `paused_reason` and `description`.
+
+### Fixed
+
+- Secret reads now parse the server's plain-text response. Secret name listing uses `POST /secrets`; grantable secret listing uses `GET` without `grantable=true`.
+- Schedule pause and resume use `PUT`, with a `GET` fallback on `405` for older Orkes servers.
 
 ## [0.1.0] - 2026-06-29
 
