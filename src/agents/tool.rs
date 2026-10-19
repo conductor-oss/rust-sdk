@@ -18,6 +18,8 @@ use super::guardrail::Guardrail;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolType {
     Worker,
+    /// Server-side decision inference, compiled to a synchronous SWITCH task.
+    Decision,
     Http,
     Mcp,
     AgentTool,
@@ -47,6 +49,7 @@ impl ToolType {
     pub fn as_str(&self) -> &'static str {
         match self {
             ToolType::Worker => "worker",
+            ToolType::Decision => "decision",
             ToolType::Http => "http",
             ToolType::Mcp => "mcp",
             ToolType::AgentTool => "agent_tool",
@@ -199,6 +202,21 @@ impl ToolDef {
             handler: None,
             guardrails: Vec::new(),
         }
+    }
+
+    /// A server-side decision tool. No local handler or worker is needed.
+    /// `config` contains `model`, `questions`, and optionally `provider`.
+    #[must_use]
+    pub fn decision(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        input_schema: Value,
+        config: HashMap<String, Value>,
+    ) -> Self {
+        let mut tool = Self::base(name, description, ToolType::Decision);
+        tool.input_schema = input_schema;
+        tool.config = config;
+        tool
     }
 
     /// A locally-invoked function tool. `input_schema` should describe `T`'s shape (typically

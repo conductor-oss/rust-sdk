@@ -469,3 +469,13 @@ required-features = ["agents"]
 [lib]
 name = "conductor"
 path = "src/lib.rs"
+
+[[example]]
+name = "decision_router"
+path = "examples/decision_router.rs"
+required-features = ["agents"]
+
+[[example]]
+name = "decision_tool"
+path = "examples/decision_tool.rs"
+required-features = ["agents"]
