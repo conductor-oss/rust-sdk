@@ -3,7 +3,7 @@
 
 use serde_json::{Map, Value};
 
-use super::def::{sanitize_for_task_name, AgentDef, OutputType};
+use super::def::{sanitize_for_task_name, AgentDef, OutputType, Strategy};
 use super::guardrail::Guardrail;
 use super::memory::{ConversationMemory, Message, ToolCall};
 use super::swarm::SwarmTransition;
@@ -76,7 +76,10 @@ fn serialize_agent(agent: &AgentDef) -> Value {
     );
     map.insert(
         "external".to_owned(),
-        Value::Bool(agent.model.as_deref().unwrap_or("").is_empty()),
+        Value::Bool(
+            agent.model.as_deref().unwrap_or("").is_empty()
+                && !(agent.strategy == Strategy::Router && agent.decision_router.is_some()),
+        ),
     );
 
     if let Some(instructions) = &agent.instructions {
@@ -100,9 +103,17 @@ fn serialize_agent(agent: &AgentDef) -> Value {
         );
     }
 
-    // Router: this SDK version only models an agent-based router, so serialization is always
-    // the recursive full-agent shape.
-    if let Some(router) = &agent.router {
+    if let Some(router) = &agent.decision_router {
+        let mut config = Map::new();
+        config.insert("name".to_owned(), Value::String(router.name.clone()));
+        config.insert("kind".to_owned(), Value::String("decision".to_owned()));
+        for key in ["model", "questions", "provider"] {
+            if let Some(value) = router.config.get(key).filter(|value| !value.is_null()) {
+                config.insert(key.to_owned(), value.clone());
+            }
+        }
+        map.insert("router".to_owned(), Value::Object(config));
+    } else if let Some(router) = &agent.router {
         map.insert("router".to_owned(), serialize_agent(router));
     }
 
@@ -1255,6 +1266,96 @@ mod tests {
         let json = AgentConfigSerializer::serialize(&agent);
         let mem = json.as_object().unwrap().get("memory").unwrap();
         assert!(!mem.as_object().unwrap().contains_key("maxMessages"));
+    }
+
+    #[test]
+    fn test_decision_router_wire_contract() {
+        let questions = serde_json::json!({"agent": {"type": "choice", "choices": {"billing": "Invoices", "technical": "Errors"}}});
+        let mut tool = ToolDef::decision(
+            "selector",
+            "Select support",
+            serde_json::json!({"type": "object"}),
+            [
+                ("model".to_owned(), Value::from("jev-1.13")),
+                ("questions".to_owned(), questions.clone()),
+            ]
+            .into(),
+        );
+        let agent = AgentDef::new("support")
+            .unwrap()
+            .with_sub_agent(
+                AgentDef::new("billing")
+                    .unwrap()
+                    .with_model("openai/gpt-4o-mini"),
+            )
+            .unwrap()
+            .with_decision_router(tool.clone())
+            .unwrap()
+            .with_strategy(Strategy::Router)
+            .unwrap();
+        let config = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(config["external"], false);
+        assert_eq!(config["strategy"], "router");
+        assert_eq!(
+            config["router"],
+            serde_json::json!({
+                "name": "selector", "kind": "decision", "model": "jev-1.13", "questions": questions
+            })
+        );
+        tool.config
+            .insert("provider".to_owned(), Value::from("openrouter"));
+        tool.config.insert("ignored".to_owned(), Value::from(true));
+        let agent = agent.with_decision_router(tool).unwrap();
+        let config = AgentConfigSerializer::serialize(&agent);
+        assert_eq!(config["router"]["provider"], "openrouter");
+        assert!(config["router"].get("ignored").is_none());
+        let legacy = agent.with_router(
+            AgentDef::new("legacy")
+                .unwrap()
+                .with_model("openai/gpt-4o-mini"),
+        );
+        let config = AgentConfigSerializer::serialize(&legacy);
+        assert_eq!(config["router"]["name"], "legacy");
+        assert_eq!(config["external"], true);
+    }
+
+    #[test]
+    fn test_decision_router_rejects_invalid_tools() {
+        let parent = AgentDef::new("support").unwrap();
+        parent
+            .clone()
+            .with_decision_router(ToolDef::human("ask", "Ask"))
+            .unwrap_err();
+        let mut tool = ToolDef::decision(
+            "select",
+            "Select",
+            Value::Null,
+            std::collections::HashMap::new(),
+        );
+        parent
+            .clone()
+            .with_decision_router(tool.clone())
+            .unwrap_err();
+        tool.config
+            .insert("model".to_owned(), Value::from("jev-1.13"));
+        parent.with_decision_router(tool).unwrap_err();
+    }
+
+    #[test]
+    fn test_decision_tool_uses_server_side_wire_contract() {
+        let config = serde_json::json!({"model": "jev-1.13", "questions": {"department": {"type": "choice"}}});
+        let schema = serde_json::json!({"type": "object", "properties": {"state": {"type": "string"}}, "required": ["state"]});
+        let tool = ToolDef::decision(
+            "classify",
+            "Classify",
+            schema.clone(),
+            serde_json::from_value(config.clone()).unwrap(),
+        );
+        assert!(tool.handler.is_none());
+        let value = serialize_tool(&tool);
+        assert_eq!(value["toolType"], "decision");
+        assert_eq!(value["config"], config);
+        assert_eq!(value["inputSchema"], schema);
     }
 
     #[test]

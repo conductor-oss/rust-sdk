@@ -17,7 +17,7 @@ each strategy requires:
 |---|---|
 | `Handoff` (default) | The LLM freely picks the next agent. |
 | `Sequential` / `Parallel` | Deterministic composition over `agents`; the parent needs a model for aggregation — inherited automatically from the first child that has one if the parent doesn't set its own. |
-| `Router` | A router sub-agent (set via `with_router`, required before `with_strategy(Strategy::Router)`) picks the next agent. |
+| `Router` | A router sub-agent (`with_router`) or decision tool (`with_decision_router`) picks the next agent. Set the router before `with_strategy(Strategy::Router)`. A decision router needs `model` and `questions` in its tool config and no model on the parent. |
 | `RoundRobin` / `Random` | Fixed rotation / random selection among sub-agents. |
 | `Swarm` | Rule-based transitions via [`SwarmTransition`] (see below). |
 | `Manual` | The caller selects the next agent externally. |

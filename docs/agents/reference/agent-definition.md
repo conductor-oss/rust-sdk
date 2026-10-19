@@ -5,12 +5,14 @@ policy. Construct with `AgentDef::new` and compose with consuming `with_*` build
 
 Names must match `^[a-zA-Z_][a-zA-Z0-9_-]*$`, since the name doubles as the compiled workflow
 name. An unset `model` is only valid for a `Sequential`/`Parallel` parent that inherits one
-from a sub-agent, or an agent marked via `with_framework`.
+from a sub-agent, an agent marked via `with_framework`, or a router parent using
+`with_decision_router`. A model-less decision router is compiled inline, not treated as an
+external workflow.
 
 | Field | Notes |
 |---|---|
 | `tools`, `agents` | See [tools](../concepts/tools.md) and [multi-agent](../concepts/multi-agent.md). |
-| `strategy`, `router`, `swarm_transitions`, `allowed_transitions` | See [multi-agent](../concepts/multi-agent.md). Router requires `with_router` first; `PlanExecute` requires `with_planner` and at least one tool first. |
+| `strategy`, `router`, `decision_router`, `swarm_transitions`, `allowed_transitions` | See [multi-agent](../concepts/multi-agent.md). Router requires `with_router` or `with_decision_router` first; `PlanExecute` requires `with_planner` and at least one tool first. |
 | `guardrails` | See [guardrails](../concepts/guardrails.md). |
 | `termination` | See [termination](../concepts/termination.md). |
 | `memory` | See [stateful agents](../concepts/stateful.md). |

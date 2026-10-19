@@ -13,9 +13,9 @@ use super::guardrail::Guardrail;
 use super::memory::ConversationMemory;
 use super::swarm::SwarmTransition;
 use super::termination::TerminationCondition;
-use super::tool::ToolDef;
+use super::tool::{ToolDef, ToolType};
 
-/// Multi-agent orchestration strategy. `Router` requires a router sub-agent (see
+/// Multi-agent orchestration strategy. `Router` requires a router (see
 /// [`AgentDef::with_router`]); `Swarm` requires `swarm_transitions` (see
 /// [`AgentDef::with_swarm_transition`]); `PlanExecute` requires a planner (see
 /// [`AgentDef::with_planner`]).
@@ -26,7 +26,7 @@ pub enum Strategy {
     Handoff,
     Sequential,
     Parallel,
-    /// Requires a router sub-agent set via [`AgentDef::with_router`].
+    /// Requires [`AgentDef::with_router`] or [`AgentDef::with_decision_router`].
     Router,
     RoundRobin,
     Random,
@@ -201,7 +201,7 @@ impl RunSettings {
 /// Declarative agent definition.
 ///
 /// `Guardrail`, `TerminationCondition`, `SwarmTransition`, `ConversationMemory`, `Router`
-/// (agent-based only — see [`AgentDef::router`]), and `PlanExecute`'s composition fields are
+/// (agent or decision tool — see [`AgentDef::router`]), and `PlanExecute`'s composition fields are
 /// all fully wired. `CallbackHandler` is registered (`callbacks`) but deliberately not
 /// serialized — see `serializer.rs`.
 ///
@@ -220,9 +220,10 @@ pub struct AgentDef {
     pub guardrails: Vec<Guardrail>,
     pub agents: Vec<AgentDef>,
     /// Sub-agent that picks which agent runs each turn, used when `strategy =
-    /// Strategy::Router`. Only the agent-based form is modeled — a callable-based router is
-    /// out of scope.
+    /// Strategy::Router`. See [`AgentDef::with_decision_router`] for a decision selector.
     pub router: Option<Box<AgentDef>>,
+    /// Server-side decision selector, mutually exclusive with `router`.
+    pub decision_router: Option<ToolDef>,
     /// Structured-output typing for the agent's final response.
     pub output_type: Option<OutputType>,
     /// Rule-based agent-to-agent transitions, used when `strategy = Strategy::Swarm`.
@@ -316,6 +317,7 @@ impl std::fmt::Debug for AgentDef {
             .field("framework", &self.framework)
             .field("framework_config", &self.framework_config)
             .field("router", &self.router)
+            .field("decision_router", &self.decision_router)
             .field(
                 "swarm_transitions",
                 &format!("<{} transitions>", self.swarm_transitions.len()),
@@ -354,6 +356,7 @@ impl AgentDef {
             guardrails: Vec::new(),
             agents: Vec::new(),
             router: None,
+            decision_router: None,
             output_type: None,
             swarm_transitions: Vec::new(),
             allowed_transitions: HashMap::new(),
@@ -463,7 +466,46 @@ impl AgentDef {
     #[must_use]
     pub fn with_router(mut self, router: AgentDef) -> Self {
         self.router = Some(Box::new(router));
+        self.decision_router = None;
         self
+    }
+
+    /// Set a decision tool as the router, before calling `with_strategy(Strategy::Router)`.
+    /// The selector runs on the server without a model on the parent or a local worker.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConductorError::Agent`] unless the tool is a decision tool with a nonempty
+    /// `model` and `questions` in its config.
+    pub fn with_decision_router(mut self, router: ToolDef) -> Result<Self> {
+        if router.tool_type != ToolType::Decision {
+            return Err(ConductorError::agent(
+                "Only a decision tool can be used as a router",
+            ));
+        }
+        if router
+            .config
+            .get("model")
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty)
+        {
+            return Err(ConductorError::agent(
+                "Decision router tool config requires 'model'",
+            ));
+        }
+        if router
+            .config
+            .get("questions")
+            .and_then(Value::as_object)
+            .is_none_or(serde_json::Map::is_empty)
+        {
+            return Err(ConductorError::agent(
+                "Decision router tool config requires 'questions'",
+            ));
+        }
+        self.decision_router = Some(router);
+        self.router = None;
+        Ok(self)
     }
 
     /// Set structured-output typing for the agent's final response. Follows
@@ -515,9 +557,9 @@ impl AgentDef {
     ///
     /// Returns [`crate::error::ConductorError::Agent`] if `strategy` requires a composition field (router/planner/tools) that hasn't been set yet -- see the per-strategy notes above.
     pub fn with_strategy(mut self, strategy: Strategy) -> Result<Self> {
-        if strategy == Strategy::Router && self.router.is_none() {
+        if strategy == Strategy::Router && self.router.is_none() && self.decision_router.is_none() {
             return Err(ConductorError::agent(
-                "strategy='router' requires a router argument: call with_router(...) before \
+                "strategy='router' requires with_router(...) or with_decision_router(...) before \
                  with_strategy(Strategy::Router)",
             ));
         }

@@ -460,11 +460,18 @@ See the examples directory for the full catalog. Key examples:
 | [hello_world.rs](examples/hello_world.rs) | Minimal hello world | `cargo run --example hello_world` |
 | [dynamic_workflow.rs](examples/dynamic_workflow.rs) | Build workflows programmatically | `cargo run --example dynamic_workflow` |
 | [llm_chat_example.rs](examples/llm_chat_example.rs) | AI multi-turn chat | `cargo run --example llm_chat_example` |
+| [ai_decision_routing.rs](examples/ai_decision_routing.rs) | JEV decision SWITCH with billing/technical branches | `cargo run --example ai_decision_routing` |
+| [decision_router.rs](examples/decision_router.rs) | Decision tool routes to a billing or technical chat agent | `cargo run --features agents --example decision_router -- --run` |
+| [decision_tool.rs](examples/decision_tool.rs) | Chat agent calls a server-side decision tool | `cargo run --features agents --example decision_tool` |
 | [rag_workflow.rs](examples/rag_workflow.rs) | RAG pipeline | `cargo run --example rag_workflow` |
 | [task_context_example.rs](examples/task_context_example.rs) | Long-running tasks with TaskContext | `cargo run --example task_context_example` |
 | [workflow_ops.rs](examples/workflow_ops.rs) | Pause, resume, terminate workflows | `cargo run --example workflow_ops` |
 | [test_workflows.rs](examples/test_workflows.rs) | Unit testing workflows | `cargo run --example test_workflows` |
 | [kitchensink.rs](examples/kitchensink.rs) | All task types (HTTP, JS, JQ, Switch) | `cargo run --example kitchensink` |
+
+Decision examples require a JEV-enabled server with provider credentials configured. Set
+`CONDUCTOR_DECISION_PROVIDER=openrouter` when using OpenRouter; the agent examples also need
+a configured chat model (default `openai/gpt-4o-mini`, overridable with `CONDUCTOR_AGENT_LLM_MODEL`).
 
 ## API Journey Examples
 
